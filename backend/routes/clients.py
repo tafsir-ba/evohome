@@ -31,6 +31,8 @@ from services.ai_service import extract_document_from_pdf, OPENAI_API_KEY
 
 from models.schemas import *
 
+from routes.activities import enrich_activity
+
 logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).parent.parent

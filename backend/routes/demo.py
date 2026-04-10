@@ -7,6 +7,7 @@ import base64
 import logging
 import secrets
 import tempfile
+import bcrypt
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional, Literal, Dict, Any
@@ -17,6 +18,7 @@ from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field, EmailStr
 
 from database import db
+from core.config import validate_config
 from core.auth import get_current_user, get_current_agent, get_current_buyer, verify_token
 from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer, get_is_demo
 from core.rate_limit import rate_limit_check, check_rate_limit
@@ -32,6 +34,9 @@ from services.ai_service import extract_document_from_pdf, OPENAI_API_KEY
 from models.schemas import *
 
 logger = logging.getLogger(__name__)
+
+# Get app config
+app_config = validate_config()
 
 ROOT_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = ROOT_DIR / "uploads"

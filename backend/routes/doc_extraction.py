@@ -8,6 +8,7 @@ import logging
 import secrets
 import tempfile
 import openai
+import fitz
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional, Literal, Dict, Any
