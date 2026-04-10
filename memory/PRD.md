@@ -644,3 +644,48 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 
 ---
 Last Updated: March 19, 2026
+
+---
+
+## Data Model Normalization Sprint (SSOT) - February 2026
+
+### Phase C: Compatibility Layer (COMPLETE)
+
+**Goal**: Route all database operations through a compatibility layer (`db_compat.py`) that reads from canonical collections first, falls back to deprecated collections during migration.
+
+**Completed Work**:
+- [x] Created `db_compat.py` with dual-read helpers for units, timelines, and timeline_steps
+- [x] All `db.project_timelines` references in server.py routed through compat layer
+- [x] `timeline_id` standardized as canonical field in all API responses
+- [x] `project_timeline_id` stripped from all externally visible responses
+- [x] New step writes use both FK field names (dual-write) for backward compat
+- [x] Dual API routes: `/stages` (deprecated) and `/steps` (canonical) both working
+- [x] Governance docs updated (PHASE_C_CONFLICT_REPORT.md, IMPLEMENTATION_IMPACT_MAP.md)
+- [x] Regression tests: 16/16 passed (testing agent validated)
+
+**Phase C Done Condition Met**:
+- `timelines` is the canonical collection path
+- `timeline_id` is the canonical field everywhere externally visible
+- `/stages` still works via compatibility
+- All tests pass
+- Docs are updated
+
+### Remaining Phases
+- **Phase D**: Data Migration (migrate data from deprecated to canonical collections)
+- **Phase E**: Code Refactoring (drop dual routing, update frontend types)
+- **Phase F**: Deprecation Cleanup (remove deprecated collections, endpoints, compat layer)
+- **Phase 3**: Architecture (split monolithic server.py into modular routers)
+
+### Key Files
+- `/app/backend/core/db_compat.py` - Compatibility layer
+- `/app/backend/core/config.py` - Fail-fast startup config
+- `/app/memory/PHASE_C_CONFLICT_REPORT.md` - Conflict tracking
+- `/app/memory/IMPLEMENTATION_IMPACT_MAP.md` - Implementation control panel
+- `/app/memory/DELIVERABLE_1_CANONICAL_SCHEMA.md` - Canonical schema SSOT
+- `/app/memory/DELIVERABLE_1B_CONTENT_LAYER_SCHEMA.md` - Content layer schema
+- `/app/memory/DELIVERABLE_2_MIGRATION_PLAN.md` - Migration plan
+- `/app/memory/DELIVERABLE_3_CODE_AUDIT.md` - Code audit
+- `/app/memory/DELIVERABLE_4_IMPLEMENTATION_SEQUENCE.md` - Sequence plan
+
+---
+Last Updated: February 2026
