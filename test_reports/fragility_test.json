@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-04-10T23:50:05.033164+00:00",
+  "total": 76,
+  "passed": 75,
+  "failed": 1,
+  "pass_rate": "98.7%",
+  "verdict": "ISOLATED",
+  "findings": [
+    {
+      "test": "PDF generation works",
+      "detail": "got 0: {'error': \"'utf-8' codec can't decode byte 0x93 in position 10: invalid start byte\"}"
+    }
+  ]
+}
