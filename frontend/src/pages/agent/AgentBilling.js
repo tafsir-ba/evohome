@@ -146,15 +146,19 @@ export const AgentBilling = () => {
       if (res.ok) {
         const data = await res.json();
         if (data.checkout_url) {
+          // Redirect to Stripe Checkout
           window.location.href = data.checkout_url;
+          return; // Don't reset processingPlan — we're navigating away
+        } else {
+          throw new Error('No checkout URL received from server');
         }
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to start checkout');
+        const error = await res.json().catch(() => ({ detail: `Server error (${res.status})` }));
+        throw new Error(error.detail || `Checkout failed (${res.status})`);
       }
     } catch (error) {
-      toast.error(error.message);
-    } finally {
+      console.error('Checkout error:', error);
+      toast.error(error.message || 'Failed to start checkout. Please try again.');
       setProcessingPlan(null);
     }
   };

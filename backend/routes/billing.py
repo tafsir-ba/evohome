@@ -82,10 +82,8 @@ async def create_checkout_session(data: CreateCheckoutRequest, user: dict = Depe
     plan = SUBSCRIPTION_PLANS[plan_id]
     
     try:
-        # Use Stripe SDK directly
         stripe.api_key = STRIPE_API_KEY
         
-        # Amount in cents for Stripe
         amount_in_cents = int(plan['price'] * 100)
         
         session = stripe.checkout.Session.create(
@@ -94,6 +92,7 @@ async def create_checkout_session(data: CreateCheckoutRequest, user: dict = Depe
                 'price_data': {
                     'currency': 'chf',
                     'unit_amount': amount_in_cents,
+                    'recurring': {'interval': 'month'},
                     'product_data': {
                         'name': f"Evohome {plan['name']} Plan",
                         'description': f"Monthly subscription - {plan['property_limit']} units"
@@ -101,13 +100,19 @@ async def create_checkout_session(data: CreateCheckoutRequest, user: dict = Depe
                 },
                 'quantity': 1,
             }],
-            mode='payment',
+            mode='subscription',
             success_url=f"{data.origin_url}/agent/billing?session_id={{CHECKOUT_SESSION_ID}}&success=true",
             cancel_url=f"{data.origin_url}/agent/billing?canceled=true",
             metadata={
                 "agent_id": user['user_id'],
                 "plan_id": plan_id,
                 "plan_name": plan['name']
+            },
+            subscription_data={
+                "metadata": {
+                    "agent_id": user['user_id'],
+                    "plan_id": plan_id,
+                }
             }
         )
         
@@ -129,18 +134,15 @@ async def verify_checkout_session(data: CheckoutStatusRequest, user: dict = Depe
         raise HTTPException(status_code=500, detail="Stripe is not configured")
     
     try:
-        # Use Stripe SDK directly
         stripe.api_key = STRIPE_API_KEY
         session = stripe.checkout.Session.retrieve(data.session_id)
         
         logger.info(f"Checkout status: {session.status}, payment: {session.payment_status}")
         
         if session.status == "complete" and session.payment_status == "paid":
-            # Get plan_id from metadata (set during checkout creation)
             metadata = session.metadata or {}
             plan_id = metadata.get('plan_id', 'starter')
             
-            # Fallback: determine plan from amount if metadata missing
             if not plan_id and session.amount_total:
                 amount = session.amount_total / 100
                 if amount >= 79:
@@ -150,15 +152,18 @@ async def verify_checkout_session(data: CheckoutStatusRequest, user: dict = Depe
                 else:
                     plan_id = "free"
             
-            # Update user's subscription in database
             update_data = {
                 "subscription_plan": plan_id,
                 "subscription_status": "active",
-                "subscription_updated_at": datetime.now(timezone.utc).isoformat()
+                "subscription_updated_at": datetime.now(timezone.utc).isoformat(),
+                "last_checkout_session": data.session_id,
             }
             
-            # Store session ID for reference
-            update_data["last_checkout_session"] = data.session_id
+            # Store Stripe subscription ID for portal/management
+            if session.subscription:
+                update_data["stripe_subscription_id"] = session.subscription
+            if session.customer:
+                update_data["stripe_customer_id"] = session.customer
             
             await db.users.update_one(
                 {"user_id": user['user_id']},
