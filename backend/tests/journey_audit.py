@@ -348,9 +348,9 @@ if isinstance(data, dict) and data.get('steps'):
     ssot_check("J5: List step has step_id, no stage_id",
                'step_id' in first_step and 'stage_id' not in first_step)
 
-# Verify /stages is deprecated (404)
+# Verify /stages is deprecated and removed (Phase F cleanup)
 code, data, ms = api_call("GET", f"/api/projects/{PROJECT_ID}/stages", token=AGENT_TOKEN)
-test("J5", "/stages endpoint returns 404 (deprecated)", code, data, 404, category="backward_compat")
+test("J5", "/stages returns 404 (intentionally removed in Phase F)", code, data, 404, category="deprecation")
 
 # ══════════════════════════════════════════════════════════════
 # J6 — POST AN ACTIVITY
@@ -701,11 +701,12 @@ report = {
         "production_ready": failed == 0,
         "certification": "CERTIFIED" if failed == 0 else "NOT CERTIFIED - failures detected",
         "summary": f"Evohome CMP passed {passed}/{total} tests ({passed/total*100:.1f}% pass rate). " + (
-            "All 11 key user journeys validated successfully. SSOT compliance confirmed. System is certified for Phase D production evolution."
+            "All 11 key user journeys validated successfully. SSOT compliance confirmed. Backward compatibility for /stages intentionally retired after consumer migration (Phase F). System is certified for Phase D production evolution."
             if failed == 0 else
             f"{failed} test(s) failed. Remediation required before production certification."
         ),
         "ssot_status": "COMPLIANT" if all(s['passed'] for s in SSOT_CHECKS) else "NON-COMPLIANT",
+        "backward_compatibility": "INTENTIONALLY DROPPED — /stages removed in Phase F after frontend migration to /steps",
         "data_integrity": "VERIFIED" if not any(b['journey'] == 'J11' for b in BUGS) else "ISSUES DETECTED",
         "security": "RBAC ENFORCED" if not any('RBAC' in b['test'] for b in BUGS) else "RBAC ISSUES",
         "performance": "ACCEPTABLE" if not any(p['elapsed_ms'] > 5000 for p in PERF_METRICS) else "DEGRADED"

@@ -270,6 +270,7 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - [x] Deprecated collections confirmed empty: `project_units`, `project_stages`, `project_timelines`
 - [x] 7 audit deliverables generated: `/app/memory/AUDIT_REPORT.md`, `/app/test_reports/journey_audit.json`
 - [x] System certified for Phase D production evolution
+- [x] Note: Backward compatibility for `/stages` was intentionally retired (Phase F) — 404 is correct behavior, not a regression
 
 ### P2 - Medium Priority  
 - [ ] Email digest notifications (daily/weekly summary)

@@ -162,16 +162,30 @@ Key endpoints validated:
 
 ### Production Readiness Certification
 
-| Criterion | Status |
-|-----------|--------|
-| Functional Integrity | VERIFIED — All 11 journeys pass end-to-end |
-| SSOT Compliance | COMPLIANT — 33/33 checks pass |
-| Backward Compatibility | VERIFIED — `/stages` returns 404 as expected |
-| Security | RBAC ENFORCED — Buyer blocked from agent endpoints |
-| Data Integrity | VERIFIED — Referential links consistent |
-| Performance | ACCEPTABLE — Avg 522ms, no timeouts |
-| Notifications | VERIFIED — Structure correct |
-| Demo/Production Isolation | VERIFIED — `is_demo` scoping intact |
+| Criterion | Status | Notes |
+|-----------|--------|-------|
+| Functional Integrity | VERIFIED | All 11 journeys pass end-to-end |
+| SSOT Compliance | COMPLIANT | 33/33 checks pass |
+| Backward Compatibility | INTENTIONALLY DROPPED | `/stages` removed in Phase F (see below) |
+| Security | RBAC ENFORCED | Buyer blocked from agent endpoints |
+| Data Integrity | VERIFIED | Referential links consistent |
+| Performance | ACCEPTABLE | Avg 522ms, no timeouts |
+| Notifications | VERIFIED | Structure correct |
+| Demo/Production Isolation | VERIFIED | `is_demo` scoping intact |
+
+### Backward Compatibility: `/stages` Deprecation Record
+
+The `/stages` endpoint was **intentionally removed**, not broken. The full deprecation lifecycle:
+
+| Phase | Date | Action |
+|-------|------|--------|
+| Phase C | Feb 2026 | `/stages` kept as compatibility alias alongside canonical `/steps` |
+| Phase E | Apr 2026 | `COMPAT_MODE = False` — disabled fallback reads from deprecated collections |
+| Phase F | Apr 2026 | `/stages` routes physically removed (GET/POST/PUT/DELETE). Frontend migrated from `/stages` → `/steps` in `AgentTimeline.js` |
+
+**Consumer impact**: None. The only consumer (frontend) was migrated in Phase F before route removal. No external API consumers exist. The 404 on `/stages` is the **correct and intended behavior** — it confirms the deprecation cleanup was executed successfully.
+
+**Governance note**: Backward compatibility was provided during Phase C–E as a migration bridge. It was deliberately retired in Phase F once all consumers migrated to canonical `/steps`. This is standard deprecation practice, not a regression.
 
 ### Certification Statement
 
@@ -180,6 +194,7 @@ Key endpoints validated:
 > The system passed 74/74 tests (100% pass rate) across all 11 key user journeys.
 > SSOT compliance is confirmed with 33/33 governance checks passing.
 > All canonical collections are in use; all deprecated collections are empty.
+> Backward compatibility for `/stages` was intentionally retired after consumer migration (Phase F).
 > Security boundaries (RBAC) are enforced. Data integrity is maintained.
 > Performance is within acceptable thresholds.
 
