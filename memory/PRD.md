@@ -282,6 +282,19 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - [x] **Regression**: 74/74 journey tests pass after all changes. Zero regressions.
 - [x] Full report: `/app/memory/PHASE_D_REPORT.md`
 
+### Full System Sweep — COMPLETED April 10, 2026
+Root cause: Phase 3 modularization (11.8k line server.py → 22 route files) was a mechanical copy-paste that dropped critical imports. This sweep found and fixed ALL remaining issues:
+- [x] `documents.py`: Missing `import fitz`, missing reportlab imports, duplicate `extract_document_from_pdf` function shadowing the imported version from `ai_service.py`
+- [x] `doc_extraction.py`: Missing `import fitz`
+- [x] `timelines.py`: Missing `import fitz`
+- [x] `workflows.py`: Missing `import fitz`
+- [x] `clients.py`: Missing `enrich_activity` import (client preview page crashed)
+- [x] `demo.py`: Missing `import bcrypt` and `validate_config` (found by testing agent)
+- [x] `doc_extraction.py`: `extract-document` rejected `type=unknown` with 400 — now falls back to quote extraction
+- [x] AI extraction quality: Upgraded PDF DPI 150→200, pages 3→5, max_tokens 2000→4000, added `detail: "high"` to all Vision calls, rewrote prompt for Swiss real estate
+- [x] Frontend: Type dropdown shows placeholder when type=unknown, "Create Draft" button enables when user overrides type
+- [x] **Testing**: 18/18 backend tests pass, all frontend pages verified, 74/74 journey tests pass
+
 ### P2 - Medium Priority  
 - [ ] Email digest notifications (daily/weekly summary)
 - [ ] Document archiving feature
