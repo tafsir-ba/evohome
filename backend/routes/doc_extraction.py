@@ -120,7 +120,7 @@ async def classify_uploaded_document(
                             "role": "user",
                             "content": [
                                 {"type": "text", "text": "Extract all text from this document image. Include numbers, dates, and any structured data. Return only the extracted text, no commentary."},
-                                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_data}"}}
+                                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_data}", "detail": "high"}}
                             ]
                         }],
                         max_tokens=2000
@@ -181,17 +181,29 @@ async def _extract_document_from_image(file_path: str, doc_type_value: str) -> d
 
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
-        system_prompt = f"""You are a document extraction assistant. Extract structured data from this {doc_type_value} image.
+        system_prompt = f"""You are a Swiss real estate document extraction assistant specializing in construction quotes, invoices, and renovation documents. Extract structured data from this {doc_type_value} image.
 
-Return ONLY a JSON object:
+IMPORTANT: Look carefully for:
+- Company/supplier name and address
+- Document reference numbers
+- Individual line items with descriptions, quantities, and prices
+- Tax amounts (TVA/MwSt)
+- Total amounts (HT and TTC)
+- Currency (default CHF if not specified)
+- Dates
+
+Return ONLY a valid JSON object with this exact structure:
 {{
-  "title": "short descriptive title",
-  "amount": final_total_number_or_null,
-  "items": [{{"description": "string", "quantity": 1, "unit_price": number, "total": number}}],
-  "supplier_name": "company name or null",
-  "description": "professional single-paragraph summary",
+  "title": "descriptive title based on document content",
+  "amount": total_amount_as_number_or_null,
+  "items": [{{"description": "line item text", "quantity": 1, "unit_price": 0, "total": 0}}],
+  "supplier_name": "company name from the document",
+  "description": "one paragraph summary of the document content",
+  "reference": "document reference/number if visible",
   "confidence": "high/medium/low"
-}}"""
+}}
+
+If the image is not a clear document (e.g., a photo, screenshot, or unclear scan), still try your best to extract any visible text and structure it. Set confidence to "low" if the content is unclear."""
 
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -199,10 +211,10 @@ Return ONLY a JSON object:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": [
                     {"type": "text", "text": f"Extract document information from this {doc_type_value} image. Return only valid JSON."},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_data}"}}
+                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_data}", "detail": "high"}}
                 ]}
             ],
-            max_tokens=2000
+            max_tokens=4000
         )
 
         response_text = response.choices[0].message.content or ""
@@ -300,7 +312,12 @@ async def extract_document_data(
         
         intent = intent_map.get(doc_type)
         if not intent:
-            raise HTTPException(status_code=400, detail=f"Cannot extract from document type: {document_type}")
+            # For UNKNOWN type, default to quote extraction (most common)
+            if doc_type == DocumentType.UNKNOWN:
+                intent = CommandIntent.EXTRACT_QUOTE
+                doc_type = DocumentType.QUOTE
+            else:
+                raise HTTPException(status_code=400, detail=f"Cannot extract from document type: {document_type}")
         
         # Extract data using appropriate method based on file type
         extracted_data = {}

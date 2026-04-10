@@ -75,15 +75,15 @@ Return ONLY a JSON object with this structure:
         doc = fitz.open(pdf_path)
         image_contents = []
 
-        for page_num in range(min(3, len(doc))):
+        for page_num in range(min(5, len(doc))):
             page = doc[page_num]
-            mat = fitz.Matrix(150/72, 150/72)
+            mat = fitz.Matrix(200/72, 200/72)
             pix = page.get_pixmap(matrix=mat)
             img_bytes = pix.tobytes("png")
             img_base64 = base64.b64encode(img_bytes).decode('utf-8')
             image_contents.append({
                 "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{img_base64}"}
+                "image_url": {"url": f"data:image/png;base64,{img_base64}", "detail": "high"}
             })
         doc.close()
 
@@ -103,7 +103,7 @@ Return ONLY a JSON object with this structure:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": message_content}
             ],
-            max_tokens=2000
+            max_tokens=4000
         )
 
         response_text = response.choices[0].message.content

@@ -1451,15 +1451,15 @@ export const AgentHomePage = () => {
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-sm text-muted-foreground">Type:</span>
                     <Select 
-                      value={overrideDocType || previewData.document_type || previewData.classification?.document_type} 
+                      value={overrideDocType || (previewData.document_type !== 'unknown' ? previewData.document_type : undefined) || (previewData.classification?.document_type !== 'unknown' ? previewData.classification?.document_type : undefined)} 
                       onValueChange={(val) => setOverrideDocType(val)}
                     >
                       <SelectTrigger className="w-40 h-8 text-sm">
-                        <SelectValue />
+                        <SelectValue placeholder="Select type..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="invoice">Invoice</SelectItem>
                         <SelectItem value="quote">Quote</SelectItem>
+                        <SelectItem value="invoice">Invoice</SelectItem>
                         <SelectItem value="timeline">Timeline</SelectItem>
                         <SelectItem value="contacts">Contacts</SelectItem>
                       </SelectContent>
@@ -1738,32 +1738,50 @@ export const AgentHomePage = () => {
               )}
 
               {/* Execution Status */}
-              <div className={cn(
-                "p-4 rounded-lg border",
-                previewData.can_execute 
-                  ? "bg-emerald-500/10 border-emerald-500/30" 
-                  : "bg-amber-500/10 border-amber-500/30"
-              )}>
-                <div className="flex items-center gap-2">
-                  {previewData.can_execute ? (
-                    <>
-                      <CheckCircle className="w-5 h-5 text-emerald-500" />
-                      <div>
-                        <p className="font-medium text-emerald-700 dark:text-emerald-400">Ready to Execute</p>
-                        <p className="text-xs text-emerald-600 dark:text-emerald-500">All required fields are present</p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="w-5 h-5 text-amber-500" />
-                      <div>
-                        <p className="font-medium text-amber-700 dark:text-amber-400">Cannot Execute</p>
-                        <p className="text-xs text-amber-600 dark:text-amber-500">Fill in missing required fields first</p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
+              {(() => {
+                // Recalculate can_execute: if user has overridden doc type, missing doc_type field is resolved
+                const effectiveCanExecute = previewData.can_execute || (
+                  overrideDocType && 
+                  overrideDocType !== 'unknown' && 
+                  !previewData.missing_fields?.some(f => f.required && f.name !== 'document_type')
+                );
+                return (
+                  <div className={cn(
+                    "p-4 rounded-lg border",
+                    effectiveCanExecute 
+                      ? "bg-emerald-500/10 border-emerald-500/30" 
+                      : "bg-amber-500/10 border-amber-500/30"
+                  )}>
+                    <div className="flex items-center gap-2">
+                      {effectiveCanExecute ? (
+                        <>
+                          <CheckCircle className="w-5 h-5 text-emerald-500" />
+                          <div>
+                            <p className="font-medium text-emerald-700 dark:text-emerald-400">Ready to Execute</p>
+                            <p className="text-xs text-emerald-600 dark:text-emerald-500">All required fields are present</p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="w-5 h-5 text-amber-500" />
+                          <div>
+                            <p className="font-medium text-amber-700 dark:text-amber-400">
+                              {!overrideDocType && (previewData.document_type === 'unknown' || !previewData.document_type)
+                                ? 'Select Document Type'
+                                : 'Cannot Execute'}
+                            </p>
+                            <p className="text-xs text-amber-600 dark:text-amber-500">
+                              {!overrideDocType && (previewData.document_type === 'unknown' || !previewData.document_type)
+                                ? 'Choose a document type above, then click Re-run Extraction'
+                                : 'Fill in missing required fields first'}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Debug Log (collapsible) */}
               {previewData.interpretation_log && previewData.interpretation_log.length > 0 && (
@@ -1812,7 +1830,7 @@ export const AgentHomePage = () => {
             </Button>
             <Button
               onClick={handleExecuteAction}
-              disabled={executing || !previewData?.can_execute}
+              disabled={executing || !(previewData?.can_execute || (overrideDocType && overrideDocType !== 'unknown'))}
               data-testid="confirm-action-btn"
             >
               {executing ? (
