@@ -242,9 +242,12 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
   - **Remaining (non-blocking cleanup)**:
     - Writing both field names (type/document_type, amount/total_amount) is temporary migration debt
     - `is_demo` extraction still present for subscription gating (correct behavior)
-- [ ] Phase 3: Decompose `server.py` Monolith (~11,000 lines)
-  - Split into domain-specific route files: `/routes/auth.py`, `/routes/projects.py`, etc.
-  - **READY**: Document schema normalized, API contracts validated, frontend consistent
+- [x] Phase 3: Decompose `server.py` Monolith (~11,800 lines) - COMPLETED April 10, 2026
+  - Split into 22 domain-specific route files under `/routes/`
+  - Created shared infrastructure: `models/schemas.py`, `helpers.py`, `services/email_service.py`, `services/realtime_service.py`, `services/qr_service.py`, `services/ai_service.py`
+  - `server.py` reduced from 11,834 → 184 lines (slim orchestrator)
+  - Fixed pre-existing LoginPage.js bug (redundant API call via AuthContext.login)
+  - All 22 backend endpoints tested passing (100%), frontend login + navigation verified
 
 ### P1 - High Priority (Agent Command Workspace Phase 4) - COMPLETED
 - [x] Multi-step workflows (chaining commands) - COMPLETED March 19, 2026
@@ -603,22 +606,36 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
    - Buyer registration now auto-links to existing client records with matching email
    - Added 'feed_update' email template for activity notifications
 
-## Architecture
+## Architecture (Post-Phase 3 Modularization - April 2026)
 ```
-/app
-├── backend/
-│   ├── server.py      # Monolithic FastAPI (existing endpoints)
-│   ├── routes/        # Modular route definitions
-│   ├── services/      # Business logic layer
-│   ├── models/        # Pydantic models
-│   ├── uploads/       # Uploaded files
-│   └── .env          # MONGO_URL, API keys
-└── frontend/
-    └── src/
-        ├── pages/agent/   # AgentDashboard, AgentVault, AgentSettings, etc.
-        ├── pages/buyer/   # BuyerDashboard, BuyerTimeline
-        ├── components/    # LanguageToggle, FileDropZone, PdfViewer, AgentLayout, NotificationCenter
-        └── context/       # AuthContext, SettingsContext
+/app/backend/
+├── server.py              # Slim orchestrator (184 lines) - app setup, CORS, router wiring
+├── database.py            # Shared MongoDB connection
+├── helpers.py             # Utility functions (demo filter, query builder, transitions)
+├── models/
+│   ├── schemas.py         # All Pydantic models (consolidated)
+│   └── common.py          # Base response models
+├── services/
+│   ├── email_service.py   # Resend email + templates + create_notification
+│   ├── realtime_service.py # WebSocket manager + notify_realtime
+│   ├── qr_service.py      # Swiss QR code generation
+│   ├── ai_service.py      # OpenAI PDF extraction
+│   ├── command_service.py  # Command interpreter/executor
+│   └── workflow_service.py # Workflow templates/execution
+├── routes/ (22 files)
+│   ├── auth.py, projects.py, clients.py, documents.py, timelines.py
+│   ├── activities.py, notifications.py, vault.py, billing.py, settings.py
+│   ├── invitations.py, dashboard.py, stats.py, analytics.py
+│   ├── commands.py, workflows.py, steps.py, timeline_view.py
+│   ├── demo.py, admin.py, doc_extraction.py, test_endpoints.py
+├── core/                  # config, auth, access_control, rate_limit, monitoring, responses
+└── uploads/               # File storage
+/app/frontend/
+└── src/
+    ├── pages/agent/       # AgentDashboard, AgentVault, AgentSettings, etc.
+    ├── pages/buyer/       # BuyerDashboard, BuyerTimeline
+    ├── components/        # LanguageToggle, FileDropZone, PdfViewer, AgentLayout, NotificationCenter
+    └── context/           # AuthContext, SettingsContext
 ```
 
 ## Key Endpoints
