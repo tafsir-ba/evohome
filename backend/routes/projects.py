@@ -246,6 +246,7 @@ async def create_project_unit(project_id: str, data: dict, user: dict = Depends(
         "project_id": project_id,
         "unit_reference": unit_reference,
         "client_id": None,
+        "is_demo": is_demo,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
