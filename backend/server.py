@@ -555,7 +555,8 @@ class TimelineStepNoteCreate(BaseModel):
 
 class TimelineStep(BaseModel):
     step_id: str
-    project_timeline_id: str
+    timeline_id: Optional[str] = None  # Canonical FK
+    project_timeline_id: Optional[str] = None  # DEPRECATED - kept for Phase C compat
     title: str
     description: Optional[str] = None
     status: Literal["pending", "in_progress", "completed", "approved"]
@@ -1286,8 +1287,9 @@ async def send_milestone_notification(step: dict, project: dict, timeline: dict,
         ) or {}
         
         # Calculate overall progress
+        tl_ref = step.get('timeline_id') or step.get('project_timeline_id')
         all_steps = await db.timeline_steps.find(
-            {"project_timeline_id": step['project_timeline_id']},
+            {"$or": [{"timeline_id": tl_ref}, {"project_timeline_id": tl_ref}]},
             {"_id": 0, "status": 1}
         ).to_list(100)
         
@@ -4948,19 +4950,16 @@ async def get_project_stages(project_id: str, user: dict = Depends(get_current_u
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Single source: timeline_steps
-    timeline = await db.project_timelines.find_one(
-        {"project_id": project_id},
-        {"_id": 0}
-    )
+    # Single source: timeline_steps (via compat layer)
+    timeline = await db_compat.find_timeline_one({"project_id": project_id})
     
     if not timeline:
         # No timeline exists yet - return empty stages
         return {"project": project, "stages": []}
     
-    timeline_id = timeline.get('timeline_id') or timeline.get('project_timeline_id')
+    timeline_id = timeline.get('timeline_id')
     steps = await db.timeline_steps.find(
-        {"project_timeline_id": timeline_id},
+        db_compat.timeline_ref_query(timeline_id),
         {"_id": 0}
     ).sort("order_index", 1).to_list(50)
     
@@ -5028,29 +5027,28 @@ async def create_project_stage(project_id: str, data: ProjectStageCreate, user: 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Ensure timeline exists for this project
-    timeline = await db.project_timelines.find_one({"project_id": project_id, "is_demo": is_demo}, {"_id": 0})
+    # Ensure timeline exists for this project (via compat layer)
+    timeline = await db_compat.find_timeline_one({"project_id": project_id, "is_demo": is_demo})
     if not timeline:
         timeline_id = f"timeline_{uuid.uuid4().hex[:12]}"
         timeline = {
             "timeline_id": timeline_id,
-            "project_timeline_id": timeline_id,
             "project_id": project_id,
             "template_id": None,
             "template_name": None,
             "is_demo": is_demo,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
-        await db.project_timelines.insert_one(timeline)
+        await db_compat.insert_timeline(timeline)
     
-    timeline_id = timeline.get('timeline_id') or timeline.get('project_timeline_id')
+    timeline_id = timeline.get('timeline_id')
     step_id = f"step_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
     
     # Write to timeline_steps (single source of truth)
     step_doc = {
         "step_id": step_id,
-        "project_timeline_id": timeline_id,
+        **db_compat.timeline_ref_fields(timeline_id),
         "title": data.name,
         "description": data.description,
         "order_index": data.order,
@@ -5102,14 +5100,14 @@ async def update_project_stage(project_id: str, stage_id: str, data: ProjectStag
     if not step:
         raise HTTPException(status_code=404, detail="Stage not found")
     
-    # Verify ownership via timeline -> project
-    timeline = await db.project_timelines.find_one(
-        {"$or": [
-            {"timeline_id": step['project_timeline_id']},
-            {"project_timeline_id": step['project_timeline_id']}
-        ]},
-        {"_id": 0}
-    )
+    # Verify ownership via timeline -> project (via compat layer)
+    step_tl_ref = db_compat.get_step_timeline_ref(step)
+    timeline = await db_compat.find_timeline_one({
+        "$or": [
+            {"timeline_id": step_tl_ref},
+            {"project_timeline_id": step_tl_ref}
+        ]
+    })
     if not timeline or timeline.get('project_id') != project_id:
         raise HTTPException(status_code=404, detail="Stage not found in this project")
     
@@ -5181,14 +5179,14 @@ async def delete_project_stage(project_id: str, stage_id: str, user: dict = Depe
     if not step:
         raise HTTPException(status_code=404, detail="Stage not found")
     
-    # Verify ownership via timeline -> project
-    timeline = await db.project_timelines.find_one(
-        {"$or": [
-            {"timeline_id": step['project_timeline_id']},
-            {"project_timeline_id": step['project_timeline_id']}
-        ]},
-        {"_id": 0}
-    )
+    # Verify ownership via timeline -> project (via compat layer)
+    step_tl_ref = db_compat.get_step_timeline_ref(step)
+    timeline = await db_compat.find_timeline_one({
+        "$or": [
+            {"timeline_id": step_tl_ref},
+            {"project_timeline_id": step_tl_ref}
+        ]
+    })
     if not timeline or timeline.get('project_id') != project_id:
         raise HTTPException(status_code=404, detail="Stage not found in this project")
     
@@ -5481,10 +5479,9 @@ async def get_project_timeline_full(project_id: str, user: dict = Depends(get_cu
         created_at=project.get('created_at')
     )
     
-    # Get timeline
-    timeline = await db.project_timelines.find_one(
-        {"project_id": project_id},
-        {"_id": 0}
+    # Get timeline (via compat layer)
+    timeline = await db_compat.find_timeline_one(
+        {"project_id": project_id}
     )
     
     if not timeline:
@@ -5495,11 +5492,11 @@ async def get_project_timeline_full(project_id: str, user: dict = Depends(get_cu
             progress_percent=0
         )
     
-    timeline_id = timeline.get('timeline_id') or timeline.get('project_timeline_id')
+    timeline_id = timeline.get('timeline_id')
     
     # Get steps from single source of truth
     steps_raw = await db.timeline_steps.find(
-        {"project_timeline_id": timeline_id},
+        db_compat.timeline_ref_query(timeline_id),
         {"_id": 0}
     ).sort("order_index", 1).to_list(50)
     
@@ -5554,20 +5551,19 @@ async def get_project_workflow_full(project_id: str, user: dict = Depends(get_cu
         created_at=project.get('created_at')
     )
     
-    # Get timeline and steps
-    timeline = await db.project_timelines.find_one(
-        {"project_id": project_id},
-        {"_id": 0}
+    # Get timeline and steps (via compat layer)
+    timeline = await db_compat.find_timeline_one(
+        {"project_id": project_id}
     )
     
     timeline_id = None
     steps = []
     
     if timeline:
-        timeline_id = timeline.get('timeline_id') or timeline.get('project_timeline_id')
+        timeline_id = timeline.get('timeline_id')
         
         steps_raw = await db.timeline_steps.find(
-            {"project_timeline_id": timeline_id},
+            db_compat.timeline_ref_query(timeline_id),
             {"_id": 0}
         ).sort("order_index", 1).to_list(50)
         
@@ -6562,11 +6558,11 @@ async def create_manual_timeline(data: ManualTimelineCreate, user: dict = Depend
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Check if timeline already exists
-    existing = await db.project_timelines.find_one({
+    # Check if timeline already exists (via compat layer)
+    existing = await db_compat.find_timeline_one({
         "project_id": data.project_id,
         "is_demo": is_demo
-    }, {"_id": 0})
+    })
     
     if existing:
         raise HTTPException(status_code=400, detail="Timeline already exists for this project. Delete the existing one first.")
@@ -6574,7 +6570,7 @@ async def create_manual_timeline(data: ManualTimelineCreate, user: dict = Depend
     now = datetime.now(timezone.utc).isoformat()
     timeline_id = str(uuid.uuid4())
     
-    # Create timeline
+    # Create timeline (writes to canonical collection only)
     timeline = {
         "timeline_id": timeline_id,
         "project_id": data.project_id,
@@ -6585,14 +6581,14 @@ async def create_manual_timeline(data: ManualTimelineCreate, user: dict = Depend
         "created_at": now,
         "updated_at": now
     }
-    await db.project_timelines.insert_one(timeline)
+    await db_compat.insert_timeline(timeline)
     
     # Create steps
     created_steps = []
     for i, step_data in enumerate(data.steps):
         step = {
             "step_id": str(uuid.uuid4()),
-            "project_timeline_id": timeline_id,
+            **db_compat.timeline_ref_fields(timeline_id),
             "title": step_data.get('title', f'Step {i+1}'),
             "description": step_data.get('description', ''),
             "planned_date": step_data.get('planned_date'),
@@ -6769,10 +6765,10 @@ async def approve_timeline_extraction(
         }
         await db.timeline_template_steps.insert_one(step_doc)
     
-    # Apply template to project - use timeline_id to match what get_project_timeline expects
+    # Apply template to project (via compat layer)
     timeline_id = f"ptl_{uuid.uuid4().hex[:12]}"
     project_timeline_doc = {
-        "timeline_id": timeline_id,  # This is what get_project_timeline uses
+        "timeline_id": timeline_id,
         "project_id": project_id,
         "agent_id": user['user_id'],
         "template_id": template_id,
@@ -6782,14 +6778,14 @@ async def approve_timeline_extraction(
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.project_timelines.insert_one(project_timeline_doc)
+    await db_compat.insert_timeline(project_timeline_doc)
     
     # Create timeline steps - use db.timeline_steps to match what get_project_timeline reads
     for idx, phase in enumerate(phases_list):
         step_id = f"pts_{uuid.uuid4().hex[:8]}"
         step_doc = {
             "step_id": step_id,
-            "project_timeline_id": timeline_id,  # References the timeline
+            **db_compat.timeline_ref_fields(timeline_id),
             "project_id": project_id,
             "agent_id": user['user_id'],
             "title": phase.get("name", f"Phase {idx + 1}"),  # 'title' matches existing schema
@@ -6951,8 +6947,8 @@ async def apply_timeline_template(template_id: str, project_id: str, user: dict 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Check if project already has a timeline
-    existing = await db.project_timelines.find_one({
+    # Check if project already has a timeline (via compat layer)
+    existing = await db_compat.find_timeline_one({
         "project_id": project_id,
         "is_demo": is_demo
     })
@@ -6963,7 +6959,7 @@ async def apply_timeline_template(template_id: str, project_id: str, user: dict 
     now = datetime.now(timezone.utc).isoformat()
     timeline_id = f"timeline_{uuid.uuid4().hex[:12]}"
     
-    # Create project timeline
+    # Create project timeline (writes to canonical collection)
     timeline_doc = {
         "timeline_id": timeline_id,
         "project_id": project_id,
@@ -6971,7 +6967,7 @@ async def apply_timeline_template(template_id: str, project_id: str, user: dict 
         "is_demo": is_demo,
         "created_at": now
     }
-    await db.project_timelines.insert_one(timeline_doc)
+    await db_compat.insert_timeline(timeline_doc)
     
     # Get template steps and create timeline steps
     template_steps = await db.timeline_template_steps.find(
@@ -6983,7 +6979,7 @@ async def apply_timeline_template(template_id: str, project_id: str, user: dict 
         step_id = f"step_{uuid.uuid4().hex[:12]}"
         step_doc = {
             "step_id": step_id,
-            "project_timeline_id": timeline_id,
+            **db_compat.timeline_ref_fields(timeline_id),
             "title": tmpl_step['title'],
             "description": tmpl_step.get('description'),
             "status": "pending",
@@ -7032,17 +7028,16 @@ async def get_project_timeline(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
     
-    # Get project timeline
-    timeline = await db.project_timelines.find_one(
-        {"project_id": project_id},
-        {"_id": 0}
+    # Get project timeline (via compat layer)
+    timeline = await db_compat.find_timeline_one(
+        {"project_id": project_id}
     )
     
     if not timeline:
         return {"timeline": None, "steps": []}
     
-    # Handle missing timeline_id (legacy data)
-    tl_id = timeline.get('timeline_id') or timeline.get('project_timeline_id')
+    # Handle missing timeline_id (legacy data) - normalized by compat layer
+    tl_id = timeline.get('timeline_id')
     if not tl_id:
         return {"timeline": timeline, "steps": []}
     
@@ -7056,7 +7051,7 @@ async def get_project_timeline(
     
     # Get steps with documents and notes
     steps = await db.timeline_steps.find(
-        {"project_timeline_id": tl_id},
+        db_compat.timeline_ref_query(tl_id),
         {"_id": 0}
     ).sort("order_index", 1).to_list(100)
     
@@ -7096,6 +7091,12 @@ async def get_project_timeline(
         else:
             step['internal_notes'] = []  # Buyer doesn't see notes
     
+    # Normalize step FK field names for API response
+    for step in steps:
+        if 'project_timeline_id' in step and 'timeline_id' not in step:
+            step['timeline_id'] = step['project_timeline_id']
+        step.pop('project_timeline_id', None)
+    
     timeline['steps'] = steps
     return {"timeline": timeline, "steps": steps}
 
@@ -7113,14 +7114,15 @@ async def update_timeline_step(step_id: str, data: TimelineStepUpdate, user: dic
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
     
-    # Verify agent owns the project via timeline
-    timeline = await db.project_timelines.find_one({
+    # Verify agent owns the project via timeline (via compat layer)
+    step_tl_ref = db_compat.get_step_timeline_ref(step)
+    timeline = await db_compat.find_timeline_one({
         "$or": [
-            {"timeline_id": step['project_timeline_id']},
-            {"project_timeline_id": step['project_timeline_id']}
+            {"timeline_id": step_tl_ref},
+            {"project_timeline_id": step_tl_ref}
         ],
         "is_demo": is_demo
-    }, {"_id": 0})
+    })
     
     if not timeline:
         raise HTTPException(status_code=404, detail="Timeline not found")
@@ -7194,6 +7196,11 @@ async def update_timeline_step(step_id: str, data: TimelineStepUpdate, user: dic
             )
     
     updated = await db.timeline_steps.find_one({"step_id": step_id}, {"_id": 0})
+    # Normalize FK field for API response
+    if updated and 'project_timeline_id' in updated:
+        if 'timeline_id' not in updated:
+            updated['timeline_id'] = updated['project_timeline_id']
+        del updated['project_timeline_id']
     return updated
 
 @api_router.post("/timeline/{timeline_id}/steps")
@@ -7201,14 +7208,14 @@ async def add_timeline_step(timeline_id: str, data: dict, user: dict = Depends(g
     """Add a new step to an existing timeline"""
     is_demo = user.get('is_demo', False)
     
-    # Find timeline (support both timeline_id and project_timeline_id)
-    timeline = await db.project_timelines.find_one({
+    # Find timeline (via compat layer - supports both timeline_id and project_timeline_id)
+    timeline = await db_compat.find_timeline_one({
         "$or": [
             {"timeline_id": timeline_id},
             {"project_timeline_id": timeline_id}
         ],
         "is_demo": is_demo
-    }, {"_id": 0})
+    })
     
     if not timeline:
         raise HTTPException(status_code=404, detail="Timeline not found")
@@ -7222,19 +7229,19 @@ async def add_timeline_step(timeline_id: str, data: dict, user: dict = Depends(g
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Get current max order_index
+    tl_id = timeline.get('timeline_id')
     pipeline = [
-        {"$match": {"project_timeline_id": timeline.get('timeline_id') or timeline.get('project_timeline_id')}},
+        {"$match": {"$or": [{"timeline_id": tl_id}, {"project_timeline_id": tl_id}]}},
         {"$group": {"_id": None, "max_order": {"$max": "$order_index"}}}
     ]
     result = await db.timeline_steps.aggregate(pipeline).to_list(1)
     max_order = result[0]['max_order'] if result and result[0].get('max_order') is not None else 0
     
     now = datetime.now(timezone.utc).isoformat()
-    timeline_id_ref = timeline.get('timeline_id') or timeline.get('project_timeline_id')
     
     step_doc = {
         "step_id": f"step_{uuid.uuid4().hex[:12]}",
-        "project_timeline_id": timeline_id_ref,
+        **db_compat.timeline_ref_fields(tl_id),
         "project_id": timeline['project_id'],
         "title": data.get('title', 'New Step'),
         "description": data.get('description', ''),
@@ -7250,7 +7257,13 @@ async def add_timeline_step(timeline_id: str, data: dict, user: dict = Depends(g
     }
     
     await db.timeline_steps.insert_one(step_doc)
-    return await db.timeline_steps.find_one({"step_id": step_doc['step_id']}, {"_id": 0})
+    result = await db.timeline_steps.find_one({"step_id": step_doc['step_id']}, {"_id": 0})
+    # Normalize FK field for API response
+    if result and 'project_timeline_id' in result:
+        if 'timeline_id' not in result:
+            result['timeline_id'] = result['project_timeline_id']
+        del result['project_timeline_id']
+    return result
 
 @api_router.delete("/timeline/steps/{step_id}")
 async def delete_timeline_step(step_id: str, user: dict = Depends(get_current_agent)):
@@ -7266,14 +7279,15 @@ async def delete_timeline_step(step_id: str, user: dict = Depends(get_current_ag
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
     
-    # Verify agent owns the project via timeline
-    timeline = await db.project_timelines.find_one({
+    # Verify agent owns the project via timeline (via compat layer)
+    step_tl_ref = db_compat.get_step_timeline_ref(step)
+    timeline = await db_compat.find_timeline_one({
         "$or": [
-            {"timeline_id": step['project_timeline_id']},
-            {"project_timeline_id": step['project_timeline_id']}
+            {"timeline_id": step_tl_ref},
+            {"project_timeline_id": step_tl_ref}
         ],
         "is_demo": is_demo
-    }, {"_id": 0})
+    })
     
     if not timeline:
         raise HTTPException(status_code=404, detail="Timeline not found")
@@ -7304,10 +7318,10 @@ async def link_document_to_step(step_id: str, data: TimelineStepDocumentCreate, 
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
     
-    # Verify agent owns the project
-    timeline = await db.project_timelines.find_one(
-        {"timeline_id": step['project_timeline_id']},
-        {"_id": 0}
+    # Verify agent owns the project (via compat layer)
+    step_tl_ref = db_compat.get_step_timeline_ref(step)
+    timeline = await db_compat.find_timeline_one(
+        {"$or": [{"timeline_id": step_tl_ref}, {"project_timeline_id": step_tl_ref}]}
     )
     
     project = await db.projects.find_one(
@@ -7358,7 +7372,10 @@ async def unlink_document_from_step(step_id: str, activity_id: str, user: dict =
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
     
-    timeline = await db.project_timelines.find_one({"timeline_id": step['project_timeline_id']})
+    step_tl_ref = db_compat.get_step_timeline_ref(step)
+    timeline = await db_compat.find_timeline_one(
+        {"$or": [{"timeline_id": step_tl_ref}, {"project_timeline_id": step_tl_ref}]}
+    )
     project = await db.projects.find_one({"project_id": timeline['project_id'], "agent_id": user['user_id']})
     
     if not project:
@@ -7384,7 +7401,10 @@ async def add_internal_note(step_id: str, data: TimelineStepNoteCreate, user: di
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
     
-    timeline = await db.project_timelines.find_one({"timeline_id": step['project_timeline_id']})
+    step_tl_ref = db_compat.get_step_timeline_ref(step)
+    timeline = await db_compat.find_timeline_one(
+        {"$or": [{"timeline_id": step_tl_ref}, {"project_timeline_id": step_tl_ref}]}
+    )
     project = await db.projects.find_one({"project_id": timeline['project_id'], "agent_id": user['user_id']})
     
     if not project:
@@ -7413,8 +7433,8 @@ async def delete_project_timeline(timeline_id: str, user: dict = Depends(get_cur
     """Delete a project timeline and all its steps"""
     is_demo = user.get('is_demo', False)
     
-    # Try to find by timeline_id or project_timeline_id (for legacy data)
-    timeline = await db.project_timelines.find_one({
+    # Try to find by timeline_id or project_timeline_id (via compat layer)
+    timeline = await db_compat.find_timeline_one({
         "$or": [
             {"timeline_id": timeline_id},
             {"project_timeline_id": timeline_id}
@@ -7425,8 +7445,8 @@ async def delete_project_timeline(timeline_id: str, user: dict = Depends(get_cur
     if not timeline:
         raise HTTPException(status_code=404, detail="Timeline not found")
     
-    # Get the actual timeline ID from whichever field exists
-    actual_timeline_id = timeline.get('timeline_id') or timeline.get('project_timeline_id')
+    # Get the actual timeline ID (normalized by compat layer)
+    actual_timeline_id = timeline.get('timeline_id')
     
     # Verify agent owns the project
     project = await db.projects.find_one({
@@ -7438,32 +7458,26 @@ async def delete_project_timeline(timeline_id: str, user: dict = Depends(get_cur
     if not project:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Delete all related data - try both ID formats
-    steps = await db.timeline_steps.find({
-        "$or": [
-            {"project_timeline_id": actual_timeline_id},
-            {"project_timeline_id": timeline_id}
-        ]
-    }).to_list(100)
+    # Delete all related data - use compat ref query for both FK names
+    steps = await db.timeline_steps.find(
+        db_compat.timeline_ref_query(actual_timeline_id)
+    ).to_list(100)
     step_ids = [s['step_id'] for s in steps]
     
     if step_ids:
         await db.timeline_step_documents.delete_many({"timeline_step_id": {"$in": step_ids}})
         await db.timeline_step_internal_notes.delete_many({"timeline_step_id": {"$in": step_ids}})
     
-    # Delete steps using both possible ID formats
-    await db.timeline_steps.delete_many({
-        "$or": [
-            {"project_timeline_id": actual_timeline_id},
-            {"project_timeline_id": timeline_id}
-        ]
-    })
+    # Delete steps using compat ref query
+    await db.timeline_steps.delete_many(
+        db_compat.timeline_ref_query(actual_timeline_id)
+    )
     
-    # Delete the timeline document
-    await db.project_timelines.delete_one({"_id": timeline['_id']} if '_id' in timeline else {
+    # Delete the timeline document (from both canonical + deprecated)
+    await db_compat.delete_timeline_one({
         "$or": [
-            {"timeline_id": timeline_id},
-            {"project_timeline_id": timeline_id}
+            {"timeline_id": actual_timeline_id},
+            {"project_timeline_id": actual_timeline_id}
         ]
     })
     
@@ -8151,7 +8165,7 @@ async def seed_demo_data():
         await db.notifications.delete_many({})
         await db.project_stages.delete_many({})
         await db.timeline_steps.delete_many({})
-        await db.project_timelines.delete_many({})
+        await db_compat.delete_timelines_many({})
         await db.activities.delete_many({})
         await db.vault_documents.delete_many({})
         await db.team_members.delete_many({})
@@ -8765,7 +8779,7 @@ async def seed_demo_data():
     # ==================== SEED DEMO TIMELINE ====================
     await db.timeline_templates.delete_many({"is_demo": True})
     await db.timeline_template_steps.delete_many({})
-    await db.project_timelines.delete_many({"is_demo": True})
+    await db_compat.delete_timelines_many({"is_demo": True})
     await db.timeline_steps.delete_many({"is_demo": True})
     await db.timeline_step_documents.delete_many({})
     await db.timeline_step_internal_notes.delete_many({})
@@ -8801,12 +8815,13 @@ async def seed_demo_data():
         "is_demo": True,
         "created_at": (now - timedelta(days=60)).isoformat()
     }
-    await db.project_timelines.insert_one(demo_timeline)
+    await db_compat.insert_timeline(demo_timeline)
     
     # Create actual timeline steps with realistic progress
     timeline_steps = [
         {
             "step_id": "step_demo_001",
+            "timeline_id": demo_timeline_id,
             "project_timeline_id": demo_timeline_id,
             "title": "Site Preparation",
             "description": "Clear vegetation, mark boundaries, set up site office and safety perimeter",
@@ -8820,6 +8835,7 @@ async def seed_demo_data():
         },
         {
             "step_id": "step_demo_002",
+            "timeline_id": demo_timeline_id,
             "project_timeline_id": demo_timeline_id,
             "title": "Excavation",
             "description": "Excavate foundation trenches, install drainage, prepare for concrete",
@@ -8833,6 +8849,7 @@ async def seed_demo_data():
         },
         {
             "step_id": "step_demo_003",
+            "timeline_id": demo_timeline_id,
             "project_timeline_id": demo_timeline_id,
             "title": "Foundation",
             "description": "Reinforcement installation, concrete pour, waterproofing membrane",
@@ -8846,6 +8863,7 @@ async def seed_demo_data():
         },
         {
             "step_id": "step_demo_004",
+            "timeline_id": demo_timeline_id,
             "project_timeline_id": demo_timeline_id,
             "title": "Structure",
             "description": "Steel framework, load-bearing walls, floor slabs for each level",
@@ -8859,6 +8877,7 @@ async def seed_demo_data():
         },
         {
             "step_id": "step_demo_005",
+            "timeline_id": demo_timeline_id,
             "project_timeline_id": demo_timeline_id,
             "title": "Finishes",
             "description": "Plastering, painting, flooring, fixtures, final inspections",
@@ -10750,11 +10769,11 @@ async def extract_document_data(
             # Check if project already has a timeline
             project_id = ctx_dict.get("project_id")
             if project_id:
-                existing_timeline = await db.project_timelines.find_one({
+                existing_timeline = await db_compat.find_timeline_one({
                     "project_id": project_id,
                     "agent_id": user['user_id'],
                     "is_demo": user.get('is_demo', False)
-                }, {"_id": 0})
+                })
                 
                 if existing_timeline:
                     # Timeline already exists - return info about existing timeline
@@ -11426,13 +11445,13 @@ async def get_workflow_selectors(
         # Get timeline steps (ownership enforced via project/timeline chain)
         query = {}
         if project_id:
-            # Get timeline for this project
-            timeline = await db.project_timelines.find_one(
+            # Get timeline for this project (via compat layer)
+            timeline = await db_compat.find_timeline_one(
                 {"project_id": project_id},
-                {"_id": 0, "timeline_id": 1}
+                {"timeline_id": 1}
             )
             if timeline:
-                query["project_timeline_id"] = timeline['timeline_id']
+                query = db_compat.timeline_ref_query(timeline['timeline_id'])
             else:
                 return {"items": []}
         else:
@@ -11443,22 +11462,22 @@ async def get_workflow_selectors(
             ).to_list(100)
             project_ids = [p['project_id'] for p in projects]
             
-            # Get timelines for these projects
-            timelines = await db.project_timelines.find(
+            # Get timelines for these projects (via compat layer)
+            timelines = await db_compat.find_timeline_many(
                 {"project_id": {"$in": project_ids}},
-                {"_id": 0, "timeline_id": 1, "project_id": 1}
-            ).to_list(100)
+                {"timeline_id": 1, "project_id": 1}
+            )
             timeline_ids = [t['timeline_id'] for t in timelines]
             timeline_project_map = {t['timeline_id']: t['project_id'] for t in timelines}
             
             if not timeline_ids:
                 return {"items": []}
-            query["project_timeline_id"] = {"$in": timeline_ids}
+            query = {"$or": [{"timeline_id": {"$in": timeline_ids}}, {"project_timeline_id": {"$in": timeline_ids}}]}
         
         # Use correct field names: title (not name), order_index (not order)
         steps = await db.timeline_steps.find(
             query,
-            {"_id": 0, "step_id": 1, "title": 1, "status": 1, "project_timeline_id": 1, "planned_date": 1}
+            {"_id": 0, "step_id": 1, "title": 1, "status": 1, "timeline_id": 1, "project_timeline_id": 1, "planned_date": 1}
         ).sort("order_index", 1).limit(100).to_list(100)
         
         # Enrich with project names
@@ -11466,12 +11485,16 @@ async def get_workflow_selectors(
             # Map title to name for UI consistency
             step['name'] = step.pop('title', 'Untitled')
             
-            timeline_id = step.get('project_timeline_id')
-            if timeline_id:
-                # Get project_id from timeline
-                timeline = await db.project_timelines.find_one(
-                    {"timeline_id": timeline_id},
-                    {"_id": 0, "project_id": 1}
+            # Normalize: use timeline_id, fallback to project_timeline_id
+            tl_id = step.get('timeline_id') or step.get('project_timeline_id')
+            step.pop('project_timeline_id', None)
+            step['timeline_id'] = tl_id
+            
+            if tl_id:
+                # Get project_id from timeline (via compat layer)
+                timeline = await db_compat.find_timeline_one(
+                    {"$or": [{"timeline_id": tl_id}, {"project_timeline_id": tl_id}]},
+                    {"project_id": 1}
                 )
                 if timeline:
                     project = await db.projects.find_one(

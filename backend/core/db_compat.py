@@ -199,6 +199,97 @@ class DatabaseCompat:
         
         return await self.get_timeline_by_id(timeline_id)
     
+    async def find_timeline_one(self, query: Dict, projection: Dict = None) -> Optional[Dict]:
+        """
+        Flexible find_one for timelines with dual-collection fallback.
+        Use when specific helper methods don't cover the query pattern.
+        """
+        if projection is None:
+            projection = {"_id": 0}
+        elif "_id" not in projection:
+            projection = {**projection, "_id": 0}
+        
+        result = await self.db.timelines.find_one(query, projection)
+        if result:
+            return self._normalize_timeline_id(result)
+        
+        if COMPAT_MODE:
+            result = await self.db.project_timelines.find_one(query, projection)
+            if result:
+                self._log_conflict("find_timeline_one", f"Found in project_timelines")
+                return self._normalize_timeline_id(result)
+        
+        return None
+    
+    async def find_timeline_many(self, query: Dict, projection: Dict = None, limit: int = 100) -> List[Dict]:
+        """Flexible find for timelines with dual-collection fallback."""
+        if projection is None:
+            projection = {"_id": 0}
+        elif "_id" not in projection:
+            projection = {**projection, "_id": 0}
+        
+        results = await self.db.timelines.find(query, projection).to_list(limit)
+        
+        if not results and COMPAT_MODE:
+            results = await self.db.project_timelines.find(query, projection).to_list(limit)
+            if results:
+                self._log_conflict("find_timeline_many", f"Found {len(results)} in project_timelines")
+        
+        return [self._normalize_timeline_id(t) for t in results]
+    
+    async def insert_timeline(self, doc: Dict) -> None:
+        """Insert timeline into canonical collection only. Normalizes field names."""
+        if "project_timeline_id" in doc and "timeline_id" not in doc:
+            doc["timeline_id"] = doc["project_timeline_id"]
+        await self.db.timelines.insert_one(doc)
+    
+    async def delete_timeline_one(self, query: Dict) -> bool:
+        """Delete single timeline from canonical + deprecated during compat."""
+        result = await self.db.timelines.delete_one(query)
+        deleted = result.deleted_count > 0
+        if COMPAT_MODE:
+            dep_result = await self.db.project_timelines.delete_one(query)
+            deleted = deleted or dep_result.deleted_count > 0
+        return deleted
+    
+    async def delete_timelines_many(self, query: Dict) -> int:
+        """Delete many timelines from canonical + deprecated during compat."""
+        result = await self.db.timelines.delete_many(query)
+        count = result.deleted_count
+        if COMPAT_MODE:
+            dep_result = await self.db.project_timelines.delete_many(query)
+            count += dep_result.deleted_count
+        return count
+    
+    # =========================================================================
+    # TIMELINE REFERENCE HELPERS (for timeline_steps FK field)
+    # =========================================================================
+    
+    @staticmethod
+    def timeline_ref_query(timeline_id: str) -> Dict:
+        """
+        Query helper for finding timeline_steps by timeline reference.
+        Handles both canonical (timeline_id) and deprecated (project_timeline_id).
+        """
+        return {"$or": [{"timeline_id": timeline_id}, {"project_timeline_id": timeline_id}]}
+    
+    @staticmethod
+    def timeline_ref_fields(timeline_id: str) -> Dict:
+        """
+        Write helper for timeline reference fields in step documents.
+        Writes both canonical and deprecated field names during Phase C.
+        Remove deprecated field in Phase F.
+        """
+        return {"timeline_id": timeline_id, "project_timeline_id": timeline_id}
+    
+    @staticmethod
+    def get_step_timeline_ref(step: Dict) -> str:
+        """
+        Get timeline reference from a step document.
+        Supports both canonical (timeline_id) and deprecated (project_timeline_id) field names.
+        """
+        return step.get('timeline_id') or step.get('project_timeline_id', '')
+    
     # =========================================================================
     # TIMELINE STEPS COMPATIBILITY
     # =========================================================================

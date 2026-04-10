@@ -1,65 +1,73 @@
 # Implementation Impact Map
-## Pre-Phase C Control Panel
+## Phase C Control Panel (Updated)
 
-**Date**: January 2026  
-**Purpose**: Practical control panel before code changes begin
+**Date**: January-February 2026  
+**Purpose**: Track implementation progress and remaining work
 
 ---
 
 ## Collections Impact
 
-| Collection | Action | Risk | Migration Script | Notes |
-|------------|--------|------|------------------|-------|
-| `project_units` | RENAME → `units` | LOW | Yes | 18 code references |
-| `units` | KEEP (absorb data) | LOW | Receiver | 1 legacy reference |
-| `project_timelines` | RENAME → `timelines` | LOW | Yes | 28 code references |
-| `project_stages` | DELETE | LOW | Yes (merge) | 3 references, demo seed only |
-| `timeline_steps` | KEEP | NONE | Field rename only | 34 references, canonical |
-| `activities` | KEEP | NONE | None | Already canonical |
-| `activity_recipients` | KEEP | NONE | None | Already canonical |
-| `activity_replies` | KEEP | NONE | None | Already canonical |
-| `documents` | KEEP | NONE | None | Already canonical |
-| `vault_documents` | KEEP | NONE | None | Already canonical |
-| `notifications` | KEEP | NONE | None | Already canonical |
-| `team_members` | KEEP | NONE | None | Already canonical |
-| `clients` | KEEP | NONE | None | Already canonical |
-| `projects` | KEEP | NONE | None | Already canonical |
-| `users` | KEEP | NONE | None | Already canonical |
-
-**Summary**: 3 collections to rename/delete, 12 collections unchanged
-
----
-
-## Field Renames Required
-
-| Collection | Old Field | New Field | Document Count | Risk |
-|------------|-----------|-----------|----------------|------|
-| `timelines` | `project_timeline_id` | `timeline_id` | TBD | LOW |
-| `timeline_steps` | `project_timeline_id` | `timeline_id` | TBD | LOW |
+| Collection | Action | Phase C Status | Migration Script | Notes |
+|------------|--------|----------------|------------------|-------|
+| `project_units` | RENAME -> `units` | PARTIAL (compat for GET/POST/DELETE) | Yes | ~15 direct refs remain in server.py |
+| `units` | KEEP (absorb data) | IN USE | Receiver | Canonical collection active |
+| `project_timelines` | RENAME -> `timelines` | COMPLETE | Yes | All refs routed through `db_compat` |
+| `timelines` | KEEP (absorb data) | IN USE | Receiver | Canonical collection active |
+| `project_stages` | DELETE | PENDING (Phase D) | Yes (merge) | Only in demo reset delete_many |
+| `timeline_steps` | KEEP | COMPLETE | Field rename only | Queries use $or for both FK names |
+| `activities` | KEEP | N/A | None | Already canonical |
+| `activity_recipients` | KEEP | N/A | None | Already canonical |
+| `activity_replies` | KEEP | N/A | None | Already canonical |
+| `documents` | KEEP | N/A | None | Already canonical |
+| `vault_documents` | KEEP | N/A | None | Already canonical |
+| `notifications` | KEEP | N/A | None | Already canonical |
+| `team_members` | KEEP | N/A | None | Already canonical |
+| `clients` | KEEP | N/A | None | Already canonical |
+| `projects` | KEEP | N/A | None | Already canonical |
+| `users` | KEEP | N/A | None | Already canonical |
 
 ---
 
-## Backend Endpoints Impact
+## Field Renames Status
 
-### Routes Requiring Rename
+| Collection | Old Field | New Field | Phase C Status | DB Migration Needed |
+|------------|-----------|-----------|----------------|---------------------|
+| `timelines` | `project_timeline_id` | `timeline_id` | NORMALIZED IN API | Yes (Phase D) |
+| `timeline_steps` | `project_timeline_id` | `timeline_id` | DUAL-WRITE + NORMALIZED IN API | Yes (Phase D) |
 
-| Current Route | New Route | Method | Risk | Breaking |
-|---------------|-----------|--------|------|----------|
-| `/projects/{id}/stages` | `/projects/{id}/steps` | POST | LOW | Yes* |
-| `/projects/{id}/stages/{stage_id}` | `/projects/{id}/steps/{step_id}` | PUT | LOW | Yes* |
-| `/projects/{id}/stages/{stage_id}` | `/projects/{id}/steps/{step_id}` | DELETE | LOW | Yes* |
+---
 
-*Breaking change mitigated by dual routes in Phase C
+## Backend Endpoints Phase C Status
 
-### Routes Requiring Collection Updates (Internal Only)
+### Routes With Compatibility Routing (COMPLETE)
 
-| Route | Current Collection | New Collection | Risk |
-|-------|-------------------|----------------|------|
-| `GET /projects/{id}/units` | `project_units` | `units` | LOW |
-| `POST /projects/{id}/units` | `project_units` | `units` | LOW |
-| `DELETE /projects/{id}/units/{id}` | `project_units` | `units` | LOW |
-| `GET /projects/{id}/timeline` | `project_timelines` | `timelines` | LOW |
-| `POST /timeline/create` | `project_timelines` | `timelines` | LOW |
+| Route | Collection Migration | Field Normalization | Status |
+|-------|---------------------|---------------------|--------|
+| `GET /projects/{id}/stages` | via `db_compat.find_timeline_one` | `timeline_id` in response | COMPLETE |
+| `POST /projects/{id}/stages` | via `db_compat.find_timeline_one` + `insert_timeline` | dual-write FK | COMPLETE |
+| `PUT /projects/{id}/stages/{id}` | via `db_compat.find_timeline_one` | N/A | COMPLETE |
+| `DELETE /projects/{id}/stages/{id}` | via `db_compat.find_timeline_one` | N/A | COMPLETE |
+| `GET /projects/{id}/steps` | delegates to /stages impl | Same as /stages | COMPLETE |
+| `POST /projects/{id}/steps` | delegates to /stages impl | Same as /stages | COMPLETE |
+| `PUT /projects/{id}/steps/{id}` | delegates to /stages impl | Same as /stages | COMPLETE |
+| `DELETE /projects/{id}/steps/{id}` | delegates to /stages impl | Same as /stages | COMPLETE |
+| `GET /project-timeline` | via `db_compat.find_timeline_one` | Both timeline + step FK normalized | COMPLETE |
+| `GET /projects/{id}/timeline/full` | via `db_compat.find_timeline_one` | `timeline_id` in response | COMPLETE |
+| `GET /projects/{id}/workflow/full` | via `db_compat.find_timeline_one` | `timeline_id` in response | COMPLETE |
+| `POST /timeline/create` | via `db_compat.insert_timeline` | dual-write FK | COMPLETE |
+| `POST /timeline/{id}/steps` | via `db_compat.find_timeline_one` | dual-write FK, normalized return | COMPLETE |
+| `PATCH /timeline/steps/{id}` | via `db_compat.find_timeline_one` | normalized return | COMPLETE |
+| `DELETE /timeline/steps/{id}` | via `db_compat.find_timeline_one` | N/A | COMPLETE |
+| `POST /timeline/steps/{id}/documents` | via `db_compat.find_timeline_one` | N/A | COMPLETE |
+| `DELETE /timeline/steps/{id}/documents/{id}` | via `db_compat.find_timeline_one` | N/A | COMPLETE |
+| `POST /timeline/steps/{id}/notes` | via `db_compat.find_timeline_one` | N/A | COMPLETE |
+| `DELETE /timeline/{id}` | via `db_compat.find_timeline_one` + `delete_timeline_one` | N/A | COMPLETE |
+| `POST /timeline/extractions/{id}/approve` | via `db_compat.insert_timeline` | dual-write FK | COMPLETE |
+| `POST /timeline/apply-template` | via `db_compat.find_timeline_one` + `insert_timeline` | dual-write FK | COMPLETE |
+| Demo seed | via `db_compat.insert_timeline` + `delete_timelines_many` | dual-write FK | COMPLETE |
+| AI extraction timeline check | via `db_compat.find_timeline_one` | N/A | COMPLETE |
+| Selector (timeline_step) | via `db_compat.find_timeline_one/many` | normalized in response | COMPLETE |
 
 ### Routes Unchanged (Already Canonical)
 
@@ -71,120 +79,51 @@
 - All `/auth/*` routes
 - All `/billing/*` routes
 
-**Summary**: 3 routes to rename, ~8 routes need collection updates, ~50+ routes unchanged
+---
+
+## Compat Layer Methods Used
+
+| Method | Purpose | Usage Count |
+|--------|---------|-------------|
+| `find_timeline_one(query, projection)` | Dual-read find_one | ~20 |
+| `find_timeline_many(query, projection)` | Dual-read find | 1 |
+| `insert_timeline(doc)` | Write to canonical only | 5 |
+| `delete_timeline_one(query)` | Delete from both | 1 |
+| `delete_timelines_many(query)` | Delete many from both | 2 |
+| `timeline_ref_query(tl_id)` | $or query for step FK | ~8 |
+| `timeline_ref_fields(tl_id)` | Dual-write FK fields | ~6 |
+| `get_step_timeline_ref(step)` | Defensive FK access | ~8 |
 
 ---
 
-## Frontend Pages/Components Impact
+## Phase C Done Condition Checklist
 
-| Component | File | Changes Required | Risk |
-|-----------|------|------------------|------|
-| AgentTimeline | `AgentTimeline.js` | `/stages/` → `/steps/` | MEDIUM |
-| BuyerTimeline | `BuyerTimeline.js` | Verify step_id usage | LOW |
-| AgentProjects | `AgentProjects.js` | None (route unchanged) | NONE |
-| AgentClients | `AgentClients.js` | None | NONE |
-| AgentClientDetail | `AgentClientDetail.js` | None | NONE |
-| AgentHomePage | `AgentHomePage.js` | Verify timeline response | LOW |
-| AgentVault | `AgentVault.js` | None | NONE |
-| AgentQuotes | `AgentQuotes.js` | None | NONE |
-| AgentInvoices | `AgentInvoices.js` | None | NONE |
-| AgentFeed | `AgentFeed.js` | None | NONE |
-
-**Summary**: 2 components need updates, 8+ components unchanged
+- [x] `timelines` is the canonical collection path
+- [x] `timeline_id` is the canonical field everywhere externally visible
+- [x] `/stages` still works via compatibility
+- [x] All regression tests pass (14/14)
+- [x] Docs updated (this file + PHASE_C_CONFLICT_REPORT.md)
 
 ---
 
-## Migration Scripts Required
+## Remaining Work (Phase D-F)
 
-| Script | Purpose | Collections | Reversible |
-|--------|---------|-------------|------------|
-| `migrate_units.js` | Merge `project_units` → `units` | 2 | Yes |
-| `migrate_timelines.js` | Rename `project_timelines` → `timelines` | 1 | Yes |
-| `normalize_timeline_id.js` | Rename field `project_timeline_id` → `timeline_id` | 2 | Yes |
-| `migrate_stages.js` | Merge `project_stages` → `timeline_steps` | 2 | Yes |
-| `verify_integrity.js` | Post-migration verification | All | N/A |
-| `cleanup_deprecated.js` | Drop old collections (Phase F only) | 3 | No |
-
----
-
-## Rollback Risk by Area
-
-| Area | Risk Level | Rollback Method | Time to Rollback |
-|------|------------|-----------------|------------------|
-| Units collection | LOW | Restore from backup | < 1 hour |
-| Timelines collection | LOW | Restore from backup | < 1 hour |
-| Timeline ID field | LOW | Re-rename field | < 1 hour |
-| Stages merge | LOW | Restore from backup | < 1 hour |
-| API route renames | LOW | Redeploy old code | < 30 min |
-| Frontend changes | LOW | Redeploy old build | < 30 min |
-
-**Overall Rollback Risk**: LOW - All changes reversible with backups
+| Phase | Task | Priority |
+|-------|------|----------|
+| D | Backup all collections | P0 |
+| D | Run `migrate_units` (project_units -> units) | P0 |
+| D | Run `migrate_timelines` (project_timelines -> timelines) | P0 |
+| D | Run `normalize_timeline_id` (rename field in timeline_steps) | P0 |
+| D | Run `verify_integrity` | P0 |
+| E | Remove compat dual-reads (read canonical only) | P1 |
+| E | Update remaining `db.project_units` direct refs | P1 |
+| E | Update Pydantic models | P1 |
+| E | Update frontend API calls | P1 |
+| F | Remove deprecated `/stages` routes | P2 |
+| F | Drop `project_timelines` collection | P2 |
+| F | Drop `project_units` collection | P2 |
+| F | Remove `db_compat.py` | P2 |
 
 ---
 
-## Conflict Checkpoints
-
-During implementation, flag if ANY of these are found:
-
-| Checkpoint | Expected | Action if Different |
-|------------|----------|---------------------|
-| `project_units` has data | Yes | Document count, verify merge |
-| `project_stages` has data | Minimal (demo only) | Verify before delete |
-| `timeline_id` already exists | Some docs | Skip rename for those |
-| Frontend uses `project_timeline_id` | Possibly | Flag and fix |
-| Frontend uses `stage_id` | Yes | Flag locations |
-| Other collections use deprecated names | No | Flag immediately |
-
----
-
-## Implementation Order (Strict)
-
-```
-Phase C: Compatibility Layer
-├── C.1: Create db_compat.py helper module
-├── C.2: Add dual read (old + new collections)
-├── C.3: Write only to canonical collections
-├── C.4: Add dual API routes (/stages AND /steps)
-├── C.5: Verify all features still work
-└── C.6: Deploy compatibility layer
-
-Phase D: Data Migration
-├── D.1: Backup all collections
-├── D.2: Run migrate_units.js
-├── D.3: Run migrate_timelines.js
-├── D.4: Run normalize_timeline_id.js
-├── D.5: Run migrate_stages.js
-├── D.6: Run verify_integrity.js
-└── D.7: Verify all features still work
-
-Phase E: Code Normalization
-├── E.1: Remove compatibility helpers (read from canonical only)
-├── E.2: Update all collection references in code
-├── E.3: Update Pydantic models
-├── E.4: Update frontend API calls
-├── E.5: Run full test suite
-└── E.6: Deploy normalized code
-
-Phase F: Cleanup (30 days later)
-├── F.1: Remove deprecated routes
-├── F.2: Drop old collections
-├── F.3: Remove compatibility code
-└── F.4: Final verification
-```
-
----
-
-## Go/No-Go Checklist
-
-Before starting Phase C:
-- [x] Canonical schema complete (Deliverable 1 + 1B)
-- [x] Migration plan documented (Deliverable 2)
-- [x] Code audit complete (Deliverable 3)
-- [x] Implementation sequence defined (Deliverable 4)
-- [x] Impact map created (this document)
-- [ ] Database backup verified
-- [ ] Rollback procedure tested
-
----
-
-*Implementation Impact Map created: January 2026*
+*Last updated: February 2026*
