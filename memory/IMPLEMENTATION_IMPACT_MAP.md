@@ -106,21 +106,35 @@
 
 ---
 
-## Remaining Work (Phase E-F)
+## Remaining Work (Phase F)
 
 | Phase | Task | Priority |
 |-------|------|----------|
-| E | Remove compat dual-reads (read canonical only) | P1 |
-| E | Update remaining `db.project_units` direct refs in server.py | P1 |
-| E | Update Pydantic models to drop deprecated fields | P1 |
-| E | Update frontend API calls if needed | P1 |
-| F | Remove deprecated `/stages` routes | P2 |
-| F | Drop `project_timelines` collection | P2 |
-| F | Drop `project_units` collection | P2 |
-| F | Drop `project_stages` collection | P2 |
-| F | Remove `db_compat.py` compat layer | P2 |
+| F | $unset `project_timeline_id` from all DB documents | P1 |
+| F | Remove deprecated `/stages` routes | P1 |
+| F | Drop `project_timelines` collection | P1 |
+| F | Drop `project_units` collection | P1 |
+| F | Drop `project_stages` collection | P1 |
+| F | Remove response normalization code | P2 |
+| F | Remove `db_compat.py` module (replace with direct `db.` calls) | P2 |
 
-## Phase D: Data Migration (COMPLETE)
+## Phase E: Code Refactoring (COMPLETE)
+
+**Executed**: 2026-04-10
+
+| Change | Count | Status |
+|---|---|---|
+| `db.project_units` → `db.units` | 16 | DONE |
+| `db.project_stages` → `db.timeline_steps` | 3 | DONE |
+| `COMPAT_MODE` = False | 1 | DONE |
+| `$or` queries simplified to `timeline_id` only | 7 | DONE |
+| `timeline_ref_query()` simplified | 1 | DONE |
+| `timeline_ref_fields()` simplified | 1 | DONE |
+| Pydantic model updated | 1 | DONE |
+| Demo seed updated | 5 | DONE |
+| Frontend `AgentWorkflow.js` updated | 2 | DONE |
+
+**Regression**: 14/14 API endpoint tests passed
 
 **Executed**: 2026-04-10  
 **Script**: `/app/backend/migrations/phase_d_migrate.py`  

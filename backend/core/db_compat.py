@@ -27,7 +27,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 logger = logging.getLogger("evohome.db_compat")
 
 # Flag to track if we're in compatibility mode
-COMPAT_MODE = True  # Set to False in Phase F
+COMPAT_MODE = False  # Phase E: data migrated, canonical reads only. Remove in Phase F.
 
 
 class DatabaseCompat:
@@ -184,19 +184,11 @@ class DatabaseCompat:
         return await self.db.timelines.find_one({"timeline_id": timeline_doc["timeline_id"]}, {"_id": 0})
     
     async def update_timeline(self, timeline_id: str, update_data: Dict) -> Optional[Dict]:
-        """Update timeline."""
-        # Try both field names during migration
-        result = await self.db.timelines.update_one(
-            {"$or": [{"timeline_id": timeline_id}, {"project_timeline_id": timeline_id}]},
+        """Update timeline. Phase E: canonical collection only."""
+        await self.db.timelines.update_one(
+            {"timeline_id": timeline_id},
             {"$set": update_data}
         )
-        
-        if result.modified_count == 0 and COMPAT_MODE:
-            await self.db.project_timelines.update_one(
-                {"$or": [{"timeline_id": timeline_id}, {"project_timeline_id": timeline_id}]},
-                {"$set": update_data}
-            )
-        
         return await self.get_timeline_by_id(timeline_id)
     
     async def find_timeline_one(self, query: Dict, projection: Dict = None) -> Optional[Dict]:
@@ -269,24 +261,23 @@ class DatabaseCompat:
     def timeline_ref_query(timeline_id: str) -> Dict:
         """
         Query helper for finding timeline_steps by timeline reference.
-        Handles both canonical (timeline_id) and deprecated (project_timeline_id).
+        Phase E: canonical field only. Remove $or fallback in Phase F cleanup.
         """
-        return {"$or": [{"timeline_id": timeline_id}, {"project_timeline_id": timeline_id}]}
+        return {"timeline_id": timeline_id}
     
     @staticmethod
     def timeline_ref_fields(timeline_id: str) -> Dict:
         """
         Write helper for timeline reference fields in step documents.
-        Writes both canonical and deprecated field names during Phase C.
-        Remove deprecated field in Phase F.
+        Phase E: writes canonical only. Drop deprecated in Phase F.
         """
-        return {"timeline_id": timeline_id, "project_timeline_id": timeline_id}
+        return {"timeline_id": timeline_id}
     
     @staticmethod
     def get_step_timeline_ref(step: Dict) -> str:
         """
         Get timeline reference from a step document.
-        Supports both canonical (timeline_id) and deprecated (project_timeline_id) field names.
+        Phase E: canonical field, with safe fallback.
         """
         return step.get('timeline_id') or step.get('project_timeline_id', '')
     
@@ -295,23 +286,9 @@ class DatabaseCompat:
     # =========================================================================
     
     async def get_steps(self, timeline_id: str, **filters) -> List[Dict]:
-        """
-        Get steps for a timeline.
-        
-        Handles both timeline_id and project_timeline_id fields.
-        """
-        # Query with both possible field names
-        query = {
-            "$or": [
-                {"timeline_id": timeline_id},
-                {"project_timeline_id": timeline_id}
-            ],
-            **filters
-        }
-        
+        """Get steps for a timeline. Phase E: canonical field only."""
+        query = {"timeline_id": timeline_id, **filters}
         steps = await self.db.timeline_steps.find(query, {"_id": 0}).to_list(500)
-        
-        # Normalize each step
         return [self._normalize_step(step) for step in steps]
     
     async def get_steps_by_project(self, project_id: str, **filters) -> List[Dict]:
@@ -422,7 +399,7 @@ def init_compat(db: AsyncIOMotorDatabase) -> DatabaseCompat:
     """Initialize compatibility layer with database."""
     global _compat
     _compat = DatabaseCompat(db)
-    logger.info("Database compatibility layer initialized (COMPAT_MODE=True)")
+    logger.info(f"Database compatibility layer initialized (COMPAT_MODE={COMPAT_MODE})")
     return _compat
 
 

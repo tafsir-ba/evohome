@@ -684,8 +684,20 @@ Last Updated: March 19, 2026
 - [x] Post-migration regression: 14/14 API endpoint tests passed
 - [x] Migration report: `/app/backend/migrations/MIGRATION_REPORT.md`
 
+### Phase E: Code Refactoring (COMPLETE)
+
+**Executed**: 2026-04-10
+
+- [x] `COMPAT_MODE = False` — disabled fallback reads from deprecated collections
+- [x] All `db.project_units` (16 refs) → `db.units` in server.py
+- [x] All `db.project_stages` reads → `db.timeline_steps`
+- [x] All `$or` queries with `project_timeline_id` simplified to canonical `timeline_id`
+- [x] Pydantic `TimelineStep` model dropped deprecated `project_timeline_id` field
+- [x] Demo seed writes `timeline_id` only (no dual-write)
+- [x] Frontend `AgentWorkflow.js` removed `project_timeline_id` fallback
+- [x] Regression: 14/14 tests passed
+
 ### Remaining Phases
-- **Phase E**: Code Refactoring (drop dual routing, update frontend types)
 - **Phase F**: Deprecation Cleanup (remove deprecated collections, endpoints, compat layer)
 - **Phase 3**: Architecture (split monolithic server.py into modular routers)
 

@@ -88,10 +88,30 @@
 
 | Area | Deprecated Reference | Why Still Present | When to Remove |
 |------|---------------------|-------------------|----------------|
-| `db.project_units` | ~15 direct references in server.py | Not yet routed through compat layer | Phase E |
-| `project_timeline_id` field in DB | Stored in `timeline_steps` collection | Data not yet migrated | Phase D |
+| `project_timeline_id` field in DB | Stored alongside `timeline_id` in documents | Data not yet cleaned | Phase F |
 | `/stages` API routes | Still functional | Maintained for backward compat | Phase F |
-| `project_stages` collection | Only in demo reset `delete_many` | Legacy collection, no active reads | Phase D cleanup |
+| `project_timelines` collection | Data still in deprecated collection | Not dropped yet | Phase F |
+| `project_units` collection | Data still in deprecated collection | Not dropped yet | Phase F |
+| `project_stages` collection | Demo reset still deletes from it | Legacy cleanup target | Phase F |
+| Response normalization code | `pop('project_timeline_id')` in 3 endpoints | Safety net for DB data | Phase F |
+| `db_compat.py` module | Still used for canonical reads | Simplify to direct DB calls | Phase F |
+
+---
+
+## Phase E: Code Refactoring (COMPLETE)
+
+**Executed**: 2026-04-10
+
+- [x] `COMPAT_MODE` set to `False` — no fallback reads from deprecated collections
+- [x] All `db.project_units` (16 refs) → `db.units`
+- [x] All `db.project_stages` reads → `db.timeline_steps`
+- [x] All `$or` queries with `project_timeline_id` → canonical `timeline_id` only
+- [x] `timeline_ref_query()` → returns `{"timeline_id": X}` (no $or)
+- [x] `timeline_ref_fields()` → returns `{"timeline_id": X}` (no dual-write)
+- [x] Pydantic `TimelineStep` model — dropped `project_timeline_id` field
+- [x] Demo seed — writes `timeline_id` only
+- [x] Frontend `AgentWorkflow.js` — removed `project_timeline_id` fallback
+- [x] Regression: 14/14 tests passed
 
 ---
 

@@ -235,8 +235,8 @@ export const AgentWorkflow = () => {
   const handleDeleteTimeline = async () => {
     if (!timeline || !confirm('Delete this timeline? This cannot be undone.')) return;
     
-    // Use timeline_id or project_timeline_id (for legacy data)
-    const timelineId = timeline.timeline_id || timeline.project_timeline_id;
+    // Use canonical timeline_id
+    const timelineId = timeline.timeline_id;
     if (!timelineId) {
       toast.error('Invalid timeline ID');
       return;
@@ -351,7 +351,7 @@ export const AgentWorkflow = () => {
     }
     
     setFormLoading(true);
-    const timelineId = timeline.timeline_id || timeline.project_timeline_id;
+    const timelineId = timeline.timeline_id;
     
     try {
       const res = await fetch(`${API}/timeline/${timelineId}/steps`, {

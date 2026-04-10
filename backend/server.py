@@ -555,8 +555,7 @@ class TimelineStepNoteCreate(BaseModel):
 
 class TimelineStep(BaseModel):
     step_id: str
-    timeline_id: Optional[str] = None  # Canonical FK
-    project_timeline_id: Optional[str] = None  # DEPRECATED - kept for Phase C compat
+    timeline_id: Optional[str] = None
     title: str
     description: Optional[str] = None
     status: Literal["pending", "in_progress", "completed", "approved"]
@@ -1289,7 +1288,7 @@ async def send_milestone_notification(step: dict, project: dict, timeline: dict,
         # Calculate overall progress
         tl_ref = step.get('timeline_id') or step.get('project_timeline_id')
         all_steps = await db.timeline_steps.find(
-            {"$or": [{"timeline_id": tl_ref}, {"project_timeline_id": tl_ref}]},
+            {"timeline_id": tl_ref},
             {"_id": 0, "status": 1}
         ).to_list(100)
         
@@ -2570,7 +2569,7 @@ async def get_projects(user: dict = Depends(get_current_user)):
     # Add client count and unit count to each project
     for project in projects:
         client_count = await db.clients.count_documents({"project_id": project['project_id'], **demo_filter})
-        unit_count = await db.project_units.count_documents({"project_id": project['project_id']})
+        unit_count = await db.units.count_documents({"project_id": project['project_id']})
         project['client_count'] = client_count
         project['unit_count'] = unit_count
     
@@ -2615,7 +2614,7 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_a
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     # Count linked clients and units
     client_count = await db.clients.count_documents({"project_id": project_id, **demo_filter})
-    unit_count = await db.project_units.count_documents({"project_id": project_id})
+    unit_count = await db.units.count_documents({"project_id": project_id})
     project['client_count'] = client_count
     project['unit_count'] = unit_count
     return project
@@ -2636,7 +2635,7 @@ async def update_project(project_id: str, data: ProjectUpdate, user: dict = Depe
     
     updated_project = await db.projects.find_one(query, {"_id": 0})
     client_count = await db.clients.count_documents({"project_id": project_id, **demo_filter})
-    unit_count = await db.project_units.count_documents({"project_id": project_id})
+    unit_count = await db.units.count_documents({"project_id": project_id})
     updated_project['client_count'] = client_count
     updated_project['unit_count'] = unit_count
     return updated_project
@@ -2680,7 +2679,7 @@ async def get_project_units(project_id: str, user: dict = Depends(get_current_ag
     
     if not units and COMPAT_MODE:
         # Fallback to deprecated collection during migration
-        units = await db.project_units.find(
+        units = await db.units.find(
             {"project_id": project_id},
             {"_id": 0}
         ).to_list(500)
@@ -2744,7 +2743,7 @@ async def create_project_unit(project_id: str, data: dict, user: dict = Depends(
         "unit_reference": unit_reference
     })
     if not existing and COMPAT_MODE:
-        existing = await db.project_units.find_one({
+        existing = await db.units.find_one({
             "project_id": project_id,
             "unit_reference": unit_reference
         })
@@ -2784,7 +2783,7 @@ async def delete_project_unit(project_id: str, unit_id: str, user: dict = Depend
         "project_id": project_id
     }, {"_id": 0})
     if not unit and COMPAT_MODE:
-        unit = await db.project_units.find_one({
+        unit = await db.units.find_one({
             "unit_id": unit_id,
             "project_id": project_id
         }, {"_id": 0})
@@ -2798,7 +2797,7 @@ async def delete_project_unit(project_id: str, unit_id: str, user: dict = Depend
     await db.units.delete_one({"unit_id": unit_id})
     # Also clean up deprecated collection if exists
     if COMPAT_MODE:
-        await db.project_units.delete_one({"unit_id": unit_id})
+        await db.units.delete_one({"unit_id": unit_id})
     
     return {"message": "Unit deleted"}
 
@@ -3281,11 +3280,11 @@ async def get_client_preview_data(client_id: str, user: dict = Depends(get_curre
         {"_id": 0}
     ).sort("created_at", -1).to_list(50)
     
-    # Get construction stages for the project
-    stages = await db.project_stages.find(
+    # Get construction stages for the project (from canonical timeline_steps)
+    stages = await db.timeline_steps.find(
         {"project_id": client['project_id']},
         {"_id": 0}
-    ).sort("order", 1).to_list(50)
+    ).sort("order_index", 1).to_list(50)
     
     # Get team members for the project
     team = await db.team_members.find(
@@ -3319,7 +3318,7 @@ async def create_client(data: ClientCreate, user: dict = Depends(get_current_age
     unit_reference = "General"
     unit_id = None
     if data.unit_id:
-        unit = await db.project_units.find_one({
+        unit = await db.units.find_one({
             "unit_id": data.unit_id,
             "project_id": data.project_id,
             "is_demo": is_demo
@@ -3401,7 +3400,7 @@ async def update_client(client_id: str, data: ClientUpdate, user: dict = Depends
             update_data['unit_id'] = None
             update_data['unit_reference'] = "General"
         else:
-            unit = await db.project_units.find_one({
+            unit = await db.units.find_one({
                 "unit_id": data.unit_id,
                 "project_id": target_project_id,
                 "is_demo": is_demo
@@ -3943,7 +3942,7 @@ async def update_document(document_id: str, data: DocumentUpdate, user: dict = D
         else:
             # Validate unit exists and belongs to the project
             target_project_id = data.project_id or doc.get('project_id')
-            unit = await db.project_units.find_one({
+            unit = await db.units.find_one({
                 "unit_id": data.unit_id,
                 "project_id": target_project_id,
                 "is_demo": is_demo
@@ -5103,10 +5102,7 @@ async def update_project_stage(project_id: str, stage_id: str, data: ProjectStag
     # Verify ownership via timeline -> project (via compat layer)
     step_tl_ref = db_compat.get_step_timeline_ref(step)
     timeline = await db_compat.find_timeline_one({
-        "$or": [
-            {"timeline_id": step_tl_ref},
-            {"project_timeline_id": step_tl_ref}
-        ]
+        "timeline_id": step_tl_ref
     })
     if not timeline or timeline.get('project_id') != project_id:
         raise HTTPException(status_code=404, detail="Stage not found in this project")
@@ -5182,10 +5178,7 @@ async def delete_project_stage(project_id: str, stage_id: str, user: dict = Depe
     # Verify ownership via timeline -> project (via compat layer)
     step_tl_ref = db_compat.get_step_timeline_ref(step)
     timeline = await db_compat.find_timeline_one({
-        "$or": [
-            {"timeline_id": step_tl_ref},
-            {"project_timeline_id": step_tl_ref}
-        ]
+        "timeline_id": step_tl_ref
     })
     if not timeline or timeline.get('project_id') != project_id:
         raise HTTPException(status_code=404, detail="Stage not found in this project")
@@ -5424,7 +5417,7 @@ async def get_project_context(project_id: str, user: dict = Depends(get_current_
     ]
     
     # Get units for this project
-    units_raw = await db.project_units.find(
+    units_raw = await db.units.find(
         {"project_id": project_id},
         {"_id": 0}
     ).to_list(100)
@@ -5626,7 +5619,7 @@ async def get_buyer_unit_context(user: dict) -> dict:
         return None
     
     # Find the unit for this client
-    unit = await db.project_units.find_one(
+    unit = await db.units.find_one(
         {"client_id": client['client_id']},
         {"_id": 0, "unit_id": 1, "unit_reference": 1, "project_id": 1}
     )
@@ -5650,7 +5643,7 @@ async def enrich_activity(activity: dict, include_replies: bool = False) -> dict
     
     # Get unit reference
     if activity.get('unit_id'):
-        unit = await db.project_units.find_one({"unit_id": activity['unit_id']}, {"_id": 0, "unit_reference": 1})
+        unit = await db.units.find_one({"unit_id": activity['unit_id']}, {"_id": 0, "unit_reference": 1})
         activity['unit_reference'] = unit['unit_reference'] if unit else None
     
     # Get recipients
@@ -7117,10 +7110,7 @@ async def update_timeline_step(step_id: str, data: TimelineStepUpdate, user: dic
     # Verify agent owns the project via timeline (via compat layer)
     step_tl_ref = db_compat.get_step_timeline_ref(step)
     timeline = await db_compat.find_timeline_one({
-        "$or": [
-            {"timeline_id": step_tl_ref},
-            {"project_timeline_id": step_tl_ref}
-        ],
+        "timeline_id": step_tl_ref,
         "is_demo": is_demo
     })
     
@@ -7208,12 +7198,9 @@ async def add_timeline_step(timeline_id: str, data: dict, user: dict = Depends(g
     """Add a new step to an existing timeline"""
     is_demo = user.get('is_demo', False)
     
-    # Find timeline (via compat layer - supports both timeline_id and project_timeline_id)
+    # Find timeline (canonical lookup)
     timeline = await db_compat.find_timeline_one({
-        "$or": [
-            {"timeline_id": timeline_id},
-            {"project_timeline_id": timeline_id}
-        ],
+        "timeline_id": timeline_id,
         "is_demo": is_demo
     })
     
@@ -7231,7 +7218,7 @@ async def add_timeline_step(timeline_id: str, data: dict, user: dict = Depends(g
     # Get current max order_index
     tl_id = timeline.get('timeline_id')
     pipeline = [
-        {"$match": {"$or": [{"timeline_id": tl_id}, {"project_timeline_id": tl_id}]}},
+        {"$match": {"timeline_id": tl_id}},
         {"$group": {"_id": None, "max_order": {"$max": "$order_index"}}}
     ]
     result = await db.timeline_steps.aggregate(pipeline).to_list(1)
@@ -7282,10 +7269,7 @@ async def delete_timeline_step(step_id: str, user: dict = Depends(get_current_ag
     # Verify agent owns the project via timeline (via compat layer)
     step_tl_ref = db_compat.get_step_timeline_ref(step)
     timeline = await db_compat.find_timeline_one({
-        "$or": [
-            {"timeline_id": step_tl_ref},
-            {"project_timeline_id": step_tl_ref}
-        ],
+        "timeline_id": step_tl_ref,
         "is_demo": is_demo
     })
     
@@ -7321,7 +7305,7 @@ async def link_document_to_step(step_id: str, data: TimelineStepDocumentCreate, 
     # Verify agent owns the project (via compat layer)
     step_tl_ref = db_compat.get_step_timeline_ref(step)
     timeline = await db_compat.find_timeline_one(
-        {"$or": [{"timeline_id": step_tl_ref}, {"project_timeline_id": step_tl_ref}]}
+        {"timeline_id": step_tl_ref}
     )
     
     project = await db.projects.find_one(
@@ -7374,7 +7358,7 @@ async def unlink_document_from_step(step_id: str, activity_id: str, user: dict =
     
     step_tl_ref = db_compat.get_step_timeline_ref(step)
     timeline = await db_compat.find_timeline_one(
-        {"$or": [{"timeline_id": step_tl_ref}, {"project_timeline_id": step_tl_ref}]}
+        {"timeline_id": step_tl_ref}
     )
     project = await db.projects.find_one({"project_id": timeline['project_id'], "agent_id": user['user_id']})
     
@@ -7403,7 +7387,7 @@ async def add_internal_note(step_id: str, data: TimelineStepNoteCreate, user: di
     
     step_tl_ref = db_compat.get_step_timeline_ref(step)
     timeline = await db_compat.find_timeline_one(
-        {"$or": [{"timeline_id": step_tl_ref}, {"project_timeline_id": step_tl_ref}]}
+        {"timeline_id": step_tl_ref}
     )
     project = await db.projects.find_one({"project_id": timeline['project_id'], "agent_id": user['user_id']})
     
@@ -7433,12 +7417,9 @@ async def delete_project_timeline(timeline_id: str, user: dict = Depends(get_cur
     """Delete a project timeline and all its steps"""
     is_demo = user.get('is_demo', False)
     
-    # Try to find by timeline_id or project_timeline_id (via compat layer)
+    # Try to find by timeline_id (canonical lookup)
     timeline = await db_compat.find_timeline_one({
-        "$or": [
-            {"timeline_id": timeline_id},
-            {"project_timeline_id": timeline_id}
-        ],
+        "timeline_id": timeline_id,
         "is_demo": is_demo
     })
     
@@ -7473,13 +7454,8 @@ async def delete_project_timeline(timeline_id: str, user: dict = Depends(get_cur
         db_compat.timeline_ref_query(actual_timeline_id)
     )
     
-    # Delete the timeline document (from both canonical + deprecated)
-    await db_compat.delete_timeline_one({
-        "$or": [
-            {"timeline_id": actual_timeline_id},
-            {"project_timeline_id": actual_timeline_id}
-        ]
-    })
+    # Delete the timeline document (canonical)
+    await db_compat.delete_timeline_one({"timeline_id": actual_timeline_id})
     
     return {"message": "Timeline deleted"}
 
@@ -8155,7 +8131,8 @@ async def seed_demo_data():
         await db.clients.delete_many({"is_demo": True})
         await db.documents.delete_many({"is_demo": True})
         await db.notifications.delete_many({"is_demo": True})
-        await db.project_stages.delete_many({"is_demo": True})
+        await db.project_stages.delete_many({"is_demo": True})  # Legacy cleanup
+        await db.timeline_steps.delete_many({"is_demo": True})
     else:
         # Demo deployment - clear ALL data (it's a dedicated demo DB)
         await db.users.delete_many({})
@@ -8163,7 +8140,7 @@ async def seed_demo_data():
         await db.clients.delete_many({})
         await db.documents.delete_many({})
         await db.notifications.delete_many({})
-        await db.project_stages.delete_many({})
+        await db.project_stages.delete_many({})  # Legacy cleanup
         await db.timeline_steps.delete_many({})
         await db_compat.delete_timelines_many({})
         await db.activities.delete_many({})
@@ -8545,8 +8522,8 @@ async def seed_demo_data():
     demo_unit1_id = "demo_unit_001"
     demo_unit2_id = "demo_unit_002"
     
-    await db.project_units.delete_many({"is_demo": True})
-    await db.project_units.insert_many([
+    await db.units.delete_many({"is_demo": True})
+    await db.units.insert_many([
         {
             "unit_id": demo_unit1_id,
             "project_id": demo_project_id,
@@ -8822,7 +8799,6 @@ async def seed_demo_data():
         {
             "step_id": "step_demo_001",
             "timeline_id": demo_timeline_id,
-            "project_timeline_id": demo_timeline_id,
             "title": "Site Preparation",
             "description": "Clear vegetation, mark boundaries, set up site office and safety perimeter",
             "status": "completed",
@@ -8836,7 +8812,6 @@ async def seed_demo_data():
         {
             "step_id": "step_demo_002",
             "timeline_id": demo_timeline_id,
-            "project_timeline_id": demo_timeline_id,
             "title": "Excavation",
             "description": "Excavate foundation trenches, install drainage, prepare for concrete",
             "status": "completed",
@@ -8850,7 +8825,6 @@ async def seed_demo_data():
         {
             "step_id": "step_demo_003",
             "timeline_id": demo_timeline_id,
-            "project_timeline_id": demo_timeline_id,
             "title": "Foundation",
             "description": "Reinforcement installation, concrete pour, waterproofing membrane",
             "status": "in_progress",
@@ -8864,7 +8838,6 @@ async def seed_demo_data():
         {
             "step_id": "step_demo_004",
             "timeline_id": demo_timeline_id,
-            "project_timeline_id": demo_timeline_id,
             "title": "Structure",
             "description": "Steel framework, load-bearing walls, floor slabs for each level",
             "status": "pending",
@@ -8878,7 +8851,6 @@ async def seed_demo_data():
         {
             "step_id": "step_demo_005",
             "timeline_id": demo_timeline_id,
-            "project_timeline_id": demo_timeline_id,
             "title": "Finishes",
             "description": "Plastering, painting, flooring, fixtures, final inspections",
             "status": "pending",
@@ -9029,7 +9001,7 @@ async def get_agent_unit_count(agent_id: str, is_demo: bool = False) -> int:
     project_ids = [p['project_id'] for p in projects]
     
     # Count units in the project_units collection
-    total_units = await db.project_units.count_documents({
+    total_units = await db.units.count_documents({
         "project_id": {"$in": project_ids},
         "is_demo": is_demo
     })
@@ -11472,12 +11444,12 @@ async def get_workflow_selectors(
             
             if not timeline_ids:
                 return {"items": []}
-            query = {"$or": [{"timeline_id": {"$in": timeline_ids}}, {"project_timeline_id": {"$in": timeline_ids}}]}
+            query = {"timeline_id": {"$in": timeline_ids}}
         
         # Use correct field names: title (not name), order_index (not order)
         steps = await db.timeline_steps.find(
             query,
-            {"_id": 0, "step_id": 1, "title": 1, "status": 1, "timeline_id": 1, "project_timeline_id": 1, "planned_date": 1}
+            {"_id": 0, "step_id": 1, "title": 1, "status": 1, "timeline_id": 1, "planned_date": 1}
         ).sort("order_index", 1).limit(100).to_list(100)
         
         # Enrich with project names
@@ -11485,15 +11457,13 @@ async def get_workflow_selectors(
             # Map title to name for UI consistency
             step['name'] = step.pop('title', 'Untitled')
             
-            # Normalize: use timeline_id, fallback to project_timeline_id
-            tl_id = step.get('timeline_id') or step.get('project_timeline_id')
-            step.pop('project_timeline_id', None)
-            step['timeline_id'] = tl_id
+            # Normalize: use timeline_id
+            tl_id = step.get('timeline_id')
             
             if tl_id:
                 # Get project_id from timeline (via compat layer)
                 timeline = await db_compat.find_timeline_one(
-                    {"$or": [{"timeline_id": tl_id}, {"project_timeline_id": tl_id}]},
+                    {"timeline_id": tl_id},
                     {"project_id": 1}
                 )
                 if timeline:
