@@ -5,11 +5,20 @@ This module validates all required environment variables at application startup.
 If critical configuration is missing, the application will FAIL FAST rather than
 starting in a broken state.
 
+Database Isolation Strategy:
+- Production app uses DB_NAME (e.g., 'evohome')
+- Demo mode uses DB_NAME_DEMO (e.g., 'evohome_demo') if set, otherwise DB_NAME + '_demo'
+- Selection is made at boot time via DEMO_MODE env var, NOT at query time
+- This replaces the broken is_demo query filter pattern
+
 Usage:
     from core.config import validate_config, get_config
     
     # At startup
     config = validate_config()  # Raises ConfigurationError if invalid
+    
+    # Get database name for current mode
+    db_name = config.get_database_name()
 """
 
 import os
@@ -37,8 +46,12 @@ class Config:
     # Critical - App will not start without these
     MONGO_URL: str
     DB_NAME: str
+    DB_NAME_DEMO: str  # Separate demo database
     JWT_SECRET: str
     CORS_ORIGINS: List[str]
+    
+    # Demo mode - determines which database to use
+    DEMO_MODE: bool = False
     
     # Optional with graceful degradation
     RESEND_API_KEY: Optional[str] = None
@@ -67,6 +80,15 @@ class Config:
         self.DB_NAME = os.environ.get('DB_NAME', '')
         if not self.DB_NAME:
             errors.append("DB_NAME is required but not set")
+        
+        # Demo database name - defaults to DB_NAME + '_demo'
+        self.DB_NAME_DEMO = os.environ.get('DB_NAME_DEMO', '')
+        if not self.DB_NAME_DEMO and self.DB_NAME:
+            self.DB_NAME_DEMO = f"{self.DB_NAME}_demo"
+        
+        # Demo mode flag - set to 'true' for demo deployment
+        demo_mode_raw = os.environ.get('DEMO_MODE', 'false').lower()
+        self.DEMO_MODE = demo_mode_raw in ('true', '1', 'yes')
         
         # JWT Secret
         self.JWT_SECRET = os.environ.get('JWT_SECRET', '')
@@ -173,6 +195,22 @@ class Config:
     @property
     def google_oauth_enabled(self) -> bool:
         return bool(self.GOOGLE_CLIENT_SECRET)
+    
+    def get_database_name(self) -> str:
+        """
+        Get the database name based on deployment mode.
+        
+        Returns:
+            str: DB_NAME for production, DB_NAME_DEMO for demo mode
+        """
+        if self.DEMO_MODE:
+            return self.DB_NAME_DEMO
+        return self.DB_NAME
+    
+    @property
+    def is_demo_deployment(self) -> bool:
+        """Check if this is a demo deployment (separate from user is_demo flag)."""
+        return self.DEMO_MODE
 
 
 # Singleton config instance
@@ -196,6 +234,7 @@ def validate_config() -> Config:
     try:
         _config = Config()
         logger.info(f"Configuration validated successfully (environment: {_config.ENVIRONMENT})")
+        logger.info(f"  - Database: {_config.get_database_name()} {'(DEMO MODE)' if _config.DEMO_MODE else '(PRODUCTION)'}")
         logger.info(f"  - Email: {'enabled' if _config.email_enabled else 'disabled'}")
         logger.info(f"  - Billing: {'enabled' if _config.billing_enabled else 'disabled'}")
         logger.info(f"  - AI Extraction: {'enabled' if _config.ai_enabled else 'disabled'}")

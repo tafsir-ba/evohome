@@ -116,10 +116,13 @@ def secure_filename(filename: str) -> str:
 
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection - using validated config
+# MongoDB connection - using validated config with environment-based DB selection
+# This replaces the broken is_demo query filter pattern
+# Production deployment uses DB_NAME, Demo deployment uses DB_NAME_DEMO
 mongo_url = app_config.MONGO_URL
 client = AsyncIOMotorClient(mongo_url)
-db = client[app_config.DB_NAME]
+db_name = app_config.get_database_name()
+db = client[db_name]
 
 # Initialize auth module with database
 init_auth(db)
@@ -131,6 +134,53 @@ init_access_control(db)
 JWT_SECRET = app_config.JWT_SECRET
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRY_DAYS = 7
+
+# ==========================================================================
+# CONTAINMENT HELPER (Temporary until full migration to separate databases)
+# ==========================================================================
+# This function provides backward-compatible is_demo filtering during the
+# migration period. Once all demo data is moved to evohome_demo database
+# and DEMO_MODE deployment is live, this can be removed.
+# ==========================================================================
+
+def get_demo_filter(user: dict) -> dict:
+    """
+    Get is_demo filter for queries during migration period.
+    
+    MIGRATION STATUS:
+    - Production deployment (DEMO_MODE=false): Filter by user's is_demo flag
+    - Demo deployment (DEMO_MODE=true): No filter needed (dedicated DB)
+    
+    After migration: Remove this function and all is_demo filters.
+    """
+    if app_config.DEMO_MODE:
+        # Demo deployment uses dedicated database, no filter needed
+        return {}
+    else:
+        # Production deployment: filter by user's is_demo flag for containment
+        return {"is_demo": user.get('is_demo', False)}
+
+
+def build_query(user: dict, **filters) -> dict:
+    """
+    Build a query with proper ownership and demo isolation.
+    
+    Usage:
+        query = build_query(user, project_id=project_id)
+        # Returns: {"project_id": project_id, "agent_id": user_id, "is_demo": False}
+    """
+    query = {**filters}
+    
+    # Add ownership filter for agents
+    if user.get('role') == 'agent' and 'agent_id' not in query:
+        query['agent_id'] = user['user_id']
+    
+    # Add demo containment filter (temporary during migration)
+    query.update(get_demo_filter(user))
+    
+    return query
+
+# ==========================================================================
 
 app = FastAPI(title="UpgradeFlow API")
 api_router = APIRouter(prefix="/api")
@@ -2489,31 +2539,31 @@ async def logout(request: Request, response: Response):
 async def get_projects(user: dict = Depends(get_current_user)):
     """
     Get projects for current user.
-    - Agents: see all their projects (filtered by is_demo to maintain data isolation)
+    - Agents: see all their projects
     - Buyers: see only the project(s) they are associated with via client record
+    
+    Uses containment filter during migration to separate demo database.
     """
-    is_demo = user.get('is_demo', False)
+    demo_filter = get_demo_filter(user)
     
     if user['role'] == 'agent':
-        # Agent sees their projects matching is_demo context
-        query = {"agent_id": user['user_id'], "is_demo": is_demo}
+        query = {"agent_id": user['user_id'], **demo_filter}
     elif user['role'] == 'buyer':
-        # Buyer sees only projects they are associated with via client record
         client = await db.clients.find_one(
-            {"buyer_id": user['user_id'], "is_demo": is_demo},
+            {"buyer_id": user['user_id'], **demo_filter},
             {"_id": 0, "project_id": 1}
         )
         if not client or not client.get('project_id'):
-            return []  # Buyer has no associated project
-        query = {"project_id": client['project_id'], "is_demo": is_demo}
+            return []
+        query = {"project_id": client['project_id'], **demo_filter}
     else:
-        return []  # Unknown role gets nothing
+        return []
     
     projects = await db.projects.find(query, {"_id": 0}).to_list(100)
     
     # Add client count and unit count to each project
     for project in projects:
-        client_count = await db.clients.count_documents({"project_id": project['project_id'], "is_demo": is_demo})
+        client_count = await db.clients.count_documents({"project_id": project['project_id'], **demo_filter})
         unit_count = await db.project_units.count_documents({"project_id": project['project_id']})
         project['client_count'] = client_count
         project['unit_count'] = unit_count
@@ -2523,6 +2573,7 @@ async def get_projects(user: dict = Depends(get_current_user)):
 @api_router.post("/projects", response_model=Project)
 async def create_project(data: ProjectCreate, user: dict = Depends(get_current_agent)):
     """Create a new project (agent only) - enforces plan-based unit limits"""
+    demo_filter = get_demo_filter(user)
     is_demo = user.get('is_demo', False)
     
     # Unit gating - check subscription limits (skip for demo users)
@@ -2540,7 +2591,7 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_a
     
     project_id = f"proj_{uuid.uuid4().hex[:12]}"
     
-    # NOTE: is_demo NOT stored on project - ownership scoped by agent_id
+    # Store is_demo for backward compatibility during migration
     project_doc = {
         "project_id": project_id,
         "agent_id": user['user_id'],
@@ -2550,13 +2601,14 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_a
         "total_units": data.total_units,
         "construction_start": data.construction_start,
         "estimated_completion": data.estimated_completion,
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "is_demo": is_demo  # For migration compatibility
     }
     
     await db.projects.insert_one(project_doc)
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
-    # Count linked clients and units (scoped by project_id)
-    client_count = await db.clients.count_documents({"project_id": project_id})
+    # Count linked clients and units
+    client_count = await db.clients.count_documents({"project_id": project_id, **demo_filter})
     unit_count = await db.project_units.count_documents({"project_id": project_id})
     project['client_count'] = client_count
     project['unit_count'] = unit_count
@@ -2565,8 +2617,8 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_a
 @api_router.put("/projects/{project_id}", response_model=Project)
 async def update_project(project_id: str, data: ProjectUpdate, user: dict = Depends(get_current_agent)):
     """Update a project (agent only)"""
-    # Ownership check by agent_id only
-    query = {"project_id": project_id, "agent_id": user['user_id']}
+    demo_filter = get_demo_filter(user)
+    query = {"project_id": project_id, "agent_id": user['user_id'], **demo_filter}
     
     project = await db.projects.find_one(query, {"_id": 0})
     if not project:
@@ -2577,7 +2629,7 @@ async def update_project(project_id: str, data: ProjectUpdate, user: dict = Depe
         await db.projects.update_one(query, {"$set": update_data})
     
     updated_project = await db.projects.find_one(query, {"_id": 0})
-    client_count = await db.clients.count_documents({"project_id": project_id})
+    client_count = await db.clients.count_documents({"project_id": project_id, **demo_filter})
     unit_count = await db.project_units.count_documents({"project_id": project_id})
     updated_project['client_count'] = client_count
     updated_project['unit_count'] = unit_count
@@ -2586,6 +2638,7 @@ async def update_project(project_id: str, data: ProjectUpdate, user: dict = Depe
 @api_router.delete("/projects/{project_id}")
 async def delete_project(project_id: str, user: dict = Depends(get_current_agent)):
     """Delete a project (agent only)"""
+    demo_filter = get_demo_filter(user)
     is_demo = user.get('is_demo', False)
     query = {"project_id": project_id, "agent_id": user['user_id']}
     
@@ -2606,8 +2659,8 @@ async def delete_project(project_id: str, user: dict = Depends(get_current_agent
 @api_router.get("/projects/{project_id}/units")
 async def get_project_units(project_id: str, user: dict = Depends(get_current_agent)):
     """Get all units for a project with assignment status"""
-    is_demo = user.get('is_demo', False)
-    query = {"project_id": project_id, "agent_id": user['user_id']}
+    demo_filter = get_demo_filter(user)
+    query = {"project_id": project_id, "agent_id": user['user_id'], **demo_filter}
     
     project = await db.projects.find_one(query, {"_id": 0})
     if not project:
@@ -2622,7 +2675,7 @@ async def get_project_units(project_id: str, user: dict = Depends(get_current_ag
     for unit in units:
         # Check if any client is assigned to this unit
         assigned_client = await db.clients.find_one(
-            {"unit_id": unit['unit_id']},
+            {"unit_id": unit['unit_id'], **demo_filter},
             {"_id": 0, "client_id": 1, "name": 1}
         )
         if assigned_client:
@@ -2636,7 +2689,7 @@ async def get_project_units(project_id: str, user: dict = Depends(get_current_ag
         
         # Legacy client_id field for backward compatibility
         if unit.get('client_id'):
-            client = await db.clients.find_one({"client_id": unit['client_id']}, {"_id": 0, "name": 1})
+            client = await db.clients.find_one({"client_id": unit['client_id'], **demo_filter}, {"_id": 0, "name": 1})
             unit['client_name'] = client['name'] if client else None
     
     return units
@@ -2644,8 +2697,9 @@ async def get_project_units(project_id: str, user: dict = Depends(get_current_ag
 @api_router.post("/projects/{project_id}/units")
 async def create_project_unit(project_id: str, data: dict, user: dict = Depends(get_current_agent)):
     """Add a unit to a project - enforces plan-based unit limits"""
+    demo_filter = get_demo_filter(user)
     is_demo = user.get('is_demo', False)
-    query = {"project_id": project_id, "agent_id": user['user_id']}
+    query = {"project_id": project_id, "agent_id": user['user_id'], **demo_filter}
     
     project = await db.projects.find_one(query, {"_id": 0})
     if not project:
@@ -7980,14 +8034,48 @@ async def seed_demo_data_get():
 
 @api_router.post("/demo/seed")
 async def seed_demo_data():
-    """Seed comprehensive demo data using unified documents collection"""
-    # Clear existing demo data
-    await db.users.delete_many({"is_demo": True})
-    await db.projects.delete_many({"is_demo": True})
-    await db.clients.delete_many({"is_demo": True})
-    await db.documents.delete_many({"is_demo": True})
-    await db.notifications.delete_many({"is_demo": True})
-    await db.project_stages.delete_many({"is_demo": True})
+    """
+    Seed comprehensive demo data.
+    
+    NEW ARCHITECTURE (Database Isolation):
+    - In DEMO_MODE deployment: seeds data directly (no is_demo flag needed)
+    - In PRODUCTION deployment: seeds with is_demo=True for backward compatibility
+    
+    MIGRATION PATH:
+    1. Deploy demo app with DEMO_MODE=true pointing to evohome_demo database
+    2. Run /demo/seed on demo deployment
+    3. Production deployment uses evohome database with DEMO_MODE=false
+    4. After migration complete, remove is_demo field from all records
+    """
+    # Determine if we're in the new isolated demo deployment
+    is_demo_deployment = app_config.DEMO_MODE
+    
+    # For backward compatibility during migration, still set is_demo flag
+    # This can be removed after full migration to separate databases
+    is_demo_flag = not is_demo_deployment  # Only set flag in production DB
+    
+    # Clear existing demo data (using is_demo filter for backward compatibility)
+    if not is_demo_deployment:
+        # Production mode - clear only is_demo=True records
+        await db.users.delete_many({"is_demo": True})
+        await db.projects.delete_many({"is_demo": True})
+        await db.clients.delete_many({"is_demo": True})
+        await db.documents.delete_many({"is_demo": True})
+        await db.notifications.delete_many({"is_demo": True})
+        await db.project_stages.delete_many({"is_demo": True})
+    else:
+        # Demo deployment - clear ALL data (it's a dedicated demo DB)
+        await db.users.delete_many({})
+        await db.projects.delete_many({})
+        await db.clients.delete_many({})
+        await db.documents.delete_many({})
+        await db.notifications.delete_many({})
+        await db.project_stages.delete_many({})
+        await db.timeline_steps.delete_many({})
+        await db.project_timelines.delete_many({})
+        await db.activities.delete_many({})
+        await db.vault_documents.delete_many({})
+        await db.team_members.delete_many({})
     
     # Create demo agent
     demo_agent_id = "demo_agent_001"
@@ -7998,7 +8086,7 @@ async def seed_demo_data():
         "password_hash": bcrypt.hashpw("demo123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
         "role": "agent",
         "picture": None,
-        "is_demo": True,
+        "is_demo": is_demo_flag,  # Only set in production mode for backward compatibility
         "created_at": datetime.now(timezone.utc).isoformat(),
         # Demo agent has Pro subscription for showcasing all features
         "subscription_plan": "pro",
