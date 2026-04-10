@@ -91,6 +91,10 @@ export const AuthProvider = ({ children }) => {
     }
 
     const data = await response.json();
+    // Store token for WebSocket auth
+    if (data.token) {
+      localStorage.setItem('auth_token', data.token);
+    }
     setUser(data);
     return data;
   };
@@ -109,6 +113,10 @@ export const AuthProvider = ({ children }) => {
     }
 
     const data = await response.json();
+    // Store token for WebSocket auth
+    if (data.token) {
+      localStorage.setItem('auth_token', data.token);
+    }
     setUser(data);
     return data;
   };
@@ -171,6 +179,10 @@ export const AuthProvider = ({ children }) => {
     }
 
     const data = await response.json();
+    // Store token for WebSocket auth
+    if (data.token) {
+      localStorage.setItem('auth_token', data.token);
+    }
     setUser(data);
     return data;
   };
@@ -184,6 +196,8 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     }
+    // Clear token from localStorage
+    localStorage.removeItem('auth_token');
     setUser(null);
     navigate('/login');
   };

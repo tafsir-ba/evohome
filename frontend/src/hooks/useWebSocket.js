@@ -3,6 +3,21 @@ import { toast } from 'sonner';
 
 const WS_URL = process.env.REACT_APP_BACKEND_URL?.replace('https://', 'wss://').replace('http://', 'ws://') + '/api/ws';
 
+// Get token from cookie or localStorage for WebSocket auth
+const getAuthToken = () => {
+  // Try localStorage first (where login stores it)
+  const stored = localStorage.getItem('auth_token');
+  if (stored) return stored;
+  
+  // Fallback: try to get from cookie (session_token)
+  const cookies = document.cookie.split(';');
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split('=');
+    if (name === 'session_token') return value;
+  }
+  return null;
+};
+
 export const useWebSocket = (userId, onMessage) => {
   const [isConnected, setIsConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState(null);
@@ -13,8 +28,16 @@ export const useWebSocket = (userId, onMessage) => {
   const connect = useCallback(() => {
     if (!userId || wsRef.current?.readyState === WebSocket.OPEN) return;
 
+    // Get auth token for secure WebSocket connection
+    const token = getAuthToken();
+    if (!token) {
+      console.warn('No auth token available for WebSocket connection');
+      return;
+    }
+
     try {
-      const ws = new WebSocket(`${WS_URL}/${userId}`);
+      // Pass token as query parameter for authentication
+      const ws = new WebSocket(`${WS_URL}/${userId}?token=${encodeURIComponent(token)}`);
       wsRef.current = ws;
 
       ws.onopen = () => {

@@ -72,6 +72,21 @@ from core.access_control import (
     get_is_demo
 )
 
+# Import rate limiting
+from core.rate_limit import rate_limit_check, check_rate_limit
+
+# Import error monitoring
+from core.monitoring import (
+    capture_exception,
+    capture_auth_failure,
+    capture_payment_error,
+    capture_email_error,
+    capture_ai_error,
+    capture_websocket_error,
+    capture_document_error,
+    ErrorContext
+)
+
 # Import API response models for strict contracts
 from core.responses import (
     AuthSessionResponse,
@@ -694,8 +709,8 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL') or os.environ.get('APP_URL', '')  
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
 
-async def send_email_async(to_email: str, subject: str, html_content: str) -> dict:
-    """Send email asynchronously using Resend"""
+async def send_email_async(to_email: str, subject: str, html_content: str, request: Request = None) -> dict:
+    """Send email asynchronously using Resend with error monitoring"""
     if not RESEND_API_KEY:
         logger.warning(f"RESEND_API_KEY not configured. Would send email to {to_email}: {subject}")
         return {"status": "skipped", "reason": "No API key configured"}
@@ -716,7 +731,10 @@ async def send_email_async(to_email: str, subject: str, html_content: str) -> di
         logger.info(f"Email sent to {to_email}: {subject}")
         return {"status": "success", "email_id": result.get("id") if isinstance(result, dict) else str(result)}
     except Exception as e:
+        # Capture email errors for monitoring
+        capture_email_error(e, recipient=to_email, template=subject[:50], request=request)
         logger.error(f"Failed to send email to {to_email}: {str(e)}")
+        # Return graceful failure - don't crash the calling function
         return {"status": "error", "error": str(e)}
 
 # ==================== EMAIL NOTIFICATION TEMPLATES ====================
@@ -1388,11 +1406,49 @@ def verify_jwt_token(token: str) -> dict:
 
 @api_router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    """WebSocket endpoint for real-time updates"""
-    # Verify user exists (basic validation)
+    """
+    WebSocket endpoint for real-time updates.
+    
+    SECURITY: Validates JWT token from query parameter before accepting connection.
+    Token must match the user_id in the URL path.
+    """
+    # Extract token from query params
+    token = websocket.query_params.get("token")
+    
+    if not token:
+        await websocket.close(code=4001, reason="Authentication required")
+        capture_websocket_error(Exception("No token provided"), user_id=user_id, action="connect")
+        return
+    
+    # Verify token and extract user_id
+    try:
+        payload = verify_token(token, expected_type='access')
+        token_user_id = payload.get('user_id')
+        
+        # Ensure token user_id matches URL user_id - prevents impersonation
+        if token_user_id != user_id:
+            await websocket.close(code=4003, reason="User ID mismatch")
+            capture_websocket_error(
+                Exception(f"Token user_id {token_user_id} does not match URL user_id {user_id}"),
+                user_id=user_id, 
+                action="connect"
+            )
+            return
+            
+    except HTTPException as e:
+        await websocket.close(code=4001, reason=str(e.detail))
+        capture_websocket_error(e, user_id=user_id, action="connect")
+        return
+    except Exception as e:
+        await websocket.close(code=4001, reason="Invalid token")
+        capture_websocket_error(e, user_id=user_id, action="connect")
+        return
+    
+    # Verify user exists in database
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     if not user:
-        await websocket.close(code=4001, reason="User not found")
+        await websocket.close(code=4004, reason="User not found")
+        capture_websocket_error(Exception("User not found"), user_id=user_id, action="connect")
         return
     
     await ws_manager.connect(websocket, user_id)
@@ -1405,14 +1461,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket, user_id)
     except Exception as e:
-        logger.error(f"WebSocket error for {user_id}: {e}")
+        capture_websocket_error(e, user_id=user_id, action="message")
         ws_manager.disconnect(websocket, user_id)
 
 # ==================== AUTH ENDPOINTS ====================
 
 @api_router.post("/auth/register")
-async def register_agent(data: AgentRegister, response: Response):
+async def register_agent(data: AgentRegister, response: Response, request: Request):
     """Register a new agent with email/password, or link password to existing OAuth account"""
+    # Rate limit: 3 registrations per minute per IP
+    rate_limit_check(request, "auth_register")
+    
     existing = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
     
     if existing:
@@ -1498,20 +1557,26 @@ async def register_agent(data: AgentRegister, response: Response):
     }
 
 @api_router.post("/auth/login")
-async def login_agent(data: AgentLogin, response: Response):
+async def login_agent(data: AgentLogin, response: Response, request: Request):
     """Login agent with email/password"""
+    # Rate limit: 5 attempts per minute per IP
+    rate_limit_check(request, "auth_login")
+    
     user = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
     if not user:
+        capture_auth_failure("invalid_credentials", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Check if user has a password set (OAuth-only accounts won't have one)
     if not user.get('password_hash'):
+        capture_auth_failure("oauth_only_account", email=data.email, request=request)
         raise HTTPException(
             status_code=401, 
             detail="This account was created with Google. Please login with Google, or create a password by clicking 'Create Account' with the same email."
         )
     
     if not bcrypt.checkpw(data.password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+        capture_auth_failure("wrong_password", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     token = create_jwt_token(user['user_id'], "agent", user.get('is_demo', False))
@@ -1644,20 +1709,26 @@ async def register_buyer(data: BuyerRegister, response: Response):
     }
 
 @api_router.post("/auth/buyer/login")
-async def login_buyer(data: BuyerLogin, response: Response):
+async def login_buyer(data: BuyerLogin, response: Response, request: Request):
     """Login buyer with email/password"""
+    # Rate limit: 5 attempts per minute per IP
+    rate_limit_check(request, "auth_login")
+    
     user = await db.users.find_one({"email": data.email, "role": "buyer"}, {"_id": 0})
     if not user:
+        capture_auth_failure("invalid_credentials", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Check if user has a password set (OAuth-only accounts won't have one)
     if not user.get('password_hash'):
+        capture_auth_failure("oauth_only_account", email=data.email, request=request)
         raise HTTPException(
             status_code=401, 
             detail="This account was created with Google. Please login with Google, or create a password by clicking 'Create Account' with the same email."
         )
     
     if not bcrypt.checkpw(data.password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+        capture_auth_failure("wrong_password", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     token = create_jwt_token(user['user_id'], "buyer", user.get('is_demo', False))
@@ -2159,8 +2230,11 @@ async def set_password_for_oauth_user(request: SetPasswordRequest, response: Res
     }
 
 @api_router.post("/auth/forgot-password")
-async def forgot_password(request: ForgotPasswordRequest):
+async def forgot_password(request: ForgotPasswordRequest, req: Request):
     """Send password reset email"""
+    # Rate limit: 3 attempts per 5 minutes per IP
+    rate_limit_check(req, "auth_password_reset")
+    
     email = request.email.lower().strip()
     role = request.role
     
@@ -3436,6 +3510,8 @@ Return ONLY a JSON object with this structure:
         return result
         
     except Exception as e:
+        # Capture AI extraction errors for monitoring
+        capture_ai_error(e, operation="pdf_extraction", document_id=filename)
         logger.error(f"PDF extraction failed: {str(e)}")
         # Don't expose internal paths in error messages
         error_msg = str(e)
@@ -3456,6 +3532,7 @@ Return ONLY a JSON object with this structure:
 
 @api_router.post("/documents/upload")
 async def upload_document(
+    request: Request,
     client_id: str = Form(...),
     file: UploadFile = File(...),
     doc_type: str = "quote",
@@ -3469,6 +3546,9 @@ async def upload_document(
     This follows the draft-first architecture:
     input → extraction → preview → edit → confirm → final object
     """
+    # Rate limit: 10 AI extractions per minute per user
+    rate_limit_check(request, "ai_extraction")
+    
     is_demo = user.get('is_demo', False)
     
     # Validate document type
@@ -3487,12 +3567,19 @@ async def upload_document(
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
     
+    # File size limit: 10MB max for PDF uploads
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413, 
+            detail=f"File too large. Maximum size is 10MB (received {len(content) / 1024 / 1024:.1f}MB)"
+        )
+    
     # Save file temporarily for extraction
     file_id = uuid.uuid4().hex[:12]
     filename = f"{file_id}_{file.filename}"
     file_path = UPLOAD_DIR / filename
-    
-    content = await file.read()
     with open(file_path, "wb") as f:
         f.write(content)
     
@@ -7382,6 +7469,7 @@ VAULT_DOC_TYPES = ["general", "action_required"]
 
 @api_router.post("/vault/upload")
 async def upload_vault_document(
+    request: Request,
     file: UploadFile = File(...),
     name: str = Form(...),
     category: str = Form("Other"),
@@ -7393,6 +7481,9 @@ async def upload_vault_document(
     user: dict = Depends(get_current_agent)
 ):
     """Upload a document to the vault"""
+    # Rate limit: 20 uploads per minute
+    rate_limit_check(request, "file_upload")
+    
     is_demo = user.get('is_demo', False)
     
     # Validate category
@@ -8879,8 +8970,10 @@ async def create_checkout_session(data: CreateCheckoutRequest, user: dict = Depe
         }
         
     except Exception as e:
+        # Capture Stripe errors for monitoring
+        capture_payment_error(e, user_id=user['user_id'], operation="create_checkout")
         logger.error(f"Stripe checkout error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create checkout session: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session. Please try again.")
 
 @api_router.post("/billing/verify-session")
 async def verify_checkout_session(data: CheckoutStatusRequest, user: dict = Depends(get_current_agent)):
@@ -9017,8 +9110,10 @@ async def stripe_webhook(request: Request):
         return {"received": True}
         
     except Exception as e:
+        # Capture webhook errors for monitoring
+        capture_payment_error(e, operation="webhook_processing")
         logger.error(f"Webhook processing error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Webhook processing failed")
 
 @api_router.post("/billing/cancel")
 async def cancel_subscription(user: dict = Depends(get_current_agent)):
