@@ -106,23 +106,36 @@
 
 ---
 
-## Remaining Work (Phase D-F)
+## Remaining Work (Phase E-F)
 
 | Phase | Task | Priority |
 |-------|------|----------|
-| D | Backup all collections | P0 |
-| D | Run `migrate_units` (project_units -> units) | P0 |
-| D | Run `migrate_timelines` (project_timelines -> timelines) | P0 |
-| D | Run `normalize_timeline_id` (rename field in timeline_steps) | P0 |
-| D | Run `verify_integrity` | P0 |
 | E | Remove compat dual-reads (read canonical only) | P1 |
-| E | Update remaining `db.project_units` direct refs | P1 |
-| E | Update Pydantic models | P1 |
-| E | Update frontend API calls | P1 |
+| E | Update remaining `db.project_units` direct refs in server.py | P1 |
+| E | Update Pydantic models to drop deprecated fields | P1 |
+| E | Update frontend API calls if needed | P1 |
 | F | Remove deprecated `/stages` routes | P2 |
 | F | Drop `project_timelines` collection | P2 |
 | F | Drop `project_units` collection | P2 |
-| F | Remove `db_compat.py` | P2 |
+| F | Drop `project_stages` collection | P2 |
+| F | Remove `db_compat.py` compat layer | P2 |
+
+## Phase D: Data Migration (COMPLETE)
+
+**Executed**: 2026-04-10  
+**Script**: `/app/backend/migrations/phase_d_migrate.py`  
+**Report**: `/app/backend/migrations/MIGRATION_REPORT.md`
+
+| Migration | Result | Details |
+|---|---|---|
+| M1: project_units → units | PASS | 17 docs migrated, 0 errors |
+| M2: project_timelines → timelines | PASS | 2 docs migrated, field renamed |
+| M3: timeline_steps field normalization | PASS | 12 docs got `timeline_id` field |
+
+**Verification**: 5/5 checks passed (collection counts, field coverage, referential integrity)  
+**Idempotency**: Confirmed (second run: 0 inserts, all skipped)  
+**Regression**: 14/14 API endpoints passed post-migration  
+**Backups**: `/app/backend/migrations/backup/20260410_180933/` and `/app/backend/migrations/backup/20260410_181137/`
 
 ---
 

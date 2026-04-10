@@ -670,8 +670,21 @@ Last Updated: March 19, 2026
 - All tests pass
 - Docs are updated
 
+### Phase D: Data Migration (COMPLETE)
+
+**Executed**: 2026-04-10  
+**Script**: `/app/backend/migrations/phase_d_migrate.py` (idempotent, all modes: --dry-run, --backup, --execute, --verify, --full)
+
+- [x] Pre-flight backup of all 6 collections (deprecated + canonical)
+- [x] M1: `project_units` (17 docs) → `units` — migrated, 0 errors
+- [x] M2: `project_timelines` (2 docs) → `timelines` — migrated with `project_timeline_id` → `timeline_id` field rename
+- [x] M3: `timeline_steps` field normalization — added `timeline_id` alongside `project_timeline_id` for 12 docs
+- [x] Integrity verification: 5/5 checks passed (collection counts, field coverage, referential integrity)
+- [x] Idempotency confirmed (second run: 0 inserts, all skipped)
+- [x] Post-migration regression: 14/14 API endpoint tests passed
+- [x] Migration report: `/app/backend/migrations/MIGRATION_REPORT.md`
+
 ### Remaining Phases
-- **Phase D**: Data Migration (migrate data from deprecated to canonical collections)
 - **Phase E**: Code Refactoring (drop dual routing, update frontend types)
 - **Phase F**: Deprecation Cleanup (remove deprecated collections, endpoints, compat layer)
 - **Phase 3**: Architecture (split monolithic server.py into modular routers)

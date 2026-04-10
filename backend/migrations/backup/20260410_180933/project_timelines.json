@@ -1,0 +1,21 @@
+[
+  {
+    "_id": "69bb017bc3b3b18b5221efaa",
+    "timeline_id": "ptl_79062b8a39d9",
+    "project_id": "proj_135fc16dad0b",
+    "agent_id": "agent_3cde3cc12d2c",
+    "template_id": "template_c92f8f495c83",
+    "name": "Extracted Timeline - D2412G Ch de Cressy Dossier MO (dragged) 4.pdf",
+    "status": "active",
+    "is_demo": false,
+    "created_at": "2026-03-18T19:48:11.021985+00:00"
+  },
+  {
+    "_id": "69d916743d7db1dd2715f926",
+    "timeline_id": "timeline_demo_001",
+    "project_id": "demo_proj_001",
+    "template_id": "tmpl_demo_001",
+    "is_demo": true,
+    "created_at": "2026-02-09T15:25:35.481286+00:00"
+  }
+]
