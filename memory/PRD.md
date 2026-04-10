@@ -272,6 +272,16 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - [x] System certified for Phase D production evolution
 - [x] Note: Backward compatibility for `/stages` was intentionally retired (Phase F) — 404 is correct behavior, not a regression
 
+### Phase D: Production Deployment Hardening - COMPLETED April 10, 2026
+- [x] **P0 — CORS Fix**: Removed wildcard `["*"]`, now config-driven from `CORS_ORIGINS` env var. Production: exact origins only. Dev: adds localhost. No silent fallback.
+- [x] **P1 — Deep Health Check**: `/health` (liveness) + `/ready` (readiness with DB ping, feature flags). Dead DB → 503.
+- [x] **P1 — Global Exception Handler**: Sanitized 500 responses (no stack traces). Full context logged with request_id and error_id.
+- [x] **P1 — Security Headers + Request ID**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Strict-Transport-Security`, `Referrer-Policy`, `X-Request-ID` on all responses. Pass-through supported.
+- [x] **P2 — Compound Indexes**: 16 compound indexes for hot query paths (`agent_id+is_demo`, `project_id+is_demo`, `timeline_id+order_index`, `user_id+read`).
+- [x] **P2 — Graceful WebSocket Shutdown**: `close_all()` on SIGTERM, closes active connections with code 1001.
+- [x] **Regression**: 74/74 journey tests pass after all changes. Zero regressions.
+- [x] Full report: `/app/memory/PHASE_D_REPORT.md`
+
 ### P2 - Medium Priority  
 - [ ] Email digest notifications (daily/weekly summary)
 - [ ] Document archiving feature

@@ -49,6 +49,17 @@ class ConnectionManager:
         for user_id in user_ids:
             await self.send_to_user(user_id, message)
 
+    async def close_all(self, reason: str = "Server shutting down"):
+        """Close all active WebSocket connections gracefully."""
+        for user_id, connections in list(self.active_connections.items()):
+            for conn in connections:
+                try:
+                    await conn.close(code=1001, reason=reason)
+                except Exception:
+                    pass
+            logger.info(f"Closed {len(connections)} connection(s) for user {user_id}")
+        self.active_connections.clear()
+
 
 ws_manager = ConnectionManager()
 
