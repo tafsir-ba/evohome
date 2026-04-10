@@ -2489,31 +2489,31 @@ async def logout(request: Request, response: Response):
 async def get_projects(user: dict = Depends(get_current_user)):
     """
     Get projects for current user.
-    - Agents: see all their projects
+    - Agents: see all their projects (filtered by is_demo to maintain data isolation)
     - Buyers: see only the project(s) they are associated with via client record
-    
-    NOTE: Data scoping is by ownership (agent_id), not by is_demo flag.
     """
+    is_demo = user.get('is_demo', False)
+    
     if user['role'] == 'agent':
-        # Agent sees all their projects (scoped by agent_id)
-        query = {"agent_id": user['user_id']}
+        # Agent sees their projects matching is_demo context
+        query = {"agent_id": user['user_id'], "is_demo": is_demo}
     elif user['role'] == 'buyer':
         # Buyer sees only projects they are associated with via client record
         client = await db.clients.find_one(
-            {"buyer_id": user['user_id']},
+            {"buyer_id": user['user_id'], "is_demo": is_demo},
             {"_id": 0, "project_id": 1}
         )
         if not client or not client.get('project_id'):
             return []  # Buyer has no associated project
-        query = {"project_id": client['project_id']}
+        query = {"project_id": client['project_id'], "is_demo": is_demo}
     else:
         return []  # Unknown role gets nothing
     
     projects = await db.projects.find(query, {"_id": 0}).to_list(100)
     
-    # Add client count and unit count to each project (scoped by project_id, not is_demo)
+    # Add client count and unit count to each project
     for project in projects:
-        client_count = await db.clients.count_documents({"project_id": project['project_id']})
+        client_count = await db.clients.count_documents({"project_id": project['project_id'], "is_demo": is_demo})
         unit_count = await db.project_units.count_documents({"project_id": project['project_id']})
         project['client_count'] = client_count
         project['unit_count'] = unit_count
@@ -4939,14 +4939,14 @@ async def create_project_stage(project_id: str, data: ProjectStageCreate, user: 
     is_demo = user.get('is_demo', False)
     
     project = await db.projects.find_one(
-        {"project_id": project_id, "agent_id": user['user_id']},
+        {"project_id": project_id, "agent_id": user['user_id'], "is_demo": is_demo},
         {"_id": 0}
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
     # Ensure timeline exists for this project
-    timeline = await db.project_timelines.find_one({"project_id": project_id}, {"_id": 0})
+    timeline = await db.project_timelines.find_one({"project_id": project_id, "is_demo": is_demo}, {"_id": 0})
     if not timeline:
         timeline_id = f"timeline_{uuid.uuid4().hex[:12]}"
         timeline = {
