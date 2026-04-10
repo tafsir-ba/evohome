@@ -697,8 +697,22 @@ Last Updated: March 19, 2026
 - [x] Frontend `AgentWorkflow.js` removed `project_timeline_id` fallback
 - [x] Regression: 14/14 tests passed
 
+### Phase F: Deprecation Cleanup (COMPLETE)
+
+**Executed**: 2026-04-10
+
+- [x] `$unset project_timeline_id` from all `timelines` and `timeline_steps` documents
+- [x] Dropped deprecated collections: `project_timelines` (2 docs), `project_units` (17 docs), `project_stages` (0 docs)
+- [x] Removed `/stages` deprecated routes (GET/POST/PUT/DELETE) — now return 404
+- [x] Replaced all 48 `db_compat.*` calls with direct `db.*` calls
+- [x] Removed response normalization code (3 blocks stripping `project_timeline_id`)
+- [x] Deleted `db_compat.py` module
+- [x] Updated frontend `AgentTimeline.js` — `/stages` → `/steps`
+- [x] Regression: 16/16 tests passed (testing agent validated)
+
+**DATA MODEL NORMALIZATION SPRINT COMPLETE.**
+
 ### Remaining Phases
-- **Phase F**: Deprecation Cleanup (remove deprecated collections, endpoints, compat layer)
 - **Phase 3**: Architecture (split monolithic server.py into modular routers)
 
 ### Key Files

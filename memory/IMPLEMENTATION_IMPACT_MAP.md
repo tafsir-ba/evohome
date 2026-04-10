@@ -106,17 +106,32 @@
 
 ---
 
-## Remaining Work (Phase F)
+## Remaining Work
 
-| Phase | Task | Priority |
-|-------|------|----------|
-| F | $unset `project_timeline_id` from all DB documents | P1 |
-| F | Remove deprecated `/stages` routes | P1 |
-| F | Drop `project_timelines` collection | P1 |
-| F | Drop `project_units` collection | P1 |
-| F | Drop `project_stages` collection | P1 |
-| F | Remove response normalization code | P2 |
-| F | Remove `db_compat.py` module (replace with direct `db.` calls) | P2 |
+**None — Data Model Normalization Sprint is COMPLETE.**
+
+Next milestone: Phase 3 (Architecture) — Split monolithic `server.py` into modular routers.
+
+## Phase F: Deprecation Cleanup (COMPLETE)
+
+**Executed**: 2026-04-10
+
+| Operation | Details |
+|---|---|
+| `$unset project_timeline_id` from `timelines` | 0 modified (already clean) |
+| `$unset project_timeline_id` from `timeline_steps` | 12 modified |
+| Drop `project_timelines` | 2 docs dropped |
+| Drop `project_units` | 17 docs dropped |
+| Drop `project_stages` | 0 docs dropped |
+| Remove `db_compat.py` | Module deleted |
+| Remove `/stages` routes | 4 endpoints removed |
+| Replace `db_compat.*` calls | 48 → direct `db.*` calls |
+| Response normalization removed | 3 blocks removed |
+| Frontend `/stages` → `/steps` | Updated in `AgentTimeline.js` |
+
+**Verification**: 16/16 tests passed (testing agent validated)  
+**Script**: `/app/backend/migrations/phase_f_cleanup.py`  
+**Report**: `/app/backend/migrations/PHASE_F_CLEANUP_REPORT.md`
 
 ## Phase E: Code Refactoring (COMPLETE)
 
