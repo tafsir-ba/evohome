@@ -38,6 +38,12 @@ import fitz  # PyMuPDF
 import stripe
 
 # Import centralized auth module - ALL auth now goes through core.auth
+# Import startup configuration validation - MUST be first
+from core.config import validate_config, get_config
+
+# Validate configuration at import time - fail fast if misconfigured
+app_config = validate_config()
+
 from core.auth import (
     init_auth, 
     create_access_token, 
@@ -95,10 +101,10 @@ def secure_filename(filename: str) -> str:
 
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+# MongoDB connection - using validated config
+mongo_url = app_config.MONGO_URL
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[app_config.DB_NAME]
 
 # Initialize auth module with database
 init_auth(db)
@@ -106,8 +112,8 @@ init_auth(db)
 # Initialize access control module with database
 init_access_control(db)
 
-# Legacy JWT config (for backward compatibility during migration)
-JWT_SECRET = os.environ.get('JWT_SECRET') or secrets.token_urlsafe(32)
+# Legacy JWT config - using validated config (no silent fallback)
+JWT_SECRET = app_config.JWT_SECRET
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRY_DAYS = 7
 
@@ -11637,11 +11643,11 @@ app.include_router(api_router)
 # This ensures proper routing through the ingress
 app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
-# CORS
+# CORS - using validated config (no wildcard in production)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=app_config.CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
