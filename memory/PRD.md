@@ -255,13 +255,17 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - [x] Manual document type override in preview drawer (COMPLETED - March 19, 2026)
 - [x] Field-level confidence indicators in preview drawer (COMPLETED - March 19, 2026)
 
+### Frontend Type Audit - COMPLETED April 10, 2026
+- [x] Removed all legacy field aliases from backend responses: `total_amount`, `document_type`, `stage_id`, `name`, `order`
+- [x] Updated all frontend components to use canonical fields: `amount`, `type`, `step_id`, `title`, `order_index`, `pending`
+- [x] Cleaned up 10 page components + 4 backend route files. 14/14 backend + 6/6 frontend tests passing
+
 ### P2 - Medium Priority  
 - [ ] Email digest notifications (daily/weekly summary)
 - [ ] Document archiving feature
 - [ ] Proactive AI suggestions (future)
 
 ### P3 - Low Priority / Future
-- [ ] Continue backend refactoring (migrate more endpoints to modular structure)
 - [ ] WhatsApp notifications (Twilio/WhatsApp Business API)
 - [ ] SMS notifications (Twilio)
 - [ ] Advanced reporting/export
