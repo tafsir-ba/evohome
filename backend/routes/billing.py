@@ -7,6 +7,7 @@ import base64
 import logging
 import secrets
 import tempfile
+import stripe
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional, Literal, Dict, Any
@@ -371,8 +372,7 @@ async def create_billing_portal(request: Request, user: dict = Depends(get_curre
         body = await request.json()
         return_url = body.get('return_url', '')
         
-        # Use Stripe API directly for billing portal (emergentintegrations may not have this)
-        import stripe
+        # Use Stripe API directly for billing portal
         stripe.api_key = STRIPE_API_KEY
         
         portal_session = stripe.billing_portal.Session.create(
