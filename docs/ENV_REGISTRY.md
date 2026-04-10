@@ -35,12 +35,12 @@ REACT_APP_BACKEND_URL=https://api.evo-home.ch
 
 | Variable | Required | Purpose | Example | Fallback Policy |
 |----------|----------|---------|---------|-----------------|
-| `RESEND_API_KEY` | Optional | Email delivery | `re_xxxxxxxxxxxx` | WARN - emails disabled |
+| `RESEND_API_KEY` | Optional | Email delivery | `re_YOUR_KEY` | WARN - emails disabled |
 | `SENDER_EMAIL` | Optional | From address for emails | `noreply@evo-home.ch` | WARN - emails disabled |
-| `STRIPE_API_KEY` | Optional | Payment processing | `sk_live_xxxx` | WARN - billing disabled |
-| `STRIPE_WEBHOOK_SECRET` | Optional | Stripe webhook verification | `whsec_xxxx` | WARN - webhooks unverified |
-| `OPENAI_API_KEY` | Optional | Document AI extraction | `sk-xxxx` | WARN - AI extraction disabled |
-| `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth | `GOCSPX-xxxx` | WARN - Google login disabled |
+| `STRIPE_API_KEY` | Optional | Payment processing | `sk_test_YOUR_KEY` | WARN - billing disabled |
+| `STRIPE_WEBHOOK_SECRET` | Optional | Stripe webhook verification | `whsec_YOUR_SECRET` | WARN - webhooks unverified |
+| `OPENAI_API_KEY` | Optional | Document AI extraction | `sk-proj-YOUR_KEY` | WARN - AI extraction disabled |
+| `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth | `YOUR_CLIENT_SECRET` | WARN - Google login disabled |
 
 ### Application Settings
 
@@ -74,18 +74,18 @@ CORS_ORIGINS=https://app.evo-home.ch,https://evo-home.ch
 # ============================================
 
 # Email (Resend)
-RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+RESEND_API_KEY=re_YOUR_RESEND_API_KEY_HERE
 SENDER_EMAIL=noreply@evo-home.ch
 
 # Payments (Stripe)
-STRIPE_API_KEY=sk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+STRIPE_API_KEY=sk_test_YOUR_STRIPE_KEY_HERE
+STRIPE_WEBHOOK_SECRET=whsec_YOUR_WEBHOOK_SECRET_HERE
 
 # AI Extraction (OpenAI)
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OPENAI_API_KEY=sk-proj-YOUR_OPENAI_KEY_HERE
 
 # OAuth (Google) - Optional
-GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxxxxxxxxxxxxxx
+GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET_HERE
 
 # ============================================
 # APPLICATION
