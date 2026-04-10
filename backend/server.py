@@ -130,6 +130,10 @@ init_auth(db)
 # Initialize access control module with database
 init_access_control(db)
 
+# Initialize database compatibility layer (Phase C)
+from core.db_compat import init_compat, get_compat, COMPAT_MODE
+db_compat = init_compat(db)
+
 # Legacy JWT config - using validated config (no silent fallback)
 JWT_SECRET = app_config.JWT_SECRET
 JWT_ALGORITHM = 'HS256'
@@ -2666,10 +2670,20 @@ async def get_project_units(project_id: str, user: dict = Depends(get_current_ag
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    units = await db.project_units.find(
+    # CANONICAL: Read from units, fallback to project_units
+    units = await db.units.find(
         {"project_id": project_id},
         {"_id": 0}
     ).to_list(500)
+    
+    if not units and COMPAT_MODE:
+        # Fallback to deprecated collection during migration
+        units = await db.project_units.find(
+            {"project_id": project_id},
+            {"_id": 0}
+        ).to_list(500)
+        if units:
+            logger.warning(f"SCHEMA CONFLICT: Units for {project_id} found in project_units, not units")
     
     # Enrich with client assignment info
     for unit in units:
@@ -2721,12 +2735,17 @@ async def create_project_unit(project_id: str, data: dict, user: dict = Depends(
     if not unit_reference:
         raise HTTPException(status_code=400, detail="Unit reference is required")
     
-    # Check for duplicate
-    existing = await db.project_units.find_one({
+    # Check for duplicate using compatibility layer
+    existing = await db_compat.get_unit(None)  # We need to check by reference
+    existing = await db.units.find_one({
         "project_id": project_id,
-        "unit_reference": unit_reference,
-        "is_demo": is_demo
+        "unit_reference": unit_reference
     })
+    if not existing and COMPAT_MODE:
+        existing = await db.project_units.find_one({
+            "project_id": project_id,
+            "unit_reference": unit_reference
+        })
     if existing:
         raise HTTPException(status_code=400, detail="Unit reference already exists in this project")
     
@@ -2736,39 +2755,49 @@ async def create_project_unit(project_id: str, data: dict, user: dict = Depends(
         "project_id": project_id,
         "unit_reference": unit_reference,
         "client_id": None,
-        "is_demo": is_demo,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.project_units.insert_one(unit_doc)
-    return await db.project_units.find_one({"unit_id": unit_id}, {"_id": 0})
+    # CANONICAL: Write to units collection (not project_units)
+    await db.units.insert_one(unit_doc)
+    return await db.units.find_one({"unit_id": unit_id}, {"_id": 0})
 
 @api_router.delete("/projects/{project_id}/units/{unit_id}")
 async def delete_project_unit(project_id: str, unit_id: str, user: dict = Depends(get_current_agent)):
     """Remove a unit from a project"""
-    is_demo = user.get('is_demo', False)
+    demo_filter = get_demo_filter(user)
     
     # Verify project ownership
     project = await db.projects.find_one({
         "project_id": project_id,
         "agent_id": user['user_id'],
-        "is_demo": is_demo
+        **demo_filter
     }, {"_id": 0})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    unit = await db.project_units.find_one({
+    # CANONICAL: Read from units, fallback to project_units
+    unit = await db.units.find_one({
         "unit_id": unit_id,
-        "project_id": project_id,
-        "is_demo": is_demo
+        "project_id": project_id
     }, {"_id": 0})
+    if not unit and COMPAT_MODE:
+        unit = await db.project_units.find_one({
+            "unit_id": unit_id,
+            "project_id": project_id
+        }, {"_id": 0})
     if not unit:
         raise HTTPException(status_code=404, detail="Unit not found")
     
     if unit.get('client_id'):
         raise HTTPException(status_code=400, detail="Cannot delete unit that is assigned to a client")
     
-    await db.project_units.delete_one({"unit_id": unit_id})
+    # CANONICAL: Delete from units
+    await db.units.delete_one({"unit_id": unit_id})
+    # Also clean up deprecated collection if exists
+    if COMPAT_MODE:
+        await db.project_units.delete_one({"unit_id": unit_id})
+    
     return {"message": "Unit deleted"}
 
 # ==================== TEAM MEMBER ENDPOINTS ====================
@@ -5176,6 +5205,56 @@ async def delete_project_stage(project_id: str, stage_id: str, user: dict = Depe
         raise HTTPException(status_code=404, detail="Stage not found")
     
     return {"message": "Stage deleted"}
+
+# ==================== CANONICAL STEP ROUTES (Phase C) ====================
+# These are the NEW canonical routes using /steps/{step_id}
+# The /stages/{stage_id} routes above are DEPRECATED but kept for backward compatibility
+# Frontend should migrate to /steps routes
+
+@api_router.get("/projects/{project_id}/steps")
+async def get_project_steps(project_id: str, user: dict = Depends(get_current_user)):
+    """
+    Get all steps for a project timeline.
+    
+    CANONICAL ROUTE - Use this instead of /stages
+    SOURCE OF TRUTH: timeline_steps collection
+    """
+    logger.info(f"Using canonical /steps route for project {project_id}")
+    # Delegate to existing implementation
+    return await get_project_stages(project_id, user)
+
+@api_router.post("/projects/{project_id}/steps")
+async def create_project_step(project_id: str, data: ProjectStageCreate, user: dict = Depends(get_current_agent)):
+    """
+    Create a new step in project timeline.
+    
+    CANONICAL ROUTE - Use this instead of /stages
+    SOURCE OF TRUTH: timeline_steps collection
+    """
+    logger.info(f"Using canonical /steps route for project {project_id}")
+    return await create_project_stage(project_id, data, user)
+
+@api_router.put("/projects/{project_id}/steps/{step_id}")
+async def update_project_step(project_id: str, step_id: str, data: ProjectStageUpdate, user: dict = Depends(get_current_agent)):
+    """
+    Update a step in project timeline.
+    
+    CANONICAL ROUTE - Use this instead of /stages/{stage_id}
+    SOURCE OF TRUTH: timeline_steps collection
+    """
+    logger.info(f"Using canonical /steps/{step_id} route")
+    return await update_project_stage(project_id, step_id, data, user)
+
+@api_router.delete("/projects/{project_id}/steps/{step_id}")
+async def delete_project_step(project_id: str, step_id: str, user: dict = Depends(get_current_agent)):
+    """
+    Delete a step from project timeline.
+    
+    CANONICAL ROUTE - Use this instead of /stages/{stage_id}
+    SOURCE OF TRUTH: timeline_steps collection
+    """
+    logger.info(f"Using canonical /steps/{step_id} route")
+    return await delete_project_stage(project_id, step_id, user)
 
 # ==================== COMPOSITE ENDPOINTS (Phase 2) ====================
 # One canonical endpoint per major screen. Backend is single source of truth.
