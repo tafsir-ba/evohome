@@ -37,6 +37,8 @@ ROOT_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
+from services.billing_service import get_agent_subscription_data
+
 router = APIRouter()
 
 # ==================== PROJECTS, UNITS, TEAM MEMBERS, TEAM DIRECTORY ====================

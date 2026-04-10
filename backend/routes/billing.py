@@ -45,77 +45,7 @@ router = APIRouter()
 
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
 
-async def get_agent_unit_count(agent_id: str, is_demo: bool = False) -> int:
-    """Count total units across all projects owned by an agent"""
-    # Get all projects for this agent
-    projects = await db.projects.find({
-        "agent_id": agent_id,
-        "is_demo": is_demo
-    }, {"project_id": 1}).to_list(None)
-    
-    if not projects:
-        return 0
-    
-    project_ids = [p['project_id'] for p in projects]
-    
-    # Count units
-    total_units = await db.units.count_documents({
-        "project_id": {"$in": project_ids},
-        "is_demo": is_demo
-    })
-    
-    # If no units, count projects as units
-    # (for projects that don't have explicit units)
-    if total_units == 0:
-        total_units = len(projects)
-    
-    return total_units
-
-async def get_agent_subscription_data(user: dict) -> dict:
-    """Get subscription data for an agent from database"""
-    agent_id = user['user_id']
-    is_demo = user.get('is_demo', False)
-    
-    # Get user's subscription info from database
-    user_doc = await db.users.find_one({"user_id": agent_id}, {"_id": 0})
-    
-    # Default to free plan if no subscription
-    plan_id = user_doc.get('subscription_plan', 'free') if user_doc else 'free'
-    subscription_status = user_doc.get('subscription_status', 'active')
-    
-    # Get plan details
-    plan = SUBSCRIPTION_PLANS.get(plan_id, SUBSCRIPTION_PLANS['free'])
-    
-    # Count units (not projects)
-    unit_count = await get_agent_unit_count(agent_id, is_demo)
-    
-    # Determine if can create more units
-    unit_limit = plan.get('property_limit')  # Still called property_limit in plans config
-    can_create = unit_limit is None or unit_count < unit_limit
-    
-    # Calculate usage percentage for warnings
-    usage_percent = 0
-    near_limit = False
-    if unit_limit and unit_limit > 0:
-        usage_percent = (unit_count / unit_limit) * 100
-        near_limit = usage_percent >= 80 and can_create  # 80% threshold warning
-    
-    return {
-        "plan_id": plan_id,
-        "plan_name": plan['name'],
-        "unit_limit": unit_limit,  # Renamed for clarity
-        "unit_usage": unit_count,  # Renamed for clarity
-        "property_limit": unit_limit,  # Keep for backwards compatibility
-        "property_usage": unit_count,  # Keep for backwards compatibility
-        "usage_percent": usage_percent,
-        "near_limit": near_limit,  # True if at 80%+ usage
-        "can_create_property": can_create and subscription_status == 'active',
-        "can_create_unit": can_create and subscription_status == 'active',
-        "stripe_subscription_id": user_doc.get('stripe_subscription_id') if user_doc else None,
-        "stripe_customer_id": user_doc.get('stripe_customer_id') if user_doc else None,
-        "subscription_status": subscription_status,
-        "current_period_end": user_doc.get('subscription_period_end') if user_doc else None
-    }
+from services.billing_service import get_agent_subscription_data, get_agent_unit_count
 
 @router.get("/billing/plans")
 async def get_available_plans(user: dict = Depends(get_current_agent)):
