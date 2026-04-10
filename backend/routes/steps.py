@@ -79,21 +79,21 @@ async def get_project_steps(project_id: str, user: dict = Depends(get_current_us
         {"_id": 0}
     ).sort("order_index", 1).to_list(50)
     
-    # Map to ProjectStage format for API compatibility
-    stages = []
+    # Return canonical step fields directly
+    result_steps = []
     for step in steps:
-        stages.append({
-            "stage_id": step.get('step_id'),
+        result_steps.append({
+            "step_id": step.get('step_id'),
             "project_id": project_id,
             "agent_id": project.get('agent_id'),
-            "name": step.get('title'),
+            "title": step.get('title'),
             "description": step.get('description'),
-            "order": step.get('order_index', 0),
+            "order_index": step.get('order_index', 0),
             "planned_start": step.get('planned_start') or step.get('planned_date'),
             "planned_end": step.get('planned_end'),
             "actual_start": step.get('actual_start'),
             "actual_end": step.get('completed_at'),
-            "status": _map_timeline_status_to_stage(step.get('status', 'pending')),
+            "status": step.get('status', 'pending'),
             "progress_percent": step.get('progress_percent', 0),
             "notes": step.get('notes'),
             "dependencies": step.get('dependencies', []),
@@ -102,30 +102,17 @@ async def get_project_steps(project_id: str, user: dict = Depends(get_current_us
             "updated_at": step.get('updated_at')
         })
     
-    return {"project": project, "stages": stages}
+    return {"project": project, "steps": result_steps}
 
 
-def _map_timeline_status_to_stage(timeline_status: str) -> str:
-    """Map TimelineStep status to ProjectStage status for API compatibility"""
-    mapping = {
-        'pending': 'upcoming',
-        'in_progress': 'in_progress',
-        'completed': 'completed',
-        'approved': 'completed'
-    }
-    return mapping.get(timeline_status, 'upcoming')
-
-
-def _map_stage_status_to_timeline(stage_status: str) -> str:
-    """Map ProjectStage status to TimelineStep status"""
+def _normalize_status(status: str) -> str:
+    """Normalize status value, mapping any legacy values to canonical ones"""
     mapping = {
         'upcoming': 'pending',
-        'in_progress': 'in_progress',
-        'completed': 'completed',
         'delayed': 'in_progress',
         'on_hold': 'pending'
     }
-    return mapping.get(stage_status, 'pending')
+    return mapping.get(status, status)
 
 @router.post("/projects/{project_id}/steps")
 async def create_project_step(project_id: str, data: ProjectStageCreate, user: dict = Depends(get_current_agent)):
@@ -161,13 +148,17 @@ async def create_project_step(project_id: str, data: ProjectStageCreate, user: d
     step_id = f"step_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
     
+    # Accept both canonical (title/order_index) and legacy (name/order)
+    step_title = data.title or data.name
+    step_order = data.order_index if data.order_index is not None else data.order
+    
     # Write to timeline_steps (single source of truth)
     step_doc = {
         "step_id": step_id,
         "timeline_id": timeline_id,
-        "title": data.name,
+        "title": step_title,
         "description": data.description,
-        "order_index": data.order,
+        "order_index": step_order,
         "planned_date": data.planned_start,
         "planned_start": data.planned_start,
         "planned_end": data.planned_end,
@@ -184,19 +175,19 @@ async def create_project_step(project_id: str, data: ProjectStageCreate, user: d
     
     await db.timeline_steps.insert_one(step_doc)
     
-    # Return in ProjectStage format for API compatibility
+    # Return canonical step fields
     return {
-        "stage_id": step_id,
+        "step_id": step_id,
         "project_id": project_id,
         "agent_id": user['user_id'],
-        "name": data.name,
+        "title": step_title,
         "description": data.description,
-        "order": data.order,
+        "order_index": step_order,
         "planned_start": data.planned_start,
         "planned_end": data.planned_end,
         "actual_start": None,
         "actual_end": None,
-        "status": "upcoming",
+        "status": "pending",
         "progress_percent": 0,
         "notes": None,
         "dependencies": data.dependencies or [],
@@ -234,13 +225,16 @@ async def update_project_step(project_id: str, step_id: str, data: ProjectStageU
     now = datetime.now(timezone.utc).isoformat()
     update_data = {"updated_at": now}
     
-    # Map ProjectStageUpdate fields to TimelineStep fields
-    if data.name is not None:
-        update_data['title'] = data.name
+    # Map fields — accept both canonical (title/order_index) and legacy (name/order)
+    step_title = data.title or data.name
+    step_order = data.order_index if data.order_index is not None else data.order
+    
+    if data.title is not None or data.name is not None:
+        update_data['title'] = data.title or data.name
     if data.description is not None:
         update_data['description'] = data.description
-    if data.order is not None:
-        update_data['order_index'] = data.order
+    if data.order_index is not None or data.order is not None:
+        update_data['order_index'] = data.order_index if data.order_index is not None else data.order
     if data.planned_start is not None:
         update_data['planned_start'] = data.planned_start
         update_data['planned_date'] = data.planned_start
@@ -251,7 +245,7 @@ async def update_project_step(project_id: str, step_id: str, data: ProjectStageU
     if data.actual_end is not None:
         update_data['completed_at'] = data.actual_end
     if data.status is not None:
-        update_data['status'] = _map_stage_status_to_timeline(data.status)
+        update_data['status'] = _normalize_status(data.status)
     if data.progress_percent is not None:
         update_data['progress_percent'] = data.progress_percent
     if data.notes is not None:
@@ -259,20 +253,20 @@ async def update_project_step(project_id: str, step_id: str, data: ProjectStageU
     
     await db.timeline_steps.update_one({"step_id": step_id}, {"$set": update_data})
     
-    # Return updated step
+    # Return updated step with canonical fields
     updated_step = await db.timeline_steps.find_one({"step_id": step_id}, {"_id": 0})
     return {
-        "stage_id": updated_step.get('step_id'),
+        "step_id": updated_step.get('step_id'),
         "project_id": project_id,
         "agent_id": user['user_id'],
-        "name": updated_step.get('title'),
+        "title": updated_step.get('title'),
         "description": updated_step.get('description'),
-        "order": updated_step.get('order_index', 0),
+        "order_index": updated_step.get('order_index', 0),
         "planned_start": updated_step.get('planned_start'),
         "planned_end": updated_step.get('planned_end'),
         "actual_start": updated_step.get('actual_start'),
         "actual_end": updated_step.get('completed_at'),
-        "status": _map_timeline_status_to_stage(updated_step.get('status', 'pending')),
+        "status": updated_step.get('status', 'pending'),
         "progress_percent": updated_step.get('progress_percent', 0),
         "notes": updated_step.get('notes'),
         "dependencies": updated_step.get('dependencies', []),

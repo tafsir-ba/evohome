@@ -101,7 +101,7 @@ export const AgentQuoteDetail = () => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `quote_${quote.document_number || quote.quote_number}.pdf`;
+        a.download = `quote_${quote.document_number}.pdf`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -176,7 +176,7 @@ export const AgentQuoteDetail = () => {
               {quote.title}
             </h1>
             <div className="flex items-center gap-4 mt-2">
-              <p className="text-muted-foreground">{quote.document_number || quote.quote_number}</p>
+              <p className="text-muted-foreground">{quote.document_number}</p>
               <StatusBadge status={quote.status} />
             </div>
           </div>
@@ -276,7 +276,7 @@ export const AgentQuoteDetail = () => {
                   <div className="text-right">
                     <p className="text-xs font-medium tracking-widest uppercase text-muted-foreground">Total Amount</p>
                     <p className="text-3xl font-outfit font-semibold text-[#1A1A1A] mt-1">
-                      {formatCurrency(quote.amount || quote.total_amount)}
+                      {formatCurrency(quote.amount)}
                     </p>
                   </div>
                 </div>
@@ -366,7 +366,7 @@ export const AgentQuoteDetail = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Quote</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete quote "{quote.document_number || quote.quote_number}"? 
+              Are you sure you want to delete quote "{quote.document_number}"? 
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

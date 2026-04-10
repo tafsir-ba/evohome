@@ -190,17 +190,17 @@ export const AgentDashboard = () => {
                 <div className="divide-y divide-border">
                   {stats.change_requests.map((quote) => (
                     <Link 
-                      key={quote.quote_id || quote.document_id} 
-                      to={`/agent/quotes/${quote.quote_id || quote.document_id}`}
+                      key={quote.document_id} 
+                      to={`/agent/quotes/${quote.document_id}`}
                       className="flex items-start gap-4 p-4 hover:bg-muted/50 transition-colors"
-                      data-testid={`change-request-${quote.quote_id || quote.document_id}`}
+                      data-testid={`change-request-${quote.document_id}`}
                     >
                       <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
                         <MessageSquare className="w-4 h-4 text-amber-600" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-foreground truncate">{quote.title}</p>
-                        <p className="text-sm text-muted-foreground">{quote.quote_number || quote.document_number} · {quote.unit_reference}</p>
+                        <p className="text-sm text-muted-foreground">{quote.document_number} · {quote.unit_reference}</p>
                         {quote.change_request_comment && (
                           <p className="text-sm text-amber-700 dark:text-amber-400 mt-2 line-clamp-2 bg-amber-500/10 p-2 rounded-lg">
                             "{quote.change_request_comment}"
@@ -236,18 +236,18 @@ export const AgentDashboard = () => {
                 <div className="divide-y divide-border">
                   {stats.recent_documents.filter(d => d.type === 'quote').slice(0, 5).map((quote) => (
                     <Link 
-                      key={quote.quote_id || quote.document_id} 
-                      to={`/agent/quotes/${quote.quote_id || quote.document_id}`}
+                      key={quote.document_id} 
+                      to={`/agent/quotes/${quote.document_id}`}
                       className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
-                      data-testid={`recent-quote-${quote.quote_id || quote.document_id}`}
+                      data-testid={`recent-quote-${quote.document_id}`}
                     >
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-foreground truncate">{quote.title}</p>
-                        <p className="text-sm text-muted-foreground">{quote.quote_number || quote.document_number}</p>
+                        <p className="text-sm text-muted-foreground">{quote.document_number}</p>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <p className="font-medium text-foreground">{formatCurrency(quote.total_amount || quote.amount)}</p>
+                          <p className="font-medium text-foreground">{formatCurrency(quote.amount)}</p>
                           <StatusBadge status={quote.status} />
                         </div>
                         <ArrowRight className="w-4 h-4 text-muted-foreground" />

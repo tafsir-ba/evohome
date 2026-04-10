@@ -61,14 +61,12 @@ class DocumentLineItemResponse(BaseModel):
 
 
 class DocumentResponse(BaseModel):
-    """Document data returned from API - unified schema"""
+    """Document data returned from API - canonical schema"""
     document_id: str
-    type: str  # 'quote', 'invoice' - primary field
-    document_type: Optional[str] = None  # Alias for backward compat
+    type: str  # 'quote' or 'invoice'
     status: str
     title: str
-    amount: float  # Primary field
-    total_amount: Optional[float] = None  # Alias for backward compat
+    amount: float
     currency: str = "CHF"
     supplier_name: Optional[str] = None
     description: Optional[str] = None
@@ -76,7 +74,7 @@ class DocumentResponse(BaseModel):
     items: List[DocumentLineItemResponse] = []
     project_id: Optional[str] = None
     client_id: Optional[str] = None
-    agent_id: str  # Required - every doc must have an owner
+    agent_id: str
     buyer_id: Optional[str] = None
     unit_reference: Optional[str] = None
     created_at: str
@@ -96,7 +94,7 @@ class DocumentResponse(BaseModel):
     change_request_comment: Optional[str] = None
     
     class Config:
-        extra = "allow"  # Allow extra fields during migration
+        extra = "allow"
 
 
 class DocumentListResponse(BaseModel):

@@ -1,0 +1,77 @@
+{
+  "summary": "Iteration 4 - Canonical Field Audit Testing Complete. All 14 backend API tests passed. Frontend login and navigation to Timeline, Quotes, Invoices, and Settings all working correctly with canonical field names.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_canonical_fields_audit.py",
+    "/app/test_reports/pytest/pytest_iteration4_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Canonical field audit successfully completed - all legacy field aliases removed",
+    "Backend DocumentResponse model correctly uses 'type' and 'amount' (not document_type/total_amount)",
+    "Backend steps.py returns step_id/title/order_index (not stage_id/name/order)",
+    "Frontend AgentTimeline.js correctly maps step_id, title, order_index from API response",
+    "Frontend AgentQuotes.js and AgentInvoices.js correctly use document_id, document_number, amount fields"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_canonical_fields_audit.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 tests passed)",
+    "frontend": "100% (login + 5 navigation tests passed)"
+  },
+  "test_credentials": "Agent: demo.agent@upgradeflow.com / demo123 (Marc Dubois demo)",
+  "seed_data_creation": "None - used existing demo data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Canonical field audit complete. Key validations: (1) GET /api/documents returns 'type' and 'amount' fields without legacy aliases (total_amount, document_type removed), (2) GET /api/projects/{id}/steps returns step_id, title, order_index (not stage_id, name, order), (3) Frontend Timeline shows 5 stages with titles displayed correctly, (4) Frontend Quotes shows 4 quotes with CHF amounts, (5) Frontend Invoices shows 2 invoices with CHF amounts. All pages load without errors.",
+  "tested_endpoints": [
+    "POST /api/auth/login - 200 (canonical user fields)",
+    "GET /api/documents - 200 (canonical document_id, type, amount fields)",
+    "GET /api/documents?doc_type=quote - 200 (filtered quotes)",
+    "GET /api/documents?doc_type=invoice - 200 (filtered invoices)",
+    "GET /api/projects/{id}/steps - 200 (canonical step_id, title, order_index)",
+    "GET /api/projects/{id}/timeline/full - 200 (canonical step fields)",
+    "GET /api/agent/dashboard - 200 (canonical recent_work fields)",
+    "GET /api/projects - 200",
+    "GET /api/clients - 200",
+    "GET /api/notifications - 200",
+    "GET /api/billing/status - 200",
+    "GET /api/analytics - 200",
+    "GET /api/health - 200",
+    "GET /api/ - 200"
+  ],
+  "frontend_tests": [
+    "Login as Demo Agent (Marc Dubois) - PASSED",
+    "Dashboard loads with Recent Activity - PASSED",
+    "Timeline page shows 5 stage cards with canonical step_id - PASSED",
+    "Quotes page shows 4 quotes with canonical document_id and amount - PASSED",
+    "Invoices page shows 2 invoices with canonical document_id and amount - PASSED",
+    "Settings page loads correctly - PASSED"
+  ],
+  "canonical_field_validation": {
+    "documents_endpoint": {
+      "has_document_id": true,
+      "has_type": true,
+      "has_amount": true,
+      "has_total_amount_legacy": false,
+      "has_document_type_legacy": false
+    },
+    "steps_endpoint": {
+      "has_step_id": true,
+      "has_title": true,
+      "has_order_index": true,
+      "has_stage_id_legacy": false,
+      "has_name_legacy": false,
+      "has_order_legacy": false
+    }
+  }
+}

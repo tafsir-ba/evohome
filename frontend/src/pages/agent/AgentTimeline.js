@@ -44,18 +44,18 @@ const STAGE_TEMPLATES = [
 ];
 
 const stageStatusStyles = {
-  upcoming: { bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-300', icon: Clock },
+  pending: { bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-300', icon: Clock },
   in_progress: { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-400', icon: Loader2 },
   completed: { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-400', icon: CheckCircle },
   delayed: { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-400', icon: AlertCircle },
 };
 
 const StageCard = ({ stage, onEdit, onDelete, onMove, isFirst, isLast }) => {
-  const style = stageStatusStyles[stage.status] || stageStatusStyles.upcoming;
+  const style = stageStatusStyles[stage.status] || stageStatusStyles.pending;
   const StatusIcon = style.icon;
 
   return (
-    <Card className={`border-l-4 ${style.border} rounded-sm hover:shadow-swiss transition-shadow`} data-testid={`stage-card-${stage.stage_id}`}>
+    <Card className={`border-l-4 ${style.border} rounded-sm hover:shadow-swiss transition-shadow`} data-testid={`stage-card-${stage.step_id}`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -64,7 +64,7 @@ const StageCard = ({ stage, onEdit, onDelete, onMove, isFirst, isLast }) => {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-medium text-[#1A1A1A] truncate">{stage.name}</h3>
+                <h3 className="font-medium text-[#1A1A1A] truncate">{stage.title}</h3>
                 <span className={`px-2 py-0.5 text-[10px] font-medium rounded-sm uppercase ${style.bg} ${style.text}`}>
                   {stage.status.replace('_', ' ')}
                 </span>
@@ -100,7 +100,7 @@ const StageCard = ({ stage, onEdit, onDelete, onMove, isFirst, isLast }) => {
                 className="h-6 w-6"
                 onClick={() => onMove(stage, 'up')}
                 disabled={isFirst}
-                data-testid={`move-up-${stage.stage_id}`}
+                data-testid={`move-up-${stage.step_id}`}
               >
                 <ChevronUp className="w-4 h-4" />
               </Button>
@@ -110,7 +110,7 @@ const StageCard = ({ stage, onEdit, onDelete, onMove, isFirst, isLast }) => {
                 className="h-6 w-6"
                 onClick={() => onMove(stage, 'down')}
                 disabled={isLast}
-                data-testid={`move-down-${stage.stage_id}`}
+                data-testid={`move-down-${stage.step_id}`}
               >
                 <ChevronDown className="w-4 h-4" />
               </Button>
@@ -120,7 +120,7 @@ const StageCard = ({ stage, onEdit, onDelete, onMove, isFirst, isLast }) => {
               size="icon"
               className="h-8 w-8 text-[#64748B] hover:text-primary"
               onClick={() => onEdit(stage)}
-              data-testid={`edit-stage-${stage.stage_id}`}
+              data-testid={`edit-stage-${stage.step_id}`}
             >
               <Edit2 className="w-4 h-4" />
             </Button>
@@ -129,7 +129,7 @@ const StageCard = ({ stage, onEdit, onDelete, onMove, isFirst, isLast }) => {
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-destructive"
               onClick={() => onDelete(stage)}
-              data-testid={`delete-stage-${stage.stage_id}`}
+              data-testid={`delete-stage-${stage.step_id}`}
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -173,13 +173,13 @@ export const AgentTimeline = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingStage, setEditingStage] = useState(null);
   const [formData, setFormData] = useState({
-    name: '',
+    title: '',
     description: '',
     planned_start: '',
     planned_end: '',
     actual_start: '',
     actual_end: '',
-    status: 'upcoming',
+    status: 'pending',
     progress_percent: 0,
     notes: '',
   });
@@ -256,19 +256,17 @@ export const AgentTimeline = () => {
       if (res.ok) {
         const data = await res.json();
         if (currentFetchRef.current === fetchId) {
-          // Map backend response to local state
-          // Convert TimelineStepSummary format to stage format for UI compatibility
-          const mappedStages = (data.steps || []).map(step => ({
-            stage_id: step.step_id,
-            name: step.title,
+          const mappedSteps = (data.steps || []).map(step => ({
+            step_id: step.step_id,
+            title: step.title,
             description: step.description,
-            status: _mapTimelineStatusToStage(step.status),
-            order: step.order_index,
+            status: step.status || 'pending',
+            order_index: step.order_index,
             planned_start: step.planned_start,
             planned_end: step.planned_end,
             progress_percent: step.progress_percent || 0
           }));
-          setStages(mappedStages);
+          setStages(mappedSteps);
         }
       }
     } catch (error) {
@@ -282,27 +280,18 @@ export const AgentTimeline = () => {
     }
   };
 
-  // Status mapping helper (backend uses timeline status, UI uses stage status)
-  const _mapTimelineStatusToStage = (status) => {
-    const mapping = {
-      'pending': 'upcoming',
-      'in_progress': 'in_progress',
-      'completed': 'completed',
-      'approved': 'completed'
-    };
-    return mapping[status] || 'upcoming';
-  };
+  // No longer needed — backend returns canonical statuses directly
 
   const handleOpenCreate = () => {
     setEditingStage(null);
     setFormData({
-      name: '',
+      title: '',
       description: '',
       planned_start: '',
       planned_end: '',
       actual_start: '',
       actual_end: '',
-      status: 'upcoming',
+      status: 'pending',
       progress_percent: 0,
       notes: '',
     });
@@ -312,7 +301,7 @@ export const AgentTimeline = () => {
   const handleOpenEdit = (stage) => {
     setEditingStage(stage);
     setFormData({
-      name: stage.name,
+      title: stage.title,
       description: stage.description || '',
       planned_start: stage.planned_start || '',
       planned_end: stage.planned_end || '',
@@ -328,13 +317,13 @@ export const AgentTimeline = () => {
   const handleSelectTemplate = (template) => {
     setFormData(prev => ({
       ...prev,
-      name: template.name,
+      title: template.name,
       description: template.description,
     }));
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.planned_start || !formData.planned_end) {
+    if (!formData.title || !formData.planned_start || !formData.planned_end) {
       toast.error('Please fill in required fields');
       return;
     }
@@ -344,7 +333,7 @@ export const AgentTimeline = () => {
       if (editingStage) {
         // Update
         const res = await fetch(
-          `${API}/projects/${selectedProjectId}/steps/${editingStage.stage_id}`,
+          `${API}/projects/${selectedProjectId}/steps/${editingStage.step_id}`,
           {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -368,7 +357,7 @@ export const AgentTimeline = () => {
             credentials: 'include',
             body: JSON.stringify({
               ...formData,
-              order: stages.length + 1,
+              order_index: stages.length + 1,
             }),
           }
         );
@@ -389,11 +378,11 @@ export const AgentTimeline = () => {
   };
 
   const handleDelete = async (stage) => {
-    if (!window.confirm(`Delete "${stage.name}"?`)) return;
+    if (!window.confirm(`Delete "${stage.title}"?`)) return;
 
     try {
       const res = await fetch(
-        `${API}/projects/${selectedProjectId}/steps/${stage.stage_id}`,
+        `${API}/projects/${selectedProjectId}/steps/${stage.step_id}`,
         { method: 'DELETE', credentials: 'include' }
       );
       if (res.ok) {
@@ -409,7 +398,7 @@ export const AgentTimeline = () => {
   };
 
   const handleMove = async (stage, direction) => {
-    const currentIndex = stages.findIndex(s => s.stage_id === stage.stage_id);
+    const currentIndex = stages.findIndex(s => s.step_id === stage.step_id);
     const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
     
     if (newIndex < 0 || newIndex >= stages.length) return;
@@ -419,17 +408,17 @@ export const AgentTimeline = () => {
     try {
       // Swap orders
       await Promise.all([
-        fetch(`${API}/projects/${selectedProjectId}/steps/${stage.stage_id}`, {
+        fetch(`${API}/projects/${selectedProjectId}/steps/${stage.step_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ order: otherStage.order }),
+          body: JSON.stringify({ order_index: otherStage.order_index }),
         }),
-        fetch(`${API}/projects/${selectedProjectId}/steps/${otherStage.stage_id}`, {
+        fetch(`${API}/projects/${selectedProjectId}/steps/${otherStage.step_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ order: stage.order }),
+          body: JSON.stringify({ order_index: stage.order_index }),
         }),
       ]);
       fetchTimeline(selectedProjectId);
@@ -508,23 +497,23 @@ export const AgentTimeline = () => {
         return;
       }
       
-      // Parse extracted stages
+      // Parse extracted steps
       const stagesField = extractedData.fields?.find(f => f.name === 'stages');
       if (stagesField && Array.isArray(stagesField.value)) {
-        // Convert extracted stages to our format
+        // Convert extracted steps to canonical format
         const parsedStages = stagesField.value.map((stage, index) => ({
-          name: stage.name || stage.title || `Stage ${index + 1}`,
+          title: stage.title || `Step ${index + 1}`,
           description: stage.description || '',
           date_text: stage.date_text || stage.date || '',
-          status: 'upcoming',
-          order: index + 1
+          status: 'pending',
+          order_index: index + 1
         }));
         setExtractedStages(parsedStages);
         setExtractionConfidence(extractedData.confidence || 0.5);
-        toast.success(`Extracted ${parsedStages.length} stages from document`);
+        toast.success(`Extracted ${parsedStages.length} steps from document`);
       } else {
         setExtractedStages([]);
-        toast.warning('Could not extract timeline stages. Please add them manually.');
+        toast.warning('Could not extract timeline steps. Please add them manually.');
       }
       
     } catch (error) {
@@ -541,7 +530,7 @@ export const AgentTimeline = () => {
 
   const handleSaveExtractedStages = async () => {
     if (extractedStages.length === 0) {
-      toast.error('No stages to save');
+      toast.error('No steps to save');
       return;
     }
     
@@ -549,10 +538,10 @@ export const AgentTimeline = () => {
     try {
       // Get the current max order to continue numbering from
       const maxOrder = stages.length > 0 
-        ? Math.max(...stages.map(s => s.order || 0)) 
+        ? Math.max(...stages.map(s => s.order_index || 0)) 
         : 0;
       
-      // Create each stage
+      // Create each step
       for (let i = 0; i < extractedStages.length; i++) {
         const stage = extractedStages[i];
         // Parse date_text into planned_start and planned_end
@@ -565,23 +554,23 @@ export const AgentTimeline = () => {
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
-            name: stage.name,
+            title: stage.title,
             description: stage.description || stage.date_text || '',
             planned_start: startDate,
             planned_end: endDate,
-            status: stage.status || 'upcoming',
-            order: maxOrder + i + 1,  // Continue from existing order
+            status: stage.status || 'pending',
+            order_index: maxOrder + i + 1,
             notes: stage.date_text ? `Original date: ${stage.date_text}` : ''
           })
         });
         
         if (!res.ok) {
-          throw new Error(`Failed to create stage: ${stage.name}`);
+          throw new Error(`Failed to create step: ${stage.title}`);
         }
       }
       
       const actionWord = stages.length > 0 ? 'Added' : 'Created';
-      toast.success(`${actionWord} ${extractedStages.length} stages`);
+      toast.success(`${actionWord} ${extractedStages.length} steps`);
       setUploadDialogOpen(false);
       setExtractedStages([]);
       fetchTimeline(selectedProjectId);
@@ -610,7 +599,7 @@ export const AgentTimeline = () => {
     
     try {
       for (const stage of stages) {
-        await fetch(`${API}/projects/${selectedProjectId}/steps/${stage.stage_id}`, {
+        await fetch(`${API}/projects/${selectedProjectId}/steps/${stage.step_id}`, {
           method: 'DELETE',
           credentials: 'include'
         });
@@ -742,7 +731,7 @@ export const AgentTimeline = () => {
             {stages.length > 0 ? (
               stages.map((stage, index) => (
                 <StageCard
-                  key={stage.stage_id}
+                  key={stage.step_id}
                   stage={stage}
                   onEdit={handleOpenEdit}
                   onDelete={handleDelete}
@@ -792,7 +781,7 @@ export const AgentTimeline = () => {
               <div>
                 <Label className="text-xs text-muted-foreground">Quick Templates</Label>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {STAGE_TEMPLATES.filter(t => !stages.some(s => s.name === t.name)).slice(0, 4).map((template) => (
+                  {STAGE_TEMPLATES.filter(t => !stages.some(s => s.title === t.name)).slice(0, 4).map((template) => (
                     <Button
                       key={template.name}
                       variant="outline"
@@ -812,8 +801,8 @@ export const AgentTimeline = () => {
                 <Label htmlFor="name">Stage Name *</Label>
                 <Input
                   id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  value={formData.title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="e.g., Foundation"
                   className="mt-1"
                   data-testid="stage-name-input"
@@ -892,7 +881,7 @@ export const AgentTimeline = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="upcoming">Upcoming</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="in_progress">In Progress</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                     <SelectItem value="delayed">Delayed</SelectItem>
@@ -970,9 +959,9 @@ export const AgentTimeline = () => {
             </p>
             <div className="max-h-32 overflow-y-auto space-y-1">
               {stages.map((stage, i) => (
-                <div key={stage.stage_id} className="text-sm flex items-center gap-2">
+                <div key={stage.step_id} className="text-sm flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-xs">{i + 1}</span>
-                  {stage.name}
+                  {stage.title}
                 </div>
               ))}
             </div>
@@ -1053,9 +1042,9 @@ export const AgentTimeline = () => {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 space-y-2">
                         <Input
-                          value={stage.name}
-                          onChange={(e) => handleEditExtractedStage(index, 'name', e.target.value)}
-                          placeholder="Stage name"
+                          value={stage.title}
+                          onChange={(e) => handleEditExtractedStage(index, 'title', e.target.value)}
+                          placeholder="Step title"
                           className="font-medium"
                         />
                         <div className="grid grid-cols-2 gap-2">
@@ -1073,7 +1062,7 @@ export const AgentTimeline = () => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="upcoming">Upcoming</SelectItem>
+                              <SelectItem value="pending">Pending</SelectItem>
                               <SelectItem value="in_progress">In Progress</SelectItem>
                               <SelectItem value="completed">Completed</SelectItem>
                             </SelectContent>

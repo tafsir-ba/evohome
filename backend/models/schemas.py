@@ -232,17 +232,20 @@ class Document(BaseModel):
 # ==================== PROJECT STAGE / STEP MODELS ====================
 
 class ProjectStageCreate(BaseModel):
-    name: str
+    title: str
     description: Optional[str] = None
-    order: int
+    order_index: int
     planned_start: str
     planned_end: str
     dependencies: Optional[List[str]] = None
+    # Legacy aliases for backward compat during transition
+    name: Optional[str] = None
+    order: Optional[int] = None
 
 class ProjectStageUpdate(BaseModel):
-    name: Optional[str] = None
+    title: Optional[str] = None
     description: Optional[str] = None
-    order: Optional[int] = None
+    order_index: Optional[int] = None
     planned_start: Optional[str] = None
     planned_end: Optional[str] = None
     actual_start: Optional[str] = None
@@ -250,6 +253,9 @@ class ProjectStageUpdate(BaseModel):
     status: Optional[str] = None
     progress_percent: Optional[int] = None
     notes: Optional[str] = None
+    # Legacy aliases for backward compat during transition
+    name: Optional[str] = None
+    order: Optional[int] = None
 
 class ProjectStage(BaseModel):
     stage_id: str

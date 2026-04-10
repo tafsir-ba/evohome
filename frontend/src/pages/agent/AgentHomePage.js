@@ -1611,12 +1611,12 @@ export const AgentHomePage = () => {
                               )}
                             </div>
                             <p className="text-sm font-medium truncate">
-                              {field.name === 'amount' || field.name === 'total_amount'
+                              {field.name === 'amount'
                                 ? formatCurrency(field.value) 
                                 : field.name === 'line_items' && Array.isArray(field.value)
                                   ? `${field.value.length} items`
                                   : field.name === 'stages' && Array.isArray(field.value)
-                                    ? `${field.value.length} stages: ${field.value.map(s => s.name || s.title || s.stage || 'Stage').join(', ').substring(0, 50)}${field.value.length > 3 ? '...' : ''}`
+                                    ? `${field.value.length} steps: ${field.value.map(s => s.title || s.name || 'Step').join(', ').substring(0, 50)}${field.value.length > 3 ? '...' : ''}`
                                     : Array.isArray(field.value)
                                       ? `${field.value.length} items`
                                       : typeof field.value === 'object' && field.value !== null

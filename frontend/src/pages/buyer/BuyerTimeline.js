@@ -522,14 +522,14 @@ const ConstructionPhaseCard = ({ stages }) => {
               
               return (
                 <div 
-                  key={stage.stage_id} 
+                  key={stage.step_id} 
                   className={cn(
                     "p-3 rounded-lg border",
                     isCurrent && "bg-primary/5 border-primary/30",
                     isCompleted && "bg-emerald-500/5 border-emerald-500/20",
                     isPending && "bg-muted/30 border-border"
                   )}
-                  data-testid={`construction-stage-${stage.stage_id}`}
+                  data-testid={`construction-stage-${stage.step_id}`}
                 >
                   <div className="flex items-start gap-3">
                     <div className={cn(
@@ -548,7 +548,7 @@ const ConstructionPhaseCard = ({ stages }) => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-foreground">{stage.name}</span>
+                        <span className="font-medium text-foreground">{stage.title}</span>
                         {isCurrent && (
                           <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary text-primary-foreground">
                             In Progress
@@ -894,18 +894,18 @@ export const BuyerTimeline = () => {
           if (ctRes.ok) {
             const ctData = await ctRes.json();
             setConstructionTimeline(ctData);
-            // Convert to stages format for backward compatibility
+            // Use canonical field names directly
             if (ctData.steps && ctData.steps.length > 0) {
-              const stagesFromTimeline = ctData.steps.map(step => ({
-                stage_id: step.step_id,
-                name: step.title,
+              const stepsFromTimeline = ctData.steps.map(step => ({
+                step_id: step.step_id,
+                title: step.title,
                 status: step.status === 'approved' ? 'completed' : step.status,
                 description: step.description,
                 planned_date: step.planned_date,
                 completed_at: step.completed_at,
                 documents: step.documents
               }));
-              setStages(stagesFromTimeline);
+              setStages(stepsFromTimeline);
             }
           }
           

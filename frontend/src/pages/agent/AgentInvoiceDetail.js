@@ -95,7 +95,7 @@ export const AgentInvoiceDetail = () => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `invoice_${invoice.document_number || invoice.invoice_number}.pdf`;
+        a.download = `invoice_${invoice.document_number}.pdf`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -165,7 +165,7 @@ export const AgentInvoiceDetail = () => {
               Back to Invoices
             </Link>
             <h1 className="text-3xl font-outfit font-semibold text-[#1A1A1A] tracking-tight">
-              Invoice {invoice.invoice_number || invoice.document_number}
+              Invoice {invoice.document_number}
             </h1>
             <div className="flex items-center gap-4 mt-2">
               <p className="text-muted-foreground">{invoice.title}</p>
@@ -253,7 +253,7 @@ export const AgentInvoiceDetail = () => {
                   <div className="text-right">
                     <p className="text-xs font-medium tracking-widest uppercase text-muted-foreground">Amount Due</p>
                     <p className="text-3xl font-outfit font-semibold text-primary mt-1">
-                      {formatCurrency(invoice.total_amount || invoice.amount)}
+                      {formatCurrency(invoice.amount)}
                     </p>
                   </div>
                 </div>
@@ -365,7 +365,7 @@ export const AgentInvoiceDetail = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Invoice</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete invoice "{invoice.invoice_number || invoice.document_number}"? 
+              Are you sure you want to delete invoice "{invoice.document_number}"? 
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

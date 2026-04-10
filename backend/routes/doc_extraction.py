@@ -238,7 +238,7 @@ async def extract_document_data(
             
             extracted_data = {
                 "supplier_name": extraction_result.get("supplier_name"),
-                "total_amount": extraction_result.get("amount"),
+                "amount": extraction_result.get("amount"),
                 "currency": "CHF",
                 "description": extraction_result.get("description"),
                 "title": extraction_result.get("title"),
@@ -247,7 +247,7 @@ async def extract_document_data(
             }
             
             # Validate extracted amount
-            amount = extracted_data.get("total_amount")
+            amount = extracted_data.get("amount")
             if amount is not None:
                 try:
                     amount = float(amount)
@@ -262,7 +262,7 @@ async def extract_document_data(
                         extracted_data["_amount_warning"] = "zero"
                 except (ValueError, TypeError):
                     extraction_warnings.append("Could not parse amount - manual entry required")
-                    extracted_data["total_amount"] = None
+                    extracted_data["amount"] = None
             
             confidence_map = {"high": 0.9, "medium": 0.7, "low": 0.4}
             extraction_confidence = confidence_map.get(extraction_result.get("confidence", "low"), 0.4)

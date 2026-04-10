@@ -67,7 +67,7 @@ export const AgentInvoices = () => {
       
       if (response.ok) {
         toast.success('Invoice deleted');
-        setInvoices(invoices.filter(i => (i.document_id || i.invoice_id) !== invoiceId));
+        setInvoices(invoices.filter(i => i.document_id !== invoiceId));
       } else {
         const error = await response.json();
         toast.error(error.detail || 'Failed to delete');
@@ -105,7 +105,7 @@ export const AgentInvoices = () => {
   };
 
   const filteredInvoices = invoices.filter(invoice => {
-    const invoiceNumber = invoice.invoice_number || invoice.document_number || '';
+    const invoiceNumber = invoice.document_number || '';
     const matchesSearch = invoice.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           invoice.unit_reference.toLowerCase().includes(searchQuery.toLowerCase());
@@ -180,9 +180,9 @@ export const AgentInvoices = () => {
         <div className="space-y-4">
           {filteredInvoices.length > 0 ? (
             filteredInvoices.map((invoice) => {
-              const id = invoice.invoice_id || invoice.document_id;
-              const number = invoice.invoice_number || invoice.document_number;
-              const amount = invoice.total_amount || invoice.amount;
+              const id = invoice.document_id;
+              const number = invoice.document_number;
+              const amount = invoice.amount;
               return (
               <Link 
                 key={id} 

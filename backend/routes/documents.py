@@ -359,8 +359,7 @@ async def create_document_from_preview(
     doc = {
         "document_id": doc_id,
         "document_number": doc_number,
-        "type": doc_type,  # Primary field
-        "document_type": doc_type,  # Alias for compatibility
+        "type": doc_type,
         "status": "Draft",
         "agent_id": user['user_id'],  # Required - ownership scoping
         "client_id": client_id,
@@ -368,8 +367,7 @@ async def create_document_from_preview(
         "project_id": client['project_id'],
         "unit_reference": client['unit_reference'],
         "title": body.get('title', 'Untitled Document'),
-        "amount": float(body.get('amount', 0)),  # Primary field
-        "total_amount": float(body.get('amount', 0)),  # Alias for compatibility
+        "amount": float(body.get('amount', 0)),
         "items": body.get('items', []),
         "currency": "CHF",
         "supplier_name": body.get('supplier_name'),
@@ -1271,8 +1269,8 @@ async def document_action(document_id: str, action_data: DocumentAction, user: d
         
         return {
             "message": "Invoice created",
-            "invoice_id": invoice_id,
-            "invoice_number": invoice_number
+            "document_id": invoice_id,
+            "document_number": invoice_number
         }
     
     else:

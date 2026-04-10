@@ -45,7 +45,7 @@ export const AgentInvoiceUpload = () => {
   // Editing state
   const [editedData, setEditedData] = useState({
     title: '',
-    total_amount: '',
+    amount: '',
     supplier_name: '',
     notes: '',
     summary: '',
@@ -67,12 +67,11 @@ export const AgentInvoiceUpload = () => {
         const data = await res.json();
         setInvoiceData(data);
         setSelectedClient(data.client_id || '');
-        // Handle both field name variations (amount vs total_amount, items vs line_items)
-        const amount = data.amount || data.total_amount || 0;
+        const amount = data.amount || 0;
         const lineItems = data.items || data.line_items || [];
         setEditedData({
           title: data.title || '',
-          total_amount: amount.toString(),
+          amount: amount.toString(),
           supplier_name: data.supplier_name || '',
           notes: data.notes || '',
           summary: data.summary || '',
@@ -137,7 +136,7 @@ export const AgentInvoiceUpload = () => {
         
         setEditedData({
           title: data.title || '',
-          total_amount: String(data.amount || ''),
+          amount: String(data.amount || ''),
           supplier_name: data.supplier_name || '',
           notes: data.notes || '',
           summary: data.summary || '',
@@ -165,7 +164,7 @@ export const AgentInvoiceUpload = () => {
   const handleSave = async (send = false) => {
     if (!invoiceData) return;
     
-    if (send && (!editedData.total_amount || parseFloat(editedData.total_amount) <= 0)) {
+    if (send && (!editedData.amount || parseFloat(editedData.amount) <= 0)) {
       toast.error('Please enter a valid total amount before sending');
       return;
     }
@@ -190,7 +189,7 @@ export const AgentInvoiceUpload = () => {
             type: 'invoice',
             client_id: selectedClient,
             title: editedData.title,
-            amount: parseFloat(editedData.total_amount) || 0,
+            amount: parseFloat(editedData.amount) || 0,
             items: editedData.line_items.filter(item => item.description),
             supplier_name: editedData.supplier_name,
             summary: editedData.summary,
@@ -225,7 +224,7 @@ export const AgentInvoiceUpload = () => {
           credentials: 'include',
           body: JSON.stringify({
             title: editedData.title,
-            amount: parseFloat(editedData.total_amount) || 0,
+            amount: parseFloat(editedData.amount) || 0,
             supplier_name: editedData.supplier_name,
             notes: editedData.notes,
             summary: editedData.summary,
@@ -275,7 +274,7 @@ export const AgentInvoiceUpload = () => {
     setInvoiceData(null);
     setEditedData({
       title: '',
-      total_amount: '',
+      amount: '',
       supplier_name: '',
       notes: '',
       summary: '',
@@ -406,10 +405,10 @@ export const AgentInvoiceUpload = () => {
                   <Input
                     type="number"
                     step="0.01"
-                    value={editedData.total_amount}
-                    onChange={(e) => setEditedData(prev => ({ ...prev, total_amount: e.target.value }))}
+                    value={editedData.amount}
+                    onChange={(e) => setEditedData(prev => ({ ...prev, amount: e.target.value }))}
                     placeholder="0.00"
-                    className={cn(!editedData.total_amount && "border-amber-500")}
+                    className={cn(!editedData.amount && "border-amber-500")}
                     data-testid="amount-input"
                   />
                 </div>
@@ -448,7 +447,7 @@ export const AgentInvoiceUpload = () => {
                   // Auto-update total from line items
                   const total = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
                   if (total > 0) {
-                    setEditedData(prev => ({ ...prev, total_amount: String(total) }));
+                    setEditedData(prev => ({ ...prev, amount: String(total) }));
                   }
                 }}
               />
@@ -491,7 +490,7 @@ export const AgentInvoiceUpload = () => {
                 <div className="text-right">
                   <p className="text-sm text-muted-foreground">Total Amount</p>
                   <p className="text-2xl font-semibold text-foreground">
-                    CHF {formatCurrency(editedData.total_amount)}
+                    CHF {formatCurrency(editedData.amount)}
                   </p>
                 </div>
               </div>
@@ -502,7 +501,7 @@ export const AgentInvoiceUpload = () => {
                 onSend={() => handleSave(true)}
                 saving={saving}
                 sending={sending}
-                canSend={editedData.total_amount && parseFloat(editedData.total_amount) > 0}
+                canSend={editedData.amount && parseFloat(editedData.amount) > 0}
                 sendLabel="Send to Buyer"
               />
             </CardContent>

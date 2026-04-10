@@ -98,7 +98,7 @@ async def get_agent_dashboard(user: dict = Depends(get_current_agent)):
     ).sort("updated_at", -1).limit(3).to_list(3)
     
     for d in recent_docs:
-        doc_type = d.get('document_type') or d.get('type', 'document')
+        doc_type = d.get('type', 'document')
         recent_work.append(RecentWorkItem(
             id=d['document_id'],
             type='document',
@@ -154,7 +154,7 @@ async def get_recent_work(user: dict = Depends(get_current_agent)):
     ).sort("updated_at", -1).limit(3).to_list(3)
     
     for d in recent_docs:
-        doc_type = d.get('document_type') or d.get('type', 'document')
+        doc_type = d.get('type', 'document')
         recent_work.append(RecentWorkItem(
             id=d['document_id'],
             type='document',

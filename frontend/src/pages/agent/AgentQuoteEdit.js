@@ -49,7 +49,7 @@ export const AgentQuoteEdit = () => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    total_amount: '',
+    amount: '',
     supplier_name: '',
     notes: '',
     summary: '',
@@ -69,7 +69,7 @@ export const AgentQuoteEdit = () => {
         setFormData({
           title: data.title,
           description: data.description || '',
-          total_amount: String(data.total_amount || data.amount || ''),
+          amount: String(data.amount || ''),
           supplier_name: data.supplier_name || '',
           notes: data.notes || '',
           summary: data.summary || '',
@@ -99,7 +99,7 @@ export const AgentQuoteEdit = () => {
       
       if (res.ok) {
         const data = await res.json();
-        toast.success(`Invoice ${data.invoice_number} created`);
+        toast.success(`Invoice ${data.document_number} created`);
         navigate('/agent/invoices');
       } else {
         const err = await res.json();
@@ -132,7 +132,7 @@ export const AgentQuoteEdit = () => {
         setFormData({
           title: data.title,
           description: data.description || '',
-          total_amount: String(data.total_amount || data.amount || ''),
+          amount: String(data.amount || ''),
           supplier_name: data.supplier_name || '',
           notes: data.notes || '',
           summary: data.summary || '',
@@ -157,7 +157,7 @@ export const AgentQuoteEdit = () => {
   };
 
   const handleSave = async (andSend = false) => {
-    const totalAmount = parseFloat(formData.total_amount);
+    const totalAmount = parseFloat(formData.amount);
     if (!totalAmount || totalAmount <= 0) {
       toast.error('Please enter a valid total amount');
       return;
@@ -241,7 +241,7 @@ export const AgentQuoteEdit = () => {
   }
 
   const canEdit = ['Draft', 'Change Requested'].includes(quote.status);
-  const canSend = canEdit && formData.total_amount && parseFloat(formData.total_amount) > 0;
+  const canSend = canEdit && formData.amount && parseFloat(formData.amount) > 0;
   const canConvert = quote.status === 'Approved';
 
   return (
@@ -262,7 +262,7 @@ export const AgentQuoteEdit = () => {
                 </h1>
                 <StatusBadge status={quote.status} />
               </div>
-              <p className="text-sm text-muted-foreground">{quote.quote_number || quote.document_number}</p>
+              <p className="text-sm text-muted-foreground">{quote.document_number}</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -367,13 +367,13 @@ export const AgentQuoteEdit = () => {
               </div>
               
               <div>
-                <Label htmlFor="total_amount">Total Amount (CHF) *</Label>
+                <Label htmlFor="amount">Total Amount (CHF) *</Label>
                 <Input
-                  id="total_amount"
+                  id="amount"
                   type="number"
                   step="0.01"
-                  value={formData.total_amount}
-                  onChange={(e) => setFormData(prev => ({ ...prev, total_amount: e.target.value }))}
+                  value={formData.amount}
+                  onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
                   disabled={!canEdit}
                   className="mt-1"
                   data-testid="total-input"
@@ -438,7 +438,7 @@ export const AgentQuoteEdit = () => {
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Quote Total</span>
                 <span className="text-2xl font-bold text-foreground">
-                  CHF {formatCurrency(parseFloat(formData.total_amount) || 0)}
+                  CHF {formatCurrency(parseFloat(formData.amount) || 0)}
                 </span>
               </div>
             </div>

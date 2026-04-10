@@ -151,7 +151,7 @@ async def execute_workflow(
             if doc:
                 enriched_context['document_type'] = doc.get('type', 'Document')
                 enriched_context['document_title'] = doc.get('title', 'Untitled')
-                enriched_context['amount'] = doc.get('total_amount', 0)
+                enriched_context['amount'] = doc.get('amount', 0)
                 enriched_context['client_id'] = doc.get('client_id')
                 enriched_context['project_id'] = doc.get('project_id')
         
@@ -562,7 +562,7 @@ async def get_workflow_selectors(
         
         docs = await db.documents.find(
             query,
-            {"_id": 0, "document_id": 1, "type": 1, "title": 1, "status": 1, "client_id": 1, "total_amount": 1, "created_at": 1}
+            {"_id": 0, "document_id": 1, "type": 1, "title": 1, "status": 1, "client_id": 1, "amount": 1, "created_at": 1}
         ).sort("created_at", -1).limit(50).to_list(50)
         
         # Enrich with client names

@@ -46,7 +46,7 @@ export const AgentQuoteUpload = () => {
   const [editedData, setEditedData] = useState({
     title: '',
     description: '',
-    total_amount: '',
+    amount: '',
     supplier_name: '',
     notes: '',
     summary: '',
@@ -67,13 +67,12 @@ export const AgentQuoteUpload = () => {
         const data = await res.json();
         setQuoteData(data);
         setSelectedClient(data.client_id || '');
-        // Handle both field name variations (amount vs total_amount, items vs line_items)
-        const amount = data.amount || data.total_amount || 0;
+        const amount = data.amount || 0;
         const lineItems = data.items || data.line_items || [];
         setEditedData({
           title: data.title || '',
           description: data.description || data.summary || '',
-          total_amount: amount.toString(),
+          amount: amount.toString(),
           supplier_name: data.supplier_name || '',
           notes: data.notes || '',
           summary: data.summary || '',
@@ -136,7 +135,7 @@ export const AgentQuoteUpload = () => {
         setEditedData({
           title: data.title || '',
           description: data.summary || data.description || '',
-          total_amount: data.amount ? String(data.amount) : '',
+          amount: data.amount ? String(data.amount) : '',
           supplier_name: data.supplier_name || '',
           notes: data.notes || '',
           summary: data.summary || '',
@@ -163,7 +162,7 @@ export const AgentQuoteUpload = () => {
   const handleSave = async (andSend = false) => {
     if (!quoteData) return;
     
-    const totalAmount = parseFloat(editedData.total_amount);
+    const totalAmount = parseFloat(editedData.amount);
     if (!totalAmount || totalAmount <= 0) {
       toast.error('Please enter a valid total amount');
       return;
@@ -176,7 +175,7 @@ export const AgentQuoteUpload = () => {
     }
 
     try {
-      let documentId = quoteData.document_id || quoteData.quote_id;
+      let documentId = quoteData.document_id;
       
       // If this is a preview (not yet saved), create the document first
       if (quoteData.is_preview) {
@@ -261,7 +260,7 @@ export const AgentQuoteUpload = () => {
     }
   };
 
-  const documentId = quoteData?.document_id || quoteData?.quote_id;
+  const documentId = quoteData?.document_id;
 
   if (loading) {
     return (
@@ -356,19 +355,19 @@ export const AgentQuoteUpload = () => {
                   </div>
                   
                   <div>
-                    <Label htmlFor="total_amount" className="flex items-center gap-2">
+                    <Label htmlFor="amount" className="flex items-center gap-2">
                       Total Amount (CHF) *
                       {extractionWarning && (
                         <span className="text-xs text-amber-600">Required</span>
                       )}
                     </Label>
                     <Input
-                      id="total_amount"
+                      id="amount"
                       type="number"
                       step="0.01"
-                      value={editedData.total_amount}
-                      onChange={(e) => setEditedData(prev => ({ ...prev, total_amount: e.target.value }))}
-                      className={cn("mt-1", extractionWarning && !editedData.total_amount && "border-amber-500")}
+                      value={editedData.amount}
+                      onChange={(e) => setEditedData(prev => ({ ...prev, amount: e.target.value }))}
+                      className={cn("mt-1", extractionWarning && !editedData.amount && "border-amber-500")}
                       placeholder="0.00"
                       data-testid="total-input"
                     />
@@ -449,7 +448,7 @@ export const AgentQuoteUpload = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Quote Total</span>
                     <span className="text-2xl font-bold text-foreground">
-                      CHF {formatCurrency(parseFloat(editedData.total_amount) || 0)}
+                      CHF {formatCurrency(parseFloat(editedData.amount) || 0)}
                     </span>
                   </div>
                 </div>
@@ -460,7 +459,7 @@ export const AgentQuoteUpload = () => {
                   onSend={() => handleSave(true)}
                   saving={saving}
                   sending={sending}
-                  canSend={editedData.total_amount && parseFloat(editedData.total_amount) > 0}
+                  canSend={editedData.amount && parseFloat(editedData.amount) > 0}
                   sendLabel="Send to Buyer"
                 />
               </CardContent>

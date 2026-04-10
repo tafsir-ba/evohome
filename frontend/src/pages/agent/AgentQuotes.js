@@ -68,7 +68,7 @@ export const AgentQuotes = () => {
       
       if (response.ok) {
         toast.success('Quote deleted');
-        setQuotes(quotes.filter(q => (q.document_id || q.quote_id) !== quoteId));
+        setQuotes(quotes.filter(q => q.document_id !== quoteId));
       } else {
         const error = await response.json();
         toast.error(error.detail || 'Failed to delete');
@@ -106,7 +106,7 @@ export const AgentQuotes = () => {
   };
 
   const filteredQuotes = quotes.filter(quote => {
-    const quoteNumber = quote.quote_number || quote.document_number || '';
+    const quoteNumber = quote.document_number || '';
     const matchesSearch = quote.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           quoteNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           quote.unit_reference.toLowerCase().includes(searchQuery.toLowerCase());
@@ -181,9 +181,9 @@ export const AgentQuotes = () => {
         <div className="space-y-4">
           {filteredQuotes.length > 0 ? (
             filteredQuotes.map((quote) => {
-              const id = quote.quote_id || quote.document_id;
-              const number = quote.quote_number || quote.document_number;
-              const amount = quote.total_amount || quote.amount;
+              const id = quote.document_id;
+              const number = quote.document_number;
+              const amount = quote.amount;
               return (
               <Link 
                 key={id} 
