@@ -47,6 +47,7 @@ router = APIRouter()
 from services.command_service import (
     classify_document,
     DocumentType,
+    CommandIntent,
 )
 
 
@@ -155,6 +156,83 @@ async def classify_uploaded_document(
     except Exception as e:
         logger.error(f"Document classification failed: {e}")
         raise HTTPException(status_code=500, detail="Document classification failed. Please try again.")
+
+
+async def _extract_document_from_image(file_path: str, doc_type_value: str) -> dict:
+    """Extract structured data from an image file using OpenAI Vision API."""
+    if not OPENAI_API_KEY:
+        return {
+            "title": os.path.basename(file_path),
+            "amount": None,
+            "items": [],
+            "supplier_name": None,
+            "description": "AI extraction unavailable - please enter details manually",
+            "confidence": "low",
+            "extraction_failed": True
+        }
+
+    try:
+        with open(file_path, "rb") as img_file:
+            image_data = base64.b64encode(img_file.read()).decode('utf-8')
+
+        ext = os.path.splitext(file_path)[1].lower()
+        mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+        mime_type = mime_map.get(ext, "image/jpeg")
+
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+        system_prompt = f"""You are a document extraction assistant. Extract structured data from this {doc_type_value} image.
+
+Return ONLY a JSON object:
+{{
+  "title": "short descriptive title",
+  "amount": final_total_number_or_null,
+  "items": [{{"description": "string", "quantity": 1, "unit_price": number, "total": number}}],
+  "supplier_name": "company name or null",
+  "description": "professional single-paragraph summary",
+  "confidence": "high/medium/low"
+}}"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": [
+                    {"type": "text", "text": f"Extract document information from this {doc_type_value} image. Return only valid JSON."},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_data}"}}
+                ]}
+            ],
+            max_tokens=2000
+        )
+
+        response_text = response.choices[0].message.content or ""
+        json_match = re.search(r'\{[\s\S]*\}', response_text) if response_text else None
+        if json_match:
+            extracted = json.loads(json_match.group())
+        else:
+            raise ValueError("No JSON found in AI response")
+
+        return {
+            "title": extracted.get("title", os.path.basename(file_path)),
+            "amount": extracted.get("amount"),
+            "items": extracted.get("items", []),
+            "supplier_name": extracted.get("supplier_name"),
+            "description": extracted.get("description", ""),
+            "confidence": extracted.get("confidence", "medium"),
+            "extraction_failed": False
+        }
+
+    except Exception as e:
+        logger.error(f"Image extraction failed: {e}")
+        return {
+            "title": os.path.basename(file_path),
+            "amount": None,
+            "items": [],
+            "supplier_name": None,
+            "description": f"Extraction failed: {str(e)[:80]}",
+            "confidence": "low",
+            "extraction_failed": True
+        }
 
 
 @router.post("/command/extract-document")
