@@ -20,7 +20,7 @@ export const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const { loginWithGoogle, demoLogin, login } = useAuth();
+  const { loginWithGoogle, demoLogin, setAuthUser } = useAuth();
   const navigate = useNavigate();
 
   const handleGoogleLogin = (role) => {
@@ -65,7 +65,10 @@ export const LoginPage = () => {
       
       if (res.ok) {
         const data = await res.json();
-        login(data);
+        if (data.token) {
+          localStorage.setItem('auth_token', data.token);
+        }
+        setAuthUser(data);
         toast.success(isRegister ? 'Account created successfully!' : 'Login successful!');
         navigate(selectedRole === 'agent' ? '/agent/home' : '/buyer/dashboard');
       } else {

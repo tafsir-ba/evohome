@@ -1,6 +1,4 @@
 # Evohome Backend Models
-# Pydantic models for request/response validation
-
 from .common import (
     BaseResponse,
     ErrorResponse,
@@ -8,3 +6,5 @@ from .common import (
     NotificationCreate,
     NotificationResponse
 )
+
+from .schemas import *

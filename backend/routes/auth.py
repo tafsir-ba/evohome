@@ -349,8 +349,7 @@ async def forgot_password(request: ForgotPasswordRequest, req: Request):
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     subject = "Reset your Evohome password"
     html_content = f'<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><h2 style="color:#2563EB">Reset Your Password</h2><p>Hi {user.get("name","there")},</p><p>Click below to create a new password:</p><p style="text-align:center;margin:30px 0"><a href="{reset_link}" style="background:#2563EB;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block">Reset Password</a></p><p style="color:#666;font-size:14px">This link expires in 1 hour.</p></div>'
-    # Lazy import to avoid circular dependency
-    from server import send_email_async
+    from services.email_service import send_email_async
     await send_email_async(email, subject, html_content)
     return {"message": "If an account exists with this email, you will receive a reset link."}
 
