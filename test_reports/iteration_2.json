@@ -1,0 +1,66 @@
+{
+  "summary": "Phase F Deprecation Cleanup Validation - All 16 tests PASSED. The cleanup was successful: db_compat.py removed, /stages routes return 404, deprecated collections dropped, project_timeline_id field removed from all documents.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_f_cleanup.py",
+    "/app/test_reports/pytest/pytest_phase_f_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Phase F cleanup executed correctly - all deprecated artifacts removed",
+    "db_compat.py module deleted - all operations now use direct db.* calls",
+    "/stages routes properly return 404 (removed as expected)",
+    "/steps canonical route works correctly",
+    "project_timeline_id field successfully $unset from all documents",
+    "Deprecated collections (project_timelines, project_units, project_stages) dropped",
+    "All API responses use timeline_id exclusively - no project_timeline_id anywhere",
+    "No ObjectId serialization errors in any endpoint",
+    "No _id fields leaked in any JSON response"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase_f_cleanup.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A - backend only testing"
+  },
+  "test_credentials": "Demo Agent: demo.agent@upgradeflow.com / demo123",
+  "seed_data_creation": "Used existing demo data - project_id: demo_proj_001, timeline_id: timeline_demo_001",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase F deprecation cleanup validation complete. All 16 tests passed: health check, auth login, projects list, units from canonical collection, /stages returns 404 (removed), /steps works, project-timeline has timeline_id (no project_timeline_id), timeline steps have timeline_id, timeline/full endpoint, workflow/full endpoint, clients list, documents list, agent dashboard, agent stats, no ObjectId errors, no _id leaks. The data model normalization sprint is complete - all deprecated artifacts have been removed.",
+  "test_results_detail": {
+    "test_01_health_endpoint": "PASS - returns {status: healthy}",
+    "test_02_auth_login": "PASS - demo credentials work, returns token",
+    "test_03_get_projects": "PASS - returns project list (non-empty)",
+    "test_04_get_project_units": "PASS - returns units from canonical 'units' collection",
+    "test_05_stages_route_removed": "PASS - /stages returns 404 (route removed in Phase F)",
+    "test_06_steps_route_works": "PASS - /steps returns steps (canonical route)",
+    "test_07_project_timeline_has_timeline_id": "PASS - timeline object has timeline_id, no project_timeline_id",
+    "test_08_project_timeline_steps_have_timeline_id": "PASS - all steps have timeline_id, no project_timeline_id",
+    "test_09_timeline_full_endpoint": "PASS - returns timeline_id and steps",
+    "test_10_workflow_full_endpoint": "PASS - returns timeline_id, steps, and activities",
+    "test_11_get_clients": "PASS - returns client list",
+    "test_12_get_documents": "PASS - returns document list",
+    "test_13_agent_dashboard": "PASS - returns projects array",
+    "test_14_agent_stats": "PASS - returns stats object with total_clients",
+    "test_15_no_objectid_serialization_errors": "PASS - no ObjectId errors in 11 endpoints",
+    "test_16_no_id_fields_leaked": "PASS - no _id fields leaked in 10 endpoints"
+  },
+  "phase_f_cleanup_verification": {
+    "db_compat_removed": true,
+    "stages_route_returns_404": true,
+    "steps_route_works": true,
+    "project_timeline_id_removed": true,
+    "deprecated_collections_dropped": ["project_timelines", "project_units", "project_stages"],
+    "canonical_collections_intact": ["timelines", "timeline_steps", "units"]
+  }
+}

@@ -344,7 +344,7 @@ export const AgentTimeline = () => {
       if (editingStage) {
         // Update
         const res = await fetch(
-          `${API}/projects/${selectedProjectId}/stages/${editingStage.stage_id}`,
+          `${API}/projects/${selectedProjectId}/steps/${editingStage.stage_id}`,
           {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -361,7 +361,7 @@ export const AgentTimeline = () => {
       } else {
         // Create
         const res = await fetch(
-          `${API}/projects/${selectedProjectId}/stages`,
+          `${API}/projects/${selectedProjectId}/steps`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -393,7 +393,7 @@ export const AgentTimeline = () => {
 
     try {
       const res = await fetch(
-        `${API}/projects/${selectedProjectId}/stages/${stage.stage_id}`,
+        `${API}/projects/${selectedProjectId}/steps/${stage.stage_id}`,
         { method: 'DELETE', credentials: 'include' }
       );
       if (res.ok) {
@@ -419,13 +419,13 @@ export const AgentTimeline = () => {
     try {
       // Swap orders
       await Promise.all([
-        fetch(`${API}/projects/${selectedProjectId}/stages/${stage.stage_id}`, {
+        fetch(`${API}/projects/${selectedProjectId}/steps/${stage.stage_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({ order: otherStage.order }),
         }),
-        fetch(`${API}/projects/${selectedProjectId}/stages/${otherStage.stage_id}`, {
+        fetch(`${API}/projects/${selectedProjectId}/steps/${otherStage.stage_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -560,7 +560,7 @@ export const AgentTimeline = () => {
         const startDate = today.toISOString().split('T')[0];
         const endDate = new Date(today.setMonth(today.getMonth() + 1)).toISOString().split('T')[0];
         
-        const res = await fetch(`${API}/projects/${selectedProjectId}/stages`, {
+        const res = await fetch(`${API}/projects/${selectedProjectId}/steps`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -610,7 +610,7 @@ export const AgentTimeline = () => {
     
     try {
       for (const stage of stages) {
-        await fetch(`${API}/projects/${selectedProjectId}/stages/${stage.stage_id}`, {
+        await fetch(`${API}/projects/${selectedProjectId}/steps/${stage.stage_id}`, {
           method: 'DELETE',
           credentials: 'include'
         });
