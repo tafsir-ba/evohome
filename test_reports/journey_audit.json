@@ -1,7 +1,7 @@
 {
   "metadata": {
     "title": "Evohome CMP - Key User Journeys Audit Report",
-    "timestamp": "2026-04-10T22:21:30.930156+00:00Z",
+    "timestamp": "2026-04-10T22:51:59.892606+00:00Z",
     "environment": "preview",
     "backend": "http://localhost:8001"
   },
@@ -124,7 +124,7 @@
       },
       {
         "journey": "SETUP",
-        "test": "Register agent (audit.agent.a1637d@evohome-test.com)",
+        "test": "Register agent (audit.agent.a5b6d5@evohome-test.com)",
         "status": "PASS",
         "http_code": 200,
         "expected_code": 200,
@@ -547,7 +547,7 @@
       },
       {
         "journey": "J11",
-        "test": "Canonical collection 'projects' exists (count=8)",
+        "test": "Canonical collection 'projects' exists (count=10)",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -556,7 +556,7 @@
       },
       {
         "journey": "J11",
-        "test": "Canonical collection 'units' exists (count=31)",
+        "test": "Canonical collection 'units' exists (count=36)",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -565,7 +565,7 @@
       },
       {
         "journey": "J11",
-        "test": "Canonical collection 'clients' exists (count=9)",
+        "test": "Canonical collection 'clients' exists (count=11)",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -574,7 +574,7 @@
       },
       {
         "journey": "J11",
-        "test": "Canonical collection 'timelines' exists (count=7)",
+        "test": "Canonical collection 'timelines' exists (count=9)",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -583,7 +583,7 @@
       },
       {
         "journey": "J11",
-        "test": "Canonical collection 'timeline_steps' exists (count=17)",
+        "test": "Canonical collection 'timeline_steps' exists (count=21)",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -592,7 +592,7 @@
       },
       {
         "journey": "J11",
-        "test": "Canonical collection 'documents' exists (count=18)",
+        "test": "Canonical collection 'documents' exists (count=21)",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -601,7 +601,7 @@
       },
       {
         "journey": "J11",
-        "test": "Canonical collection 'activities' exists (count=15)",
+        "test": "Canonical collection 'activities' exists (count=16)",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -610,7 +610,7 @@
       },
       {
         "journey": "J11",
-        "test": "Canonical collection 'vault_documents' exists (count=7)",
+        "test": "Canonical collection 'vault_documents' exists (count=8)",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -619,7 +619,7 @@
       },
       {
         "journey": "J11",
-        "test": "Canonical collection 'notifications' exists (count=14)",
+        "test": "Canonical collection 'notifications' exists (count=17)",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -628,7 +628,7 @@
       },
       {
         "journey": "J11",
-        "test": "Canonical collection 'users' exists (count=21)",
+        "test": "Canonical collection 'users' exists (count=24)",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -664,7 +664,7 @@
       },
       {
         "journey": "J11",
-        "test": "Project proj_ff47b37937e4 has agent_id=agent_354ff816bed2",
+        "test": "Project proj_6be0d7b25df3 has agent_id=agent_7737b6f5939d",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -682,7 +682,7 @@
       },
       {
         "journey": "J11",
-        "test": "Document doc_ad891e915a42 has NO legacy fields",
+        "test": "Document doc_4e319ef0ebb7 has NO legacy fields",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -709,7 +709,7 @@
       },
       {
         "journey": "J11",
-        "test": "Step step_378816b3aacc has NO legacy 'stage_id'",
+        "test": "Step step_294671014c37 has NO legacy 'stage_id'",
         "status": "PASS",
         "http_code": "-",
         "expected_code": "-",
@@ -774,211 +774,211 @@
   },
   "deliverable_2_api_response_logs": [
     {
-      "timestamp": "2026-04-10T22:21:12.766228+00:00",
+      "timestamp": "2026-04-10T22:51:41.574338+00:00",
       "method": "GET",
       "path": "/api/health",
       "status": 200,
-      "elapsed_ms": 3.1,
-      "response_summary": "{'status': 'alive', 'version': '8171d2ce'}"
+      "elapsed_ms": 6.1,
+      "response_summary": "{'status': 'alive', 'version': 'a260faed'}"
     },
     {
-      "timestamp": "2026-04-10T22:21:13.224465+00:00",
+      "timestamp": "2026-04-10T22:51:42.028896+00:00",
       "method": "POST",
       "path": "/api/auth/register",
       "status": 200,
-      "elapsed_ms": 458.1,
-      "response_summary": "{'user_id': 'agent_354ff816bed2', 'email': 'audit.agent.a1637d@evohome-test.com', 'name': 'Audit Agent', 'role': 'agent', 'is_demo': False, 'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWdlbnRfMzU0ZmY4MTZiZWQyIiwicm9sZSI6ImFnZW50IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6Ii1ka1N4RWJUbHpZM2o0U"
+      "elapsed_ms": 454.4,
+      "response_summary": "{'user_id': 'agent_7737b6f5939d', 'email': 'audit.agent.a5b6d5@evohome-test.com', 'name': 'Audit Agent', 'role': 'agent', 'is_demo': False, 'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWdlbnRfNzczN2I2ZjU5MzlkIiwicm9sZSI6ImFnZW50IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6Ii05NG5UbVR2Q3gyenRhT"
     },
     {
-      "timestamp": "2026-04-10T22:21:15.465860+00:00",
+      "timestamp": "2026-04-10T22:51:44.158382+00:00",
       "method": "POST",
       "path": "/api/projects",
       "status": 200,
-      "elapsed_ms": 801.7,
-      "response_summary": "{'project_id': 'proj_ff47b37937e4', 'agent_id': 'agent_354ff816bed2', 'name': 'R\u00e9sidence du Lac', 'address': 'Rue du Lac 15, 1003 Lausanne', 'description': 'Luxury lakefront development with 8 units', 'total_units': 8, 'construction_start': '2026-03-01', 'estimated_completion': '2027-06-30', 'client"
+      "elapsed_ms": 788.9,
+      "response_summary": "{'project_id': 'proj_6be0d7b25df3', 'agent_id': 'agent_7737b6f5939d', 'name': 'R\u00e9sidence du Lac', 'address': 'Rue du Lac 15, 1003 Lausanne', 'description': 'Luxury lakefront development with 8 units', 'total_units': 8, 'construction_start': '2026-03-01', 'estimated_completion': '2027-06-30', 'client"
     },
     {
-      "timestamp": "2026-04-10T22:21:15.916980+00:00",
+      "timestamp": "2026-04-10T22:51:44.607169+00:00",
       "method": "GET",
       "path": "/api/projects",
       "status": 200,
-      "elapsed_ms": 450.9,
-      "response_summary": "[{'project_id': 'proj_ff47b37937e4', 'agent_id': 'agent_354ff816bed2', 'name': 'R\u00e9sidence du Lac', 'address': 'Rue du Lac 15, 1003 Lausanne', 'description': 'Luxury lakefront development with 8 units', 'total_units': 8, 'construction_start': '2026-03-01', 'estimated_completion': '2027-06-30', 'clien"
+      "elapsed_ms": 448.6,
+      "response_summary": "[{'project_id': 'proj_6be0d7b25df3', 'agent_id': 'agent_7737b6f5939d', 'name': 'R\u00e9sidence du Lac', 'address': 'Rue du Lac 15, 1003 Lausanne', 'description': 'Luxury lakefront development with 8 units', 'total_units': 8, 'construction_start': '2026-03-01', 'estimated_completion': '2027-06-30', 'clien"
     },
     {
-      "timestamp": "2026-04-10T22:21:16.819933+00:00",
+      "timestamp": "2026-04-10T22:51:45.507809+00:00",
       "method": "POST",
-      "path": "/api/projects/proj_ff47b37937e4/units",
+      "path": "/api/projects/proj_6be0d7b25df3/units",
       "status": 200,
-      "elapsed_ms": 902.7,
-      "response_summary": "{'unit_id': 'unit_d571f26c42b0', 'project_id': 'proj_ff47b37937e4', 'unit_reference': 'Unit A-101', 'client_id': None, 'is_demo': False, 'created_at': '2026-04-10T22:21:16.592849+00:00'}"
+      "elapsed_ms": 900.4,
+      "response_summary": "{'unit_id': 'unit_1c490bb35bed', 'project_id': 'proj_6be0d7b25df3', 'unit_reference': 'Unit A-101', 'client_id': None, 'is_demo': False, 'created_at': '2026-04-10T22:51:45.278351+00:00'}"
     },
     {
-      "timestamp": "2026-04-10T22:21:17.721836+00:00",
+      "timestamp": "2026-04-10T22:51:46.405549+00:00",
       "method": "POST",
-      "path": "/api/projects/proj_ff47b37937e4/units",
+      "path": "/api/projects/proj_6be0d7b25df3/units",
       "status": 200,
-      "elapsed_ms": 901.7,
-      "response_summary": "{'unit_id': 'unit_7963799f6051', 'project_id': 'proj_ff47b37937e4', 'unit_reference': 'Unit A-102', 'client_id': None, 'is_demo': False, 'created_at': '2026-04-10T22:21:17.494535+00:00'}"
+      "elapsed_ms": 897.6,
+      "response_summary": "{'unit_id': 'unit_423036eacce7', 'project_id': 'proj_6be0d7b25df3', 'unit_reference': 'Unit A-102', 'client_id': None, 'is_demo': False, 'created_at': '2026-04-10T22:51:46.179697+00:00'}"
     },
     {
-      "timestamp": "2026-04-10T22:21:18.623763+00:00",
+      "timestamp": "2026-04-10T22:51:47.628344+00:00",
       "method": "POST",
-      "path": "/api/projects/proj_ff47b37937e4/units",
+      "path": "/api/projects/proj_6be0d7b25df3/units",
       "status": 200,
-      "elapsed_ms": 901.7,
-      "response_summary": "{'unit_id': 'unit_177d7fff66f0', 'project_id': 'proj_ff47b37937e4', 'unit_reference': 'Unit A-103', 'client_id': None, 'is_demo': False, 'created_at': '2026-04-10T22:21:18.396305+00:00'}"
+      "elapsed_ms": 1222.6,
+      "response_summary": "{'unit_id': 'unit_74e45ac6440b', 'project_id': 'proj_6be0d7b25df3', 'unit_reference': 'Unit A-103', 'client_id': None, 'is_demo': False, 'created_at': '2026-04-10T22:51:47.077034+00:00'}"
     },
     {
-      "timestamp": "2026-04-10T22:21:19.323735+00:00",
+      "timestamp": "2026-04-10T22:51:48.300474+00:00",
       "method": "GET",
-      "path": "/api/projects/proj_ff47b37937e4/units",
+      "path": "/api/projects/proj_6be0d7b25df3/units",
       "status": 200,
-      "elapsed_ms": 699.8,
-      "response_summary": "[{'unit_id': 'unit_d571f26c42b0', 'project_id': 'proj_ff47b37937e4', 'unit_reference': 'Unit A-101', 'client_id': None, 'is_demo': False, 'created_at': '2026-04-10T22:21:16.592849+00:00', 'assigned_client_id': None, 'assigned_client_name': None, 'is_available': True}, {'unit_id': 'unit_7963799f6051'"
+      "elapsed_ms": 671.9,
+      "response_summary": "[{'unit_id': 'unit_1c490bb35bed', 'project_id': 'proj_6be0d7b25df3', 'unit_reference': 'Unit A-101', 'client_id': None, 'is_demo': False, 'created_at': '2026-04-10T22:51:45.278351+00:00', 'assigned_client_id': None, 'assigned_client_name': None, 'is_available': True}, {'unit_id': 'unit_423036eacce7'"
     },
     {
-      "timestamp": "2026-04-10T22:21:19.891226+00:00",
+      "timestamp": "2026-04-10T22:51:48.863247+00:00",
       "method": "POST",
       "path": "/api/clients",
       "status": 200,
-      "elapsed_ms": 567.3,
-      "response_summary": "{'client_id': 'client_244e36b7ba8e', 'agent_id': 'agent_354ff816bed2', 'buyer_id': None, 'name': 'Sophie Martin', 'email': 'sophie.martin@test-evohome.com', 'phone': '+41 79 123 4567', 'project_id': 'proj_ff47b37937e4', 'unit_id': None, 'unit_reference': 'General', 'status': 'active', 'is_demo': Fal"
+      "elapsed_ms": 562.6,
+      "response_summary": "{'client_id': 'client_ce3fd512fadd', 'agent_id': 'agent_7737b6f5939d', 'buyer_id': None, 'name': 'Sophie Martin', 'email': 'sophie.martin@test-evohome.com', 'phone': '+41 79 123 4567', 'project_id': 'proj_6be0d7b25df3', 'unit_id': None, 'unit_reference': 'General', 'status': 'active', 'is_demo': Fal"
     },
     {
-      "timestamp": "2026-04-10T22:21:20.571323+00:00",
+      "timestamp": "2026-04-10T22:51:49.537945+00:00",
       "method": "PUT",
-      "path": "/api/clients/client_244e36b7ba8e",
+      "path": "/api/clients/client_ce3fd512fadd",
       "status": 200,
-      "elapsed_ms": 679.9,
-      "response_summary": "{'client_id': 'client_244e36b7ba8e', 'agent_id': 'agent_354ff816bed2', 'buyer_id': None, 'name': 'Sophie Martin', 'email': 'sophie.martin@test-evohome.com', 'phone': '+41 79 123 4567', 'project_id': 'proj_ff47b37937e4', 'unit_id': 'unit_d571f26c42b0', 'unit_reference': 'Unit A-101', 'status': 'activ"
+      "elapsed_ms": 674.5,
+      "response_summary": "{'client_id': 'client_ce3fd512fadd', 'agent_id': 'agent_7737b6f5939d', 'buyer_id': None, 'name': 'Sophie Martin', 'email': 'sophie.martin@test-evohome.com', 'phone': '+41 79 123 4567', 'project_id': 'proj_6be0d7b25df3', 'unit_id': 'unit_1c490bb35bed', 'unit_reference': 'Unit A-101', 'status': 'activ"
     },
     {
-      "timestamp": "2026-04-10T22:21:21.245906+00:00",
+      "timestamp": "2026-04-10T22:51:50.210102+00:00",
       "method": "GET",
-      "path": "/api/projects/proj_ff47b37937e4/units",
+      "path": "/api/projects/proj_6be0d7b25df3/units",
       "status": 200,
-      "elapsed_ms": 674.4,
-      "response_summary": "[{'unit_id': 'unit_d571f26c42b0', 'project_id': 'proj_ff47b37937e4', 'unit_reference': 'Unit A-101', 'client_id': None, 'is_demo': False, 'created_at': '2026-04-10T22:21:16.592849+00:00', 'assigned_client_id': 'client_244e36b7ba8e', 'assigned_client_name': 'Sophie Martin', 'is_available': False}, {'"
+      "elapsed_ms": 672.0,
+      "response_summary": "[{'unit_id': 'unit_1c490bb35bed', 'project_id': 'proj_6be0d7b25df3', 'unit_reference': 'Unit A-101', 'client_id': None, 'is_demo': False, 'created_at': '2026-04-10T22:51:45.278351+00:00', 'assigned_client_id': 'client_ce3fd512fadd', 'assigned_client_name': 'Sophie Martin', 'is_available': False}, {'"
     },
     {
-      "timestamp": "2026-04-10T22:21:21.815661+00:00",
+      "timestamp": "2026-04-10T22:51:50.774841+00:00",
       "method": "POST",
-      "path": "/api/projects/proj_ff47b37937e4/steps",
+      "path": "/api/projects/proj_6be0d7b25df3/steps",
       "status": 200,
-      "elapsed_ms": 569.5,
-      "response_summary": "{'step_id': 'step_378816b3aacc', 'project_id': 'proj_ff47b37937e4', 'agent_id': 'agent_354ff816bed2', 'title': 'Foundation Work', 'description': 'Excavation and foundation pouring', 'order_index': 1, 'planned_start': '2026-04-01', 'planned_end': '2026-05-15', 'actual_start': None, 'actual_end': None"
+      "elapsed_ms": 564.5,
+      "response_summary": "{'step_id': 'step_294671014c37', 'project_id': 'proj_6be0d7b25df3', 'agent_id': 'agent_7737b6f5939d', 'title': 'Foundation Work', 'description': 'Excavation and foundation pouring', 'order_index': 1, 'planned_start': '2026-04-01', 'planned_end': '2026-05-15', 'actual_start': None, 'actual_end': None"
     },
     {
-      "timestamp": "2026-04-10T22:21:22.493048+00:00",
+      "timestamp": "2026-04-10T22:51:51.453884+00:00",
       "method": "PUT",
-      "path": "/api/projects/proj_ff47b37937e4/steps/step_378816b3aacc",
+      "path": "/api/projects/proj_6be0d7b25df3/steps/step_294671014c37",
       "status": 200,
-      "elapsed_ms": 677.2,
-      "response_summary": "{'step_id': 'step_378816b3aacc', 'project_id': 'proj_ff47b37937e4', 'agent_id': 'agent_354ff816bed2', 'title': 'Foundation Work', 'description': 'Excavation and foundation pouring', 'order_index': 1, 'planned_start': '2026-04-01', 'planned_end': '2026-05-15', 'actual_start': None, 'actual_end': None"
+      "elapsed_ms": 678.8,
+      "response_summary": "{'step_id': 'step_294671014c37', 'project_id': 'proj_6be0d7b25df3', 'agent_id': 'agent_7737b6f5939d', 'title': 'Foundation Work', 'description': 'Excavation and foundation pouring', 'order_index': 1, 'planned_start': '2026-04-01', 'planned_end': '2026-05-15', 'actual_start': None, 'actual_end': None"
     },
     {
-      "timestamp": "2026-04-10T22:21:22.942983+00:00",
+      "timestamp": "2026-04-10T22:51:51.902256+00:00",
       "method": "GET",
-      "path": "/api/projects/proj_ff47b37937e4/steps",
+      "path": "/api/projects/proj_6be0d7b25df3/steps",
       "status": 200,
-      "elapsed_ms": 449.8,
-      "response_summary": "{'project': {'project_id': 'proj_ff47b37937e4', 'agent_id': 'agent_354ff816bed2', 'name': 'R\u00e9sidence du Lac', 'address': 'Rue du Lac 15, 1003 Lausanne', 'description': 'Luxury lakefront development with 8 units', 'total_units': 8, 'construction_start': '2026-03-01', 'estimated_completion': '2027-06-"
+      "elapsed_ms": 448.2,
+      "response_summary": "{'project': {'project_id': 'proj_6be0d7b25df3', 'agent_id': 'agent_7737b6f5939d', 'name': 'R\u00e9sidence du Lac', 'address': 'Rue du Lac 15, 1003 Lausanne', 'description': 'Luxury lakefront development with 8 units', 'total_units': 8, 'construction_start': '2026-03-01', 'estimated_completion': '2027-06-"
     },
     {
-      "timestamp": "2026-04-10T22:21:22.944468+00:00",
+      "timestamp": "2026-04-10T22:51:51.903792+00:00",
       "method": "GET",
-      "path": "/api/projects/proj_ff47b37937e4/stages",
+      "path": "/api/projects/proj_6be0d7b25df3/stages",
       "status": 404,
-      "elapsed_ms": 1.3,
+      "elapsed_ms": 1.4,
       "response_summary": "{'detail': 'Not Found'}"
     },
     {
-      "timestamp": "2026-04-10T22:21:24.298909+00:00",
+      "timestamp": "2026-04-10T22:51:53.257119+00:00",
       "method": "POST",
       "path": "/api/activities",
       "status": 200,
-      "elapsed_ms": 1354.2,
-      "response_summary": "{'activity_id': 'act_1f79b8010504', 'type': 'message', 'title': 'Construction Update', 'content': 'Foundation work has started. Excavation is 35% complete.', 'file_url': None, 'file_name': None, 'file_size': None, 'author_id': 'agent_354ff816bed2', 'author_role': 'agent', 'project_id': 'proj_ff47b37"
+      "elapsed_ms": 1353.1,
+      "response_summary": "{'activity_id': 'act_ad553df7bd16', 'type': 'message', 'title': 'Construction Update', 'content': 'Foundation work has started. Excavation is 35% complete.', 'file_url': None, 'file_name': None, 'file_size': None, 'author_id': 'agent_7737b6f5939d', 'author_role': 'agent', 'project_id': 'proj_6be0d7b"
     },
     {
-      "timestamp": "2026-04-10T22:21:24.878490+00:00",
+      "timestamp": "2026-04-10T22:51:53.822213+00:00",
       "method": "POST",
       "path": "/api/documents/create",
       "status": 200,
-      "elapsed_ms": 579.4,
-      "response_summary": "{'document_id': 'doc_ad891e915a42', 'document_number': 'QT-2026-0001', 'type': 'quote', 'status': 'Draft', 'agent_id': 'agent_354ff816bed2', 'client_id': 'client_244e36b7ba8e', 'buyer_id': None, 'project_id': 'proj_ff47b37937e4', 'unit_reference': 'Unit A-101', 'title': 'Kitchen Renovation Quote', '"
+      "elapsed_ms": 564.9,
+      "response_summary": "{'document_id': 'doc_4e319ef0ebb7', 'document_number': 'QT-2026-0001', 'type': 'quote', 'status': 'Draft', 'agent_id': 'agent_7737b6f5939d', 'client_id': 'client_ce3fd512fadd', 'buyer_id': None, 'project_id': 'proj_6be0d7b25df3', 'unit_reference': 'Unit A-101', 'title': 'Kitchen Renovation Quote', '"
     },
     {
-      "timestamp": "2026-04-10T22:21:25.104955+00:00",
+      "timestamp": "2026-04-10T22:51:54.057850+00:00",
       "method": "GET",
       "path": "/api/documents",
       "status": 200,
-      "elapsed_ms": 226.3,
-      "response_summary": "[{'document_id': 'doc_ad891e915a42', 'type': 'quote', 'status': 'Draft', 'title': 'Kitchen Renovation Quote', 'amount': 27500.0, 'currency': 'CHF', 'supplier_name': 'K\u00fcche AG', 'description': None, 'summary': '', 'items': [{'description': 'Kitchen cabinets', 'quantity': 1.0, 'unit_price': 15000.0, '"
+      "elapsed_ms": 235.4,
+      "response_summary": "[{'document_id': 'doc_4e319ef0ebb7', 'type': 'quote', 'status': 'Draft', 'title': 'Kitchen Renovation Quote', 'amount': 27500.0, 'currency': 'CHF', 'supplier_name': 'K\u00fcche AG', 'description': None, 'summary': '', 'items': [{'description': 'Kitchen cabinets', 'quantity': 1.0, 'unit_price': 15000.0, '"
     },
     {
-      "timestamp": "2026-04-10T22:21:25.335136+00:00",
+      "timestamp": "2026-04-10T22:51:54.291789+00:00",
       "method": "POST",
       "path": "/api/vault/upload",
       "status": 200,
-      "elapsed_ms": 229.9,
-      "response_summary": "{'vault_id': 'vault_5d68d7fb26e0', 'agent_id': 'agent_354ff816bed2', 'name': 'Building Permit - Lausanne', 'original_filename': 'building_permit.pdf', 'file_url': '/api/uploads/vault_5d68d7fb26e0_building_permit.pdf', 'file_path': '/app/backend/uploads/vault_5d68d7fb26e0_building_permit.pdf', 'file_"
+      "elapsed_ms": 233.7,
+      "response_summary": "{'vault_id': 'vault_77a7a2cc2eaa', 'agent_id': 'agent_7737b6f5939d', 'name': 'Building Permit - Lausanne', 'original_filename': 'building_permit.pdf', 'file_url': '/api/uploads/vault_77a7a2cc2eaa_building_permit.pdf', 'file_path': '/app/backend/uploads/vault_77a7a2cc2eaa_building_permit.pdf', 'file_"
     },
     {
-      "timestamp": "2026-04-10T22:21:25.561277+00:00",
+      "timestamp": "2026-04-10T22:51:54.516765+00:00",
       "method": "GET",
       "path": "/api/vault",
       "status": 200,
-      "elapsed_ms": 226.0,
-      "response_summary": "[{'vault_id': 'vault_5d68d7fb26e0', 'agent_id': 'agent_354ff816bed2', 'name': 'Building Permit - Lausanne', 'original_filename': 'building_permit.pdf', 'file_url': '/api/uploads/vault_5d68d7fb26e0_building_permit.pdf', 'file_path': '/app/backend/uploads/vault_5d68d7fb26e0_building_permit.pdf', 'file"
+      "elapsed_ms": 224.8,
+      "response_summary": "[{'vault_id': 'vault_77a7a2cc2eaa', 'agent_id': 'agent_7737b6f5939d', 'name': 'Building Permit - Lausanne', 'original_filename': 'building_permit.pdf', 'file_url': '/api/uploads/vault_77a7a2cc2eaa_building_permit.pdf', 'file_path': '/app/backend/uploads/vault_77a7a2cc2eaa_building_permit.pdf', 'file"
     },
     {
-      "timestamp": "2026-04-10T22:21:26.278903+00:00",
+      "timestamp": "2026-04-10T22:51:55.220870+00:00",
       "method": "POST",
       "path": "/api/auth/buyer/register",
       "status": 200,
-      "elapsed_ms": 717.4,
-      "response_summary": "{'user_id': 'buyer_379723e4e2dd', 'email': 'buyer.test.6be7ff@evohome-test.com', 'name': 'Sophie Test', 'role': 'buyer', 'is_demo': False, 'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYnV5ZXJfMzc5NzIzZTRlMmRkIiwicm9sZSI6ImJ1eWVyIiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IllBWGQ2RmtIampnaWl4Ul"
+      "elapsed_ms": 703.9,
+      "response_summary": "{'user_id': 'buyer_5dd285fb92c7', 'email': 'buyer.test.b57190@evohome-test.com', 'name': 'Sophie Test', 'role': 'buyer', 'is_demo': False, 'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYnV5ZXJfNWRkMjg1ZmI5MmM3Iiwicm9sZSI6ImJ1eWVyIiwidHlwZSI6ImFjY2VzcyIsImp0aSI6ImtFT3o1a29pNlpfQlFueE"
     },
     {
-      "timestamp": "2026-04-10T22:21:26.732057+00:00",
+      "timestamp": "2026-04-10T22:51:55.672196+00:00",
       "method": "PUT",
-      "path": "/api/clients/client_244e36b7ba8e",
+      "path": "/api/clients/client_ce3fd512fadd",
       "status": 200,
-      "elapsed_ms": 453.0,
-      "response_summary": "{'client_id': 'client_244e36b7ba8e', 'agent_id': 'agent_354ff816bed2', 'buyer_id': None, 'name': 'Sophie Martin', 'email': 'buyer.test.6be7ff@evohome-test.com', 'phone': '+41 79 123 4567', 'project_id': 'proj_ff47b37937e4', 'unit_id': 'unit_d571f26c42b0', 'unit_reference': 'Unit A-101', 'status': 'a"
+      "elapsed_ms": 451.1,
+      "response_summary": "{'client_id': 'client_ce3fd512fadd', 'agent_id': 'agent_7737b6f5939d', 'buyer_id': None, 'name': 'Sophie Martin', 'email': 'buyer.test.b57190@evohome-test.com', 'phone': '+41 79 123 4567', 'project_id': 'proj_6be0d7b25df3', 'unit_id': 'unit_1c490bb35bed', 'unit_reference': 'Unit A-101', 'status': 'a"
     },
     {
-      "timestamp": "2026-04-10T22:21:27.070339+00:00",
+      "timestamp": "2026-04-10T22:51:56.008872+00:00",
       "method": "GET",
       "path": "/api/documents",
       "status": 200,
-      "elapsed_ms": 338.1,
+      "elapsed_ms": 336.5,
       "response_summary": "[]"
     },
     {
-      "timestamp": "2026-04-10T22:21:27.408611+00:00",
+      "timestamp": "2026-04-10T22:51:56.345450+00:00",
       "method": "GET",
       "path": "/api/notifications",
       "status": 200,
-      "elapsed_ms": 338.1,
+      "elapsed_ms": 336.4,
       "response_summary": "{'notifications': [], 'unread_count': 0}"
     },
     {
-      "timestamp": "2026-04-10T22:21:27.522212+00:00",
+      "timestamp": "2026-04-10T22:51:56.458665+00:00",
       "method": "GET",
       "path": "/api/vault",
       "status": 403,
-      "elapsed_ms": 113.4,
+      "elapsed_ms": 113.1,
       "response_summary": "{'detail': 'Agent access required'}"
     },
     {
-      "timestamp": "2026-04-10T22:21:27.860105+00:00",
+      "timestamp": "2026-04-10T22:51:56.795730+00:00",
       "method": "GET",
       "path": "/api/notifications",
       "status": 200,
-      "elapsed_ms": 337.7,
+      "elapsed_ms": 336.9,
       "response_summary": "{'notifications': [], 'unread_count': 0}"
     }
   ],
@@ -1052,52 +1052,52 @@
         "detail": ""
       },
       {
-        "check": "Canonical collection 'projects' exists (count=8)",
+        "check": "Canonical collection 'projects' exists (count=10)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'units' exists (count=31)",
+        "check": "Canonical collection 'units' exists (count=36)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'clients' exists (count=9)",
+        "check": "Canonical collection 'clients' exists (count=11)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'timelines' exists (count=7)",
+        "check": "Canonical collection 'timelines' exists (count=9)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'timeline_steps' exists (count=17)",
+        "check": "Canonical collection 'timeline_steps' exists (count=21)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'documents' exists (count=18)",
+        "check": "Canonical collection 'documents' exists (count=21)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'activities' exists (count=15)",
+        "check": "Canonical collection 'activities' exists (count=16)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'vault_documents' exists (count=7)",
+        "check": "Canonical collection 'vault_documents' exists (count=8)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'notifications' exists (count=14)",
+        "check": "Canonical collection 'notifications' exists (count=17)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'users' exists (count=21)",
+        "check": "Canonical collection 'users' exists (count=24)",
         "passed": true,
         "detail": ""
       },
@@ -1117,7 +1117,7 @@
         "detail": ""
       },
       {
-        "check": "Document doc_ad891e915a42 has NO legacy fields",
+        "check": "Document doc_4e319ef0ebb7 has NO legacy fields",
         "passed": true,
         "detail": ""
       },
@@ -1132,7 +1132,7 @@
         "detail": ""
       },
       {
-        "check": "Step step_378816b3aacc has NO legacy 'stage_id'",
+        "check": "Step step_294671014c37 has NO legacy 'stage_id'",
         "passed": true,
         "detail": ""
       },
@@ -1170,142 +1170,142 @@
   },
   "deliverable_4_performance_metrics": {
     "summary": {
-      "avg_response_ms": 525.1,
-      "max_response_ms": 1354.2,
-      "min_response_ms": 1.3,
+      "avg_response_ms": 533.9,
+      "max_response_ms": 1353.1,
+      "min_response_ms": 1.4,
       "total_api_calls": 26,
-      "slow_endpoints_over_1s": 1
+      "slow_endpoints_over_1s": 2
     },
     "all_metrics": [
       {
         "endpoint": "GET /api/health",
         "status": 200,
-        "elapsed_ms": 3.1
+        "elapsed_ms": 6.1
       },
       {
         "endpoint": "POST /api/auth/register",
         "status": 200,
-        "elapsed_ms": 458.1
+        "elapsed_ms": 454.4
       },
       {
         "endpoint": "POST /api/projects",
         "status": 200,
-        "elapsed_ms": 801.7
+        "elapsed_ms": 788.9
       },
       {
         "endpoint": "GET /api/projects",
         "status": 200,
-        "elapsed_ms": 450.9
+        "elapsed_ms": 448.6
       },
       {
-        "endpoint": "POST /api/projects/proj_ff47b37937e4/units",
+        "endpoint": "POST /api/projects/proj_6be0d7b25df3/units",
         "status": 200,
-        "elapsed_ms": 902.7
+        "elapsed_ms": 900.4
       },
       {
-        "endpoint": "POST /api/projects/proj_ff47b37937e4/units",
+        "endpoint": "POST /api/projects/proj_6be0d7b25df3/units",
         "status": 200,
-        "elapsed_ms": 901.7
+        "elapsed_ms": 897.6
       },
       {
-        "endpoint": "POST /api/projects/proj_ff47b37937e4/units",
+        "endpoint": "POST /api/projects/proj_6be0d7b25df3/units",
         "status": 200,
-        "elapsed_ms": 901.7
+        "elapsed_ms": 1222.6
       },
       {
-        "endpoint": "GET /api/projects/proj_ff47b37937e4/units",
+        "endpoint": "GET /api/projects/proj_6be0d7b25df3/units",
         "status": 200,
-        "elapsed_ms": 699.8
+        "elapsed_ms": 671.9
       },
       {
         "endpoint": "POST /api/clients",
         "status": 200,
-        "elapsed_ms": 567.3
+        "elapsed_ms": 562.6
       },
       {
-        "endpoint": "PUT /api/clients/client_244e36b7ba8e",
+        "endpoint": "PUT /api/clients/client_ce3fd512fadd",
         "status": 200,
-        "elapsed_ms": 679.9
+        "elapsed_ms": 674.5
       },
       {
-        "endpoint": "GET /api/projects/proj_ff47b37937e4/units",
+        "endpoint": "GET /api/projects/proj_6be0d7b25df3/units",
         "status": 200,
-        "elapsed_ms": 674.4
+        "elapsed_ms": 672.0
       },
       {
-        "endpoint": "POST /api/projects/proj_ff47b37937e4/steps",
+        "endpoint": "POST /api/projects/proj_6be0d7b25df3/steps",
         "status": 200,
-        "elapsed_ms": 569.5
+        "elapsed_ms": 564.5
       },
       {
-        "endpoint": "PUT /api/projects/proj_ff47b37937e4/steps/step_378816b3aacc",
+        "endpoint": "PUT /api/projects/proj_6be0d7b25df3/steps/step_294671014c37",
         "status": 200,
-        "elapsed_ms": 677.2
+        "elapsed_ms": 678.8
       },
       {
-        "endpoint": "GET /api/projects/proj_ff47b37937e4/steps",
+        "endpoint": "GET /api/projects/proj_6be0d7b25df3/steps",
         "status": 200,
-        "elapsed_ms": 449.8
+        "elapsed_ms": 448.2
       },
       {
-        "endpoint": "GET /api/projects/proj_ff47b37937e4/stages",
+        "endpoint": "GET /api/projects/proj_6be0d7b25df3/stages",
         "status": 404,
-        "elapsed_ms": 1.3
+        "elapsed_ms": 1.4
       },
       {
         "endpoint": "POST /api/activities",
         "status": 200,
-        "elapsed_ms": 1354.2
+        "elapsed_ms": 1353.1
       },
       {
         "endpoint": "POST /api/documents/create",
         "status": 200,
-        "elapsed_ms": 579.4
+        "elapsed_ms": 564.9
       },
       {
         "endpoint": "GET /api/documents",
         "status": 200,
-        "elapsed_ms": 226.3
+        "elapsed_ms": 235.4
       },
       {
         "endpoint": "POST /api/vault/upload",
         "status": 200,
-        "elapsed_ms": 229.9
+        "elapsed_ms": 233.7
       },
       {
         "endpoint": "GET /api/vault",
         "status": 200,
-        "elapsed_ms": 226.0
+        "elapsed_ms": 224.8
       },
       {
         "endpoint": "POST /api/auth/buyer/register",
         "status": 200,
-        "elapsed_ms": 717.4
+        "elapsed_ms": 703.9
       },
       {
-        "endpoint": "PUT /api/clients/client_244e36b7ba8e",
+        "endpoint": "PUT /api/clients/client_ce3fd512fadd",
         "status": 200,
-        "elapsed_ms": 453.0
+        "elapsed_ms": 451.1
       },
       {
         "endpoint": "GET /api/documents",
         "status": 200,
-        "elapsed_ms": 338.1
+        "elapsed_ms": 336.5
       },
       {
         "endpoint": "GET /api/notifications",
         "status": 200,
-        "elapsed_ms": 338.1
+        "elapsed_ms": 336.4
       },
       {
         "endpoint": "GET /api/vault",
         "status": 403,
-        "elapsed_ms": 113.4
+        "elapsed_ms": 113.1
       },
       {
         "endpoint": "GET /api/notifications",
         "status": 200,
-        "elapsed_ms": 337.7
+        "elapsed_ms": 336.9
       }
     ]
   },
@@ -1382,52 +1382,52 @@
         "detail": ""
       },
       {
-        "check": "Canonical collection 'projects' exists (count=8)",
+        "check": "Canonical collection 'projects' exists (count=10)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'units' exists (count=31)",
+        "check": "Canonical collection 'units' exists (count=36)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'clients' exists (count=9)",
+        "check": "Canonical collection 'clients' exists (count=11)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'timelines' exists (count=7)",
+        "check": "Canonical collection 'timelines' exists (count=9)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'timeline_steps' exists (count=17)",
+        "check": "Canonical collection 'timeline_steps' exists (count=21)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'documents' exists (count=18)",
+        "check": "Canonical collection 'documents' exists (count=21)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'activities' exists (count=15)",
+        "check": "Canonical collection 'activities' exists (count=16)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'vault_documents' exists (count=7)",
+        "check": "Canonical collection 'vault_documents' exists (count=8)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'notifications' exists (count=14)",
+        "check": "Canonical collection 'notifications' exists (count=17)",
         "passed": true,
         "detail": ""
       },
       {
-        "check": "Canonical collection 'users' exists (count=21)",
+        "check": "Canonical collection 'users' exists (count=24)",
         "passed": true,
         "detail": ""
       },
@@ -1447,7 +1447,7 @@
         "detail": ""
       },
       {
-        "check": "Document doc_ad891e915a42 has NO legacy fields",
+        "check": "Document doc_4e319ef0ebb7 has NO legacy fields",
         "passed": true,
         "detail": ""
       },
@@ -1462,7 +1462,7 @@
         "detail": ""
       },
       {
-        "check": "Step step_378816b3aacc has NO legacy 'stage_id'",
+        "check": "Step step_294671014c37 has NO legacy 'stage_id'",
         "passed": true,
         "detail": ""
       },
@@ -1514,20 +1514,20 @@
     "performance": "ACCEPTABLE"
   },
   "test_data": {
-    "agent_email": "audit.agent.a1637d@evohome-test.com",
-    "agent_id": "agent_354ff816bed2",
-    "project_id": "proj_ff47b37937e4",
+    "agent_email": "audit.agent.a5b6d5@evohome-test.com",
+    "agent_id": "agent_7737b6f5939d",
+    "project_id": "proj_6be0d7b25df3",
     "unit_ids": [
-      "unit_d571f26c42b0",
-      "unit_7963799f6051",
-      "unit_177d7fff66f0"
+      "unit_1c490bb35bed",
+      "unit_423036eacce7",
+      "unit_74e45ac6440b"
     ],
-    "client_id": "client_244e36b7ba8e",
-    "step_id": "step_378816b3aacc",
-    "activity_id": "act_1f79b8010504",
-    "document_id": "doc_ad891e915a42",
-    "vault_id": "vault_5d68d7fb26e0",
-    "buyer_email": "buyer.test.6be7ff@evohome-test.com",
-    "buyer_id": "buyer_379723e4e2dd"
+    "client_id": "client_ce3fd512fadd",
+    "step_id": "step_294671014c37",
+    "activity_id": "act_ad553df7bd16",
+    "document_id": "doc_4e319ef0ebb7",
+    "vault_id": "vault_77a7a2cc2eaa",
+    "buyer_email": "buyer.test.b57190@evohome-test.com",
+    "buyer_id": "buyer_5dd285fb92c7"
   }
 }
