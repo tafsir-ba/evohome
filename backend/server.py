@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI):
         await db.notifications.create_index("user_id")
         await db.activities.create_index("activity_id", unique=True)
         await db.activities.create_index("project_id")
-        await db.vault_documents.create_index("vault_id", unique=True)
+        await db.vault_documents.create_index("vault_document_id", unique=True)
         logger.info("Single-field indexes created/verified")
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")

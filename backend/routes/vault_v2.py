@@ -27,23 +27,25 @@ router = APIRouter()
 @router.post("/vault/upload")
 async def upload_vault_document(
     file: UploadFile = File(...),
-    project_id: str = Form(...),
-    client_ids: str = Form(...),
+    project_id: str = Form(""),
+    client_ids: str = Form(""),
     title: str = Form(...),
     category: str = Form("general"),
     description: Optional[str] = Form(None),
+    access_level: Optional[str] = Form("private"),
+    doc_type: Optional[str] = Form("general"),
     user: dict = Depends(get_current_agent),
 ):
     """Upload a document to the vault. Agent only."""
-    project = await db.projects.find_one(
-        {"project_id": project_id, "agent_id": user['user_id']}
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    # Project is optional — skip validation if empty
+    if project_id:
+        project = await db.projects.find_one(
+            {"project_id": project_id, "agent_id": user['user_id']}
+        )
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
 
     parsed_ids = [cid.strip() for cid in client_ids.split(',') if cid.strip()]
-    if not parsed_ids:
-        raise HTTPException(status_code=400, detail="At least one client_id required")
 
     for cid in parsed_ids:
         c = await db.clients.find_one({"client_id": cid, "agent_id": user['user_id']})

@@ -118,6 +118,11 @@ export const AgentQuoteUpload = () => {
     formData.append('file', file);
     formData.append('client_id', selectedClient);
 
+    // Include project_id and unit_id from the selected client
+    const client = clients.find(c => c.client_id === selectedClient);
+    if (client?.project_id) formData.append('project_id', client.project_id);
+    if (client?.unit_id) formData.append('unit_id', client.unit_id);
+
     try {
       // Step 1: Upload and extract - this does NOT create a document
       const res = await fetch(`${API}/documents/upload?doc_type=quote`, {
@@ -193,6 +198,8 @@ export const AgentQuoteUpload = () => {
             preview_id: quoteData.preview_id,
             type: 'quote',
             client_id: selectedClient,
+            project_id: clients.find(c => c.client_id === selectedClient)?.project_id || null,
+            unit_id: clients.find(c => c.client_id === selectedClient)?.unit_id || null,
             title: editedData.title,
             amount: totalAmount,
             items: editedData.line_items.length > 0 ? editedData.line_items : undefined,

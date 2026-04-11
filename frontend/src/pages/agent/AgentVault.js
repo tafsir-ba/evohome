@@ -178,14 +178,17 @@ export const AgentVault = () => {
     try {
       const formData = new FormData();
       formData.append('file', uploadFile);
-      formData.append('name', uploadForm.name);
+      formData.append('title', uploadForm.name);
       formData.append('category', uploadForm.category);
       formData.append('project_id', uploadForm.project_id === 'none' ? '' : (uploadForm.project_id || ''));
       formData.append('description', uploadForm.description || '');
       formData.append('access_level', uploadForm.access_level);
       formData.append('doc_type', uploadForm.doc_type || 'general');
+      // client_ids: comma-separated string (required by backend)
       if (uploadForm.access_level === 'shared' && uploadForm.shared_with_clients.length > 0) {
-        formData.append('shared_with_clients', JSON.stringify(uploadForm.shared_with_clients));
+        formData.append('client_ids', uploadForm.shared_with_clients.join(','));
+      } else {
+        formData.append('client_ids', '');
       }
       
       // Use XMLHttpRequest for progress tracking
@@ -205,7 +208,12 @@ export const AgentVault = () => {
           } else {
             try {
               const error = JSON.parse(xhr.responseText);
-              reject(new Error(error.detail || 'Upload failed'));
+              const detail = error.detail;
+              // Handle Pydantic validation errors (array of objects)
+              const msg = Array.isArray(detail) 
+                ? detail.map(e => `${e.loc?.join('.')}: ${e.msg}`).join(', ')
+                : (typeof detail === 'string' ? detail : 'Upload failed');
+              reject(new Error(msg));
             } catch {
               reject(new Error('Upload failed'));
             }

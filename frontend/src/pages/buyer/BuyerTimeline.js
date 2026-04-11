@@ -56,6 +56,88 @@ const getAuthHeaders = () => {
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 };
 
+// Change Request Thread — shows the full buyer-agent exchange
+const ChangeRequestThread = ({ entityType, entityId, buyerComment }) => {
+  const [thread, setThread] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchThread = async () => {
+      try {
+        const res = await fetch(
+          `${API}/change-requests/entity/${entityType}/${entityId}`,
+          { credentials: 'include', headers: getAuthHeaders() }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          // Get the most recent open/under_review/resolved request
+          const active = (data.change_requests || []).find(
+            cr => ['open', 'under_review', 'resolved'].includes(cr.status)
+          );
+          setThread(active || null);
+        }
+      } catch {
+        // Fallback to just showing the buyer comment
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchThread();
+  }, [entityType, entityId]);
+
+  // If no canonical thread exists, show the legacy comment
+  if (loading) return null;
+
+  if (!thread) {
+    return (
+      <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+        <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Your question</p>
+        <p className="text-sm text-foreground">{buyerComment}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-blue-500/20 overflow-hidden" data-testid="change-request-thread">
+      <div className="px-3 py-2 bg-blue-500/10 border-b border-blue-500/20">
+        <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+          Change Request
+          {thread.status === 'resolved' && (
+            <span className="ml-2 text-emerald-600 font-normal">Resolved</span>
+          )}
+          {thread.status === 'open' && (
+            <span className="ml-2 text-amber-600 font-normal">Awaiting response</span>
+          )}
+          {thread.status === 'under_review' && (
+            <span className="ml-2 text-blue-600 font-normal">Under review</span>
+          )}
+        </p>
+      </div>
+      <div className="p-3 space-y-2">
+        {thread.messages.map(msg => (
+          <div
+            key={msg.message_id}
+            className={cn(
+              'p-2 rounded-lg text-sm',
+              msg.author_role === 'buyer' ? 'bg-muted/50' : 'bg-primary/5 ml-3'
+            )}
+          >
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-xs font-medium capitalize text-muted-foreground">
+                {msg.author_role === 'buyer' ? 'You' : 'Agent'}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {new Date(msg.created_at).toLocaleDateString('de-CH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+            <p className="whitespace-pre-wrap">{msg.content}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const formatCurrency = (amount, currency = 'CHF') => {
   return `${currency} ${new Intl.NumberFormat('de-CH', { 
     style: 'decimal', 
@@ -281,12 +363,13 @@ const TimelineCard = ({ event, onAction, onDownloadPdf, onPreviewPdf, onShowQrPa
                 </div>
               )}
 
-              {/* Change Request Comment */}
+              {/* Change Request Thread */}
               {event.changeComment && (
-                <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                  <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Your question</p>
-                  <p className="text-sm text-foreground">{event.changeComment}</p>
-                </div>
+                <ChangeRequestThread
+                  entityType={event.type?.toLowerCase() || 'document'}
+                  entityId={event.id}
+                  buyerComment={event.changeComment}
+                />
               )}
 
               {/* Document Actions */}

@@ -61,9 +61,21 @@ async def get_client(client_id: str) -> Optional[Dict[str, Any]]:
 
 
 async def list_clients_by_agent(agent_id: str) -> List[Dict[str, Any]]:
-    return await db.clients.find(
+    clients = await db.clients.find(
         {"agent_id": agent_id}, {"_id": 0}
     ).sort("created_at", -1).to_list(1000)
+
+    # Batch-enrich with project names
+    project_ids = list({c["project_id"] for c in clients if c.get("project_id")})
+    if project_ids:
+        projects = await db.projects.find(
+            {"project_id": {"$in": project_ids}}, {"_id": 0, "project_id": 1, "name": 1}
+        ).to_list(len(project_ids))
+        project_map = {p["project_id"]: p["name"] for p in projects}
+        for c in clients:
+            c["project_name"] = project_map.get(c.get("project_id"))
+
+    return clients
 
 
 async def list_clients_by_project(project_id: str) -> List[Dict[str, Any]]:

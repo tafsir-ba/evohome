@@ -118,6 +118,11 @@ export const AgentInvoiceUpload = () => {
     formData.append('file', file);
     formData.append('client_id', selectedClient);
 
+    // Include project_id and unit_id from the selected client
+    const client = clients.find(c => c.client_id === selectedClient);
+    if (client?.project_id) formData.append('project_id', client.project_id);
+    if (client?.unit_id) formData.append('unit_id', client.unit_id);
+
     try {
       // Step 1: Upload and extract - this does NOT create a document
       const res = await fetch(`${API}/documents/upload?doc_type=invoice`, {
@@ -194,6 +199,8 @@ export const AgentInvoiceUpload = () => {
             preview_id: invoiceData.preview_id,
             type: 'invoice',
             client_id: selectedClient,
+            project_id: clients.find(c => c.client_id === selectedClient)?.project_id || null,
+            unit_id: clients.find(c => c.client_id === selectedClient)?.unit_id || null,
             title: editedData.title,
             amount: parseFloat(editedData.amount) || 0,
             items: editedData.line_items.filter(item => item.description),
