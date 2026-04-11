@@ -1,5 +1,53 @@
 # Evohome CMP — Canonical Surgical Rebuild Changelog
 
+## Phase 3: Orchestration — COMPLETE (2026-04-11)
+
+### Objective
+Rebuild the Comment Center / Command Service as a pure orchestration brain that routes intents to Phase 1/2 canonical services. Eliminate notification_bridge.py. Make notification_service.py the canonical notification module. Purge is_demo from all orchestration code.
+
+### Completed Work
+
+#### notification_service.py — Canonical Notification Module
+- [x] `create_notification` — canonical write, no is_demo
+- [x] `emit_notification` — alias for create_notification
+- [x] `emit_email` — lazy-import wrapper for email_service.send_notification_email
+- [x] `emit_realtime` — lazy-import wrapper for realtime_service.notify_realtime
+- [x] `list_notifications`, `mark_read`, `mark_all_read` — existing read ops preserved
+
+#### notification_bridge.py — DELETED
+- [x] 3 Phase 2 services (document_service, activity_service, vault_service) migrated to notification_service
+- [x] realtime_service.py updated: create_notification imported from notification_service
+- [x] email_service.create_notification converted to backward-compat shim (absorbs is_demo via **kwargs)
+- [x] Zero references to notification_bridge remain in codebase
+
+#### command_service.py — Pure Routing Brain
+- [x] `_route_to_service()` replaces `_execute_by_intent()` — routes to canonical services
+- [x] `_route_document()` delegates to `document_service.create_document()`
+- [x] `_route_activity()` delegates to `activity_service.create_draft_activity()`
+- [x] `_create_document()` DELETED (was 47 lines of direct DB write with is_demo)
+- [x] `_create_feed_activity()` DELETED (was 39 lines of direct DB write with is_demo)
+- [x] `execute_draft()` no longer takes is_demo parameter
+
+#### activity_service.py — New canonical function
+- [x] `create_draft_activity()` — creates draft activity without is_demo, no distribution
+
+#### commands.py route — Cleaned
+- [x] Removed is_demo from execute endpoint call
+- [x] Removed is_demo from history endpoint
+- [x] Removed unused get_is_demo import
+
+#### is_demo Purge (Phase 3 Scope)
+- [x] command_service.py: 12 → 0 occurrences
+- [x] commands.py: 3 → 0 occurrences
+- [x] realtime_service.py (send_milestone_notification): 2 → 0 occurrences
+- [x] timelines_v2.py: 1 → 0 occurrences
+- [x] notification_bridge.py: DELETED entirely
+
+### Regression: 20/20 passed (100%) — `/app/test_reports/iteration_8.json`
+### Route Map: `/app/memory/PHASE3_ROUTE_MAP.md`
+
+---
+
 ## Phase 2: Content Layer — COMPLETE (2026-04-11)
 
 ### Objective

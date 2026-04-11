@@ -13,6 +13,17 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 
 ## What's Been Implemented (March 2026)
 
+### Phase 3 Orchestration Rebuild — COMPLETE (April 11, 2026)
+- [x] Command Service rebuilt as pure routing brain (no direct DB writes for documents/activities)
+- [x] notification_bridge.py eliminated entirely
+- [x] notification_service.py is canonical notification module (create, emit, list, mark_read)
+- [x] CommandExecutor routes QUOTE/INVOICE → document_service.create_document()
+- [x] CommandExecutor routes MESSAGE → activity_service.create_draft_activity()
+- [x] is_demo purged from command_service.py (12→0), commands.py (3→0), realtime_service (2→0)
+- [x] 20/20 regression tests passed
+- [x] Route map: /app/memory/PHASE3_ROUTE_MAP.md
+- [x] See: /app/memory/CHANGELOG.md, /app/memory/ROADMAP.md
+
 ### Phase 2 Content Layer Rebuild — COMPLETE (April 11, 2026)
 - [x] 4 content modules rebuilt canonically: Activity, Document, VaultDocument, Notification
 - [x] Services: activity_service, document_service, vault_service, notification_service
