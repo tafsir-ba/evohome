@@ -14,18 +14,18 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 ## Architecture (Post-Canonical Rebuild — April 2026)
 ```
 /app/backend/
-├── server.py              # Slim orchestrator (184 lines)
+├── server.py              # Slim orchestrator
 ├── database.py            # Shared MongoDB connection
 ├── helpers.py             # Utility functions
 ├── models/
-│   └── schemas.py         # All Pydantic models (is_demo fully removed)
+│   └── schemas.py         # All Pydantic models
 ├── services/              # Strict canonical domain logic
 │   ├── activity_service, document_service, vault_service
 │   ├── notification_service, project_service, client_service
 │   ├── timeline_service, step_service, team_service, unit_service
 │   ├── command_service, workflow_service, billing_service
 │   ├── email_service, realtime_service, qr_service, ai_service
-├── routes/ (22 files)     # Thin route layer — no is_demo anywhere
+├── routes/ (22 files)     # Thin route layer
 │   ├── auth.py, projects.py, clients.py, documents.py, timelines.py
 │   ├── activities.py, notifications.py, vault.py, billing.py, settings.py
 │   ├── invitations.py, dashboard.py, stats.py, analytics.py
@@ -35,46 +35,11 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 └── uploads/
 /app/frontend/
 └── src/
-    ├── pages/agent/       # AgentDashboard, AgentVault, AgentSettings, etc.
+    ├── pages/agent/       # AgentHomePage (Control Tower), AgentFeed, AgentBilling, AgentSettings, etc.
     ├── pages/buyer/       # BuyerDashboard, BuyerTimeline
-    ├── components/        # LanguageToggle, FileDropZone, PdfViewer, AgentLayout, NotificationCenter
-    └── context/           # AuthContext, SettingsContext
+    ├── components/        # Feed.js, AgentLayout, NotificationCenter, etc.
+    └── context/           # AuthContext, SettingsContext, DataContext
 ```
-
-## Canonical Rebuild Status
-
-### SSOT Architecture Rule
-**No `is_demo` field allowed in canonical data.** Demo data is identified by deterministic `demo_*` ID prefixes (e.g., `demo_agent_001`, `demo_proj_001`). Cleanup uses ID prefix regex matching.
-
-### Phase 1: Core — COMPLETE
-- 5 core modules: Unit, Project, Timeline, TimelineStep, Client
-- Service layer + V2 thin routes
-
-### Phase 2: Content Layer — COMPLETE
-- 4 content modules: Activity, Document, VaultDocument, Notification
-- Services + V2 thin routes
-
-### Phase 3: Orchestration Spine — COMPLETE
-- Command Service as pure router
-- notification_bridge eliminated, notification_service canonical
-
-### System Perimeter `is_demo` Purge — COMPLETE (April 11, 2026)
-- [x] Auth Surgery: is_demo removed from user creation, JWT payloads, session responses, response models
-- [x] Demo login: uses demo_* user_id prefix convention (not is_demo query)
-- [x] Legacy route cleanup: 9 V1 route files deleted
-- [x] DB migration: is_demo removed from 127+ documents across all collections
-- [x] `invitations.py`: Purged all is_demo projections
-- [x] `demo.py`: Fully rewritten — canonical seed using demo_* ID namespace, zero is_demo writes/deletes/branching
-- [x] `schemas.py`: Removed is_demo from all 7 Pydantic models (UserBase, Client, TeamMember, Document, ProjectStage, Activity, Notification)
-- [x] `core/auth.py`: Dead create_jwt_token wrapper deleted, stale is_demo comments removed
-- [x] `routes/auth.py`: Local create_jwt_token wrapper deleted, all calls replaced with create_access_token, is_demo projections removed
-- [x] `admin.py`, `analytics.py`: Dead is_demo variable assignments removed
-- [x] 24/24 regression tests passed (iteration_13)
-- [x] Database verified: zero is_demo fields in any collection after seed
-
-### Remaining `is_demo` References (non-blocking)
-- **Service layer defensive projections** (`"is_demo": 0`): ~40 instances across services. Harmless MongoDB field exclusions. Can be cleaned in a future sweep.
-- **Frontend conditionals**: `AgentLayout.js`, `BuyerLayout.js` still have UI is_demo conditionals (P2 task).
 
 ## What's Been Implemented
 
@@ -93,19 +58,33 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - In-app PDF viewer
 
 ### Communication
-- Real-time activity feed
+- Real-time activity feed (Feed.js — lazy-load replies)
 - Email notifications via Resend
 - In-app notifications with WebSocket
 
-### Agent Command Workspace (Phases 1-4)
+### Agent Command Workspace
 - Command bar with text/voice/file input
 - Rule-based intent classification
 - Draft-first system for all document operations
 - Multi-step workflow automation (5 templates)
 
 ### Billing
-- Stripe subscription integration
-- Plan-based feature access
+- Stripe subscription integration (canonical billing_service.py)
+- Plan-based feature access (centralized entitlements)
+- Webhook signature verification
+
+### Canonical Rebuild (Complete)
+- Phase 1-4: Core, Content, Orchestration, Billing — all canonical
+- is_demo fully purged from all active code
+- SSOT architecture with thin routes + canonical services
+- P3.5 optimization: 44 projections, 7 dead imports removed
+
+### Phase 5: UX Refinement (Sprint 1 — April 11, 2026)
+- **P0 Feed Bug Fixed**: Removed N+1 query pattern (was causing 56s load times). Activities now load with single API call. Replies lazy-loaded on expand.
+- **P1 Feed Promoted**: Moved from "More" dropdown to primary sidebar navigation.
+- **P1 Control Tower Dashboard**: Replaced command-input-only homepage with actionable Control Tower: Action Cards (Change Requests, Pending Invoices, Pending Quotes) + KPI Strip (Clients, Projects, Revenue, Approved Quotes) + Command Bar (repositioned) + Deduplicated Recent Activity.
+- **P2 Billing Cleanup**: Removed Sync button (debug affordance) and duplicate Subscription Details section.
+- **P2 Settings Cleanup**: Replaced duplicate plan grid in Settings > Billing tab with plan summary + "Manage Billing" redirect to dedicated page.
 
 ## Tech Stack
 - **Frontend**: React 18, TailwindCSS, Shadcn/UI
@@ -115,34 +94,14 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 
 ## Pending/Backlog
 
-### P1 — Phase 4: Commercial Systems (Billing/Stripe Rebuild) — COMPLETE
-- [x] Canonical billing_service.py as SSOT
-- [x] Thin routes in billing.py
-- [x] Webhook signature verification
-- [x] Real Stripe cancel
-- [x] Centralized entitlement checks
-- [x] 33/33 regression tests passed
+### P1 — Production Hardening
+- [ ] Stripe Webhook smoke test (requires user's STRIPE_WEBHOOK_SECRET)
+- [ ] Backend activities endpoint optimization (6.3s per request due to N+1 enrichment)
 
-### P2 — Frontend Canonical Alignment — COMPLETE
-- [x] Removed 2 dead `is_demo` UI branches (AgentLayout.js, BuyerLayout.js)
-- [x] Aligned 5 files to Phase 4 billing contract (property_usage→unit_usage, can_create_property→can_create_unit)
-- [x] Zero stale field references remaining
-- [x] 12/12 frontend tests passed
-
-### P3 — Architecture Cleanup — COMPLETE
-- [x] Canonicalized routes/workflows.py (zero direct DB writes, all delegated to services)
-- [x] Removed semantically wrong entitlement check from projects_v2.py
-- [x] 18/18 regression tests passed (iteration_16)
-
-### P3.5 — Optimization Pass — COMPLETE
-- [x] Removed 44 defensive projections, 2 pops, 6 dead import blocks, 2 redundant billing fields
-- [x] Fixed billing contract field name (subscription_period_end → current_period_end)
-- [x] Backend is_demo refs: 73 → 26 (all comments/config/migration — zero active code)
-
-### P4 — Phase 5: Product Refinement
-- [ ] AI enhancements
-- [ ] Dashboard improvements
+### P2 — Product Compounding
 - [ ] Email digest notifications
+- [ ] Reporting/export features
+- [ ] AI-powered command enhancements
 
 ---
 Last Updated: April 11, 2026
