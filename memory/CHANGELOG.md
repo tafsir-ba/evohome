@@ -1,3 +1,28 @@
+# Frontend Canonical Alignment — COMPLETE (2026-04-11)
+
+### Objective
+Align frontend to canonical backend contracts. Remove dead `is_demo` UI branches. Fix stale billing field names.
+
+### Completed Work
+
+#### Dead `is_demo` UI Branches — Removed
+- AgentLayout.js: Removed `{user?.is_demo && (<span>DEMO</span>)}` block
+- BuyerLayout.js: Removed identical block
+
+#### Billing Field Alignment — 5 Files Fixed
+- `property_usage` → `unit_usage` (AgentBilling, AgentProjects, AgentSettings)
+- `can_create_property` → `can_create_unit` (AgentBilling, AgentProjects)
+- `usage_percent` → computed locally from `unit_usage / property_limit` (AgentBilling, AgentSettings)
+- `near_limit` → computed locally: `unit_usage >= property_limit * 0.8` (AgentBilling, AgentProjects)
+
+### Result
+- Zero stale field references remaining in entire frontend codebase
+- Zero `is_demo` / `isDemo` references remaining
+- 12/12 frontend tests passed (iteration_15)
+
+---
+
+
 # Phase 4: Canonical Billing Rebuild — COMPLETE (2026-04-11)
 
 ### Objective

@@ -123,9 +123,11 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - [x] Centralized entitlement checks
 - [x] 33/33 regression tests passed
 
-### P2 — Frontend Canonical Alignment
-- [ ] Remove is_demo conditionals from AgentLayout.js, BuyerLayout.js
-- [ ] Clean service-layer defensive projections (~40 instances)
+### P2 — Frontend Canonical Alignment — COMPLETE
+- [x] Removed 2 dead `is_demo` UI branches (AgentLayout.js, BuyerLayout.js)
+- [x] Aligned 5 files to Phase 4 billing contract (property_usage→unit_usage, can_create_property→can_create_unit)
+- [x] Zero stale field references remaining
+- [x] 12/12 frontend tests passed
 
 ### P3 — Architecture Cleanup
 - [ ] Canonicalize routes/workflows.py (direct DB writes → delegate to services)
