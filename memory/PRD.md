@@ -13,6 +13,17 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 
 ## What's Been Implemented (March 2026)
 
+### Phase 1 Canonical Surgical Rebuild — COMPLETE (April 11, 2026)
+- [x] 5 core modules rebuilt canonically: Unit, Project, Timeline, TimelineStep, Client
+- [x] Service layer: unit_service, project_service, timeline_service, step_service, client_service
+- [x] V2 thin routes: projects_v2.py, timelines_v2.py, units.py, clients_v2.py, steps_v2.py
+- [x] Traffic switched in server.py from legacy to V2 routes
+- [x] is_demo eradicated from all Phase 1 modules (schemas, services, projections)
+- [x] Timeline AI extraction intentionally removed
+- [x] 33/33 regression tests passed
+- [x] Route map: /app/memory/PHASE1_ROUTE_MAP.md
+- [x] See: /app/memory/CHANGELOG.md, /app/memory/ROADMAP.md
+
 ### P0 Data Consistency Fix (March 19, 2026) 🔥
 - [x] **DataContext as Single Source of Truth** - All project data now flows through centralized DataContext
 - [x] Eliminated fragmented project fetching across 8+ components

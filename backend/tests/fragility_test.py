@@ -119,9 +119,9 @@ c, d = api("GET", f"/api/projects/{PID}/units", token=TOKEN)
 check("List units returns array", c == 200 and isinstance(d, list))
 check("Exactly 2 units", len(d) == 2 if isinstance(d, list) else False, f"got {len(d) if isinstance(d, list) else d}")
 
-# Check unit has is_demo field
+# Verify unit excludes is_demo field (canonical rebuild)
 if isinstance(d, list) and d:
-    check("Unit has is_demo field", "is_demo" in d[0], f"keys: {list(d[0].keys())[:10]}")
+    check("Unit excludes is_demo field", "is_demo" not in d[0], f"keys: {list(d[0].keys())[:10]}")
     check("Unit has project_id", d[0].get("project_id") == PID)
 
 # ════════════════════════════════════════════════════════════
@@ -327,7 +327,7 @@ async def db_audit():
     if proj:
         results.append(("Project has agent_id in DB", proj.get("agent_id") == AGENT_ID))
         results.append(("Project has NO legacy 'stages' field", "stages" not in proj))
-        results.append(("Project has is_demo field", "is_demo" in proj))
+        results.append(("Project excludes is_demo field", "is_demo" not in proj))
     
     # Check document in DB
     doc = await db.documents.find_one({"document_id": DOC_ID}, {"_id": 0})

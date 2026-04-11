@@ -1,100 +1,47 @@
-# Evohome Changelog
+# Evohome CMP — Canonical Surgical Rebuild Changelog
 
-## March 18, 2026
+## Phase 1: Canonical Core — COMPLETE (2026-04-11)
 
-### Timeline/Workflow Engine - Batch 3D
-- **Structured construction timeline system**
-  - Project-level timeline (not unit-level)
-  - Templates → Project instance pattern
-  - Status flow: pending → in_progress → completed → approved
-  - Documents link via activity_id only (no duplication)
-- **Agent Workflow page** (`/workflow`)
-  - View/edit timeline steps
-  - Advance status with validation
-  - Link activities as documents
-  - Add internal notes (agent-only)
-  - Delete timeline
-- **Buyer Construction Progress**
-  - Collapsible progress card
-  - Shows current phase + percentage
-  - Detailed view with linked documents
-  - Internal notes hidden (security enforced)
+### Objective
+Rebuild 5 core modules (Unit, Project, Timeline, TimelineStep, Client) with canonical services and thin routes. Eradicate `is_demo` from all Phase 1 modules.
 
-**Files added/modified:**
-- `/app/frontend/src/pages/agent/AgentWorkflow.js` (NEW)
-- `/app/frontend/src/pages/buyer/BuyerTimeline.js` (UPDATED - ConstructionPhaseCard)
-- `/app/frontend/src/components/AgentLayout.js` (UPDATED - Workflow nav)
-- `/app/backend/server.py` (UPDATED - Timeline endpoints and models)
+### Completed Work
 
----
+#### Services Layer (Canonical Business Logic)
+- [x] `unit_service.py` — CRUD, bulk ops, project/agent queries
+- [x] `project_service.py` — CRUD, list by agent/buyer, context enrichment
+- [x] `timeline_service.py` — CRUD, create with steps, enriched timeline, cascade delete, template CRUD + apply
+- [x] `step_service.py` — CRUD, add to timeline, document linking, notes, status transitions
+- [x] `client_service.py` — CRUD, list by agent/project, detail enrichment
 
-### Enhanced Features - Batch 3C
-- **Team Library**: Project-level team management (CRUD)
-  - Agent: Full management at `/projects/{id}/team`
-  - Buyer: Read-only access via new "Team" tab
-  - 4 demo team members seeded (Plumber, Electrician, Architect, Interior Designer)
-- **Project Unit Count**: Shows actual unit count on project cards
-- **View as Client**: Agent can preview client's perspective with VIEW ONLY banner
-- **Feed Notification Badge**: Unread count using `last_seen_at` timestamp
-- **Document File Type**: Activities support `type=file` for contracts, plans, etc.
+#### V2 Thin Routes (No is_demo, No Business Logic)
+- [x] `routes/units.py` — Unit CRUD
+- [x] `routes/projects_v2.py` — Project CRUD (team endpoints stay in legacy projects.py)
+- [x] `routes/timelines_v2.py` — Timeline CRUD, step management, templates (NO extraction)
+- [x] `routes/steps_v2.py` — Step CRUD via project context
+- [x] `routes/clients_v2.py` — Client CRUD
 
-**Files added/modified:**
-- `/app/frontend/src/pages/agent/AgentTeam.js` (NEW)
-- `/app/frontend/src/pages/agent/ClientPreview.js` (NEW)
-- `/app/frontend/src/pages/buyer/BuyerTimeline.js` (UPDATED - 3 tabs)
-- `/app/frontend/src/pages/agent/AgentProjects.js` (UPDATED - unit_count)
-- `/app/frontend/src/pages/agent/AgentClients.js` (UPDATED - View button)
-- `/app/frontend/src/components/AgentLayout.js` (UPDATED - Team nav)
-- `/app/frontend/src/components/Feed.js` (UPDATED - file type)
-- `/app/backend/server.py` (UPDATED - new endpoints)
+#### Traffic Switching
+- [x] `server.py` routes to V2 for all 5 modules
+- [x] Legacy `projects.py` retained ONLY for team endpoints
+- [x] Legacy `timelines.py` fully replaced
 
-### Core Communication (Activity Feed) - Batch 3B
-- Added shared `Feed.js` component with role-based UI adaptation
-- Agent view: Full post creation, 4 activity types, project/recipient selection
-- Buyer view: Read + reply only via "Updates" tab in timeline
-- Backend role-based filtering (buyer auto-filtered to their unit)
-- Fixed MongoDB ObjectId serialization bug in reply endpoint
+#### is_demo Eradication (Phase 1 Scope)
+- [x] No `is_demo` in any Phase 1 service query filter
+- [x] No `is_demo` in any Phase 1 Pydantic schema
+- [x] All Phase 1 service projections exclude `is_demo`
+- [x] New documents do NOT include `is_demo`
+- [x] `fragility_test.py` updated
 
-**Files added/modified:**
-- `/app/frontend/src/components/Feed.js` (NEW)
-- `/app/frontend/src/pages/agent/AgentFeed.js` (UPDATED)
-- `/app/frontend/src/pages/buyer/BuyerTimeline.js` (UPDATED)
-- `/app/frontend/src/components/AgentLayout.js` (UPDATED)
-- `/app/frontend/src/App.js` (UPDATED)
-- `/app/backend/server.py` (FIXED)
+#### Intentionally Removed
+- All timeline extraction endpoints (POST extract, GET/POST/DELETE extractions)
+
+### Regression: 33/33 passed (100%) — `/app/test_reports/iteration_6.json`
 
 ---
 
-## March 17, 2026
-
-### Architecture Foundation - Batch 3A
-- Separate login flows for Buyer/Agent with role enforcement
-- Original PDF as source of truth (no generated PDFs for viewing)
-- Document versioning with history tracking
-- Removed legacy /quotes/* and /invoices/* endpoints
-
-### Project Management Improvements
-- Project-based client filtering
-- Unit management within projects
-- Click project → view filtered clients
-
-### UI/UX Fixes
-- Clickable "action needed" badge scrolls to relevant item
-- Unified agent-side color scheme
-- Fixed agent list pages to use unified /documents endpoint
-- Renamed "Ask" to "Request Change"
-
----
-
-## March 16, 2026
-
-### Document UX - Iteration 7
-- Hero image upload for quotes/invoices
-- Card summary field for timeline cards
-- E-commerce style timeline cards
-- Swiss QR payment modal
-
-### Evohome Rebrand - Iteration 6
-- Renamed from UpgradeFlow to Evohome
-- Blue color system (primary: #2563EB)
-- Updated all interfaces and login page
+## Pre-Phase 1: Deploy Hardening (2026-04-10)
+- CORS, exception handler, health checks, security headers
+- Missing imports fix across 7 route files
+- Stripe session mode fix
+- is_demo removed from access_control.py indexes
