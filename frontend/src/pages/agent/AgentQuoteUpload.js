@@ -207,7 +207,7 @@ export const AgentQuoteUpload = () => {
             summary: editedData.summary || editedData.description,
             notes: editedData.notes,
             pdf_filename: quoteData.pdf_filename,
-            pdf_path: quoteData.pdf_path,
+            pdf_stored_filename: quoteData.pdf_stored_filename,
             ai_extraction_confidence: quoteData.ai_extraction_confidence
           })
         });

@@ -1,10 +1,9 @@
 """
 Vault Service — Canonical Implementation.
 
-No is_demo. VaultDocument is separate from Document.
-Vault is storage/shared repository logic.
+Single source of truth for vault document operations.
+File I/O delegated to file_service. No direct disk access here.
 """
-import os
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -15,10 +14,8 @@ from services.notification_service import emit_notification
 
 logger = logging.getLogger(__name__)
 
-VAULT_CATEGORIES = ["general", "action_required"]
+VAULT_CATEGORIES = ["contracts", "plans", "permits", "reports", "other"]
 
-
-# ── Core CRUD ──
 
 async def create_vault_document(
     agent_id: str,
@@ -27,20 +24,31 @@ async def create_vault_document(
     title: str,
     category: str,
     description: Optional[str],
-    filename: str,
-    file_path: str,
+    access_level: str,
+    doc_type: str,
+    stored_filename: str,
+    original_filename: str,
     file_size: int,
+    content_type: str,
 ) -> Dict[str, Any]:
-    """Create a vault document shared with one or more clients."""
+    """Create a vault document. Returns canonical document dict."""
     doc_id = f"vault_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
 
-    # Resolve buyer_ids from clients
+    if category not in VAULT_CATEGORIES:
+        category = "other"
+
+    if access_level not in ("private", "shared"):
+        access_level = "private"
+
+    if doc_type not in ("general", "action_required"):
+        doc_type = "general"
+
     buyer_ids = []
     for cid in client_ids:
         c = await db.clients.find_one({"client_id": cid}, {"_id": 0, "buyer_id": 1})
-        if c and c.get('buyer_id'):
-            buyer_ids.append(c['buyer_id'])
+        if c and c.get("buyer_id"):
+            buyer_ids.append(c["buyer_id"])
 
     doc = {
         "vault_document_id": doc_id,
@@ -50,17 +58,19 @@ async def create_vault_document(
         "buyer_ids": buyer_ids,
         "title": title,
         "category": category,
-        "description": description or '',
-        "filename": filename,
-        "file_path": file_path,
+        "doc_type": doc_type,
+        "description": description or "",
+        "access_level": access_level,
+        "stored_filename": stored_filename,
+        "original_filename": original_filename,
         "file_size": file_size,
+        "content_type": content_type,
         "created_at": now,
         "updated_at": now,
     }
     await db.vault_documents.insert_one(doc)
-    doc.pop('_id', None)
+    doc.pop("_id", None)
 
-    # Notify buyers
     for bid in buyer_ids:
         await emit_notification(
             user_id=bid,
@@ -75,7 +85,6 @@ async def create_vault_document(
 
 
 async def list_vault_documents(agent_id: str, project_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """List vault documents for an agent."""
     query = {"agent_id": agent_id}
     if project_id:
         query["project_id"] = project_id
@@ -83,14 +92,12 @@ async def list_vault_documents(agent_id: str, project_id: Optional[str] = None) 
 
 
 async def list_buyer_vault(buyer_id: str) -> List[Dict[str, Any]]:
-    """List vault documents shared with a buyer."""
     return await db.vault_documents.find(
         {"buyer_ids": buyer_id}, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
 
 
 async def get_vault_document(vault_document_id: str) -> Optional[Dict[str, Any]]:
-    """Get a single vault document."""
     return await db.vault_documents.find_one(
         {"vault_document_id": vault_document_id}, {"_id": 0}
     )
@@ -99,40 +106,54 @@ async def get_vault_document(vault_document_id: str) -> Optional[Dict[str, Any]]
 async def update_vault_document(
     vault_document_id: str, agent_id: str, updates: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
-    """Update title, description, category of a vault document."""
+    """Update vault document metadata. Supports title, description, category, access_level, client_ids, project_id."""
     query = {"vault_document_id": vault_document_id, "agent_id": agent_id}
     doc = await db.vault_documents.find_one(query, {"_id": 0})
     if not doc:
         return None
 
-    allowed = {"title", "description", "category"}
-    filtered = {k: v for k, v in updates.items() if k in allowed and v is not None}
+    allowed = {"title", "description", "category", "access_level", "client_ids", "project_id", "doc_type"}
+    filtered = {}
+    for k in allowed:
+        if k in updates:
+            filtered[k] = updates[k]
+
+    # Validate category
+    if "category" in filtered and filtered["category"] not in VAULT_CATEGORIES:
+        filtered["category"] = "other"
+
+    # Validate access_level
+    if "access_level" in filtered and filtered["access_level"] not in ("private", "shared"):
+        filtered["access_level"] = "private"
+
+    # Re-resolve buyer_ids when client_ids change
+    if "client_ids" in filtered:
+        buyer_ids = []
+        for cid in filtered["client_ids"]:
+            c = await db.clients.find_one({"client_id": cid}, {"_id": 0, "buyer_id": 1})
+            if c and c.get("buyer_id"):
+                buyer_ids.append(c["buyer_id"])
+        filtered["buyer_ids"] = buyer_ids
+
     filtered["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     await db.vault_documents.update_one(query, {"$set": filtered})
     return await db.vault_documents.find_one(query, {"_id": 0})
 
 
-async def delete_vault_document(vault_document_id: str, agent_id: str) -> bool:
-    """Delete a vault document and its file."""
+async def delete_vault_document(vault_document_id: str, agent_id: str) -> Optional[str]:
+    """Delete vault document from DB. Returns stored_filename for file cleanup, or None."""
     query = {"vault_document_id": vault_document_id, "agent_id": agent_id}
     doc = await db.vault_documents.find_one(query, {"_id": 0})
     if not doc:
-        return False
-
-    if doc.get('file_path') and os.path.exists(doc['file_path']):
-        try:
-            os.remove(doc['file_path'])
-        except Exception:
-            pass
+        return None
 
     await db.vault_documents.delete_one(query)
-    return True
+    return doc.get("stored_filename")
 
 
 async def get_categories() -> List[Dict[str, str]]:
-    """Return vault document category options."""
     return [
-        {"value": "general", "label": "General Documents"},
-        {"value": "action_required", "label": "Action Required"},
+        {"value": c, "label": c.replace("_", " ").title()}
+        for c in VAULT_CATEGORIES
     ]

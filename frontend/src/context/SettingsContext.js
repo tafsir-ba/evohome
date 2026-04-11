@@ -708,7 +708,7 @@ export const SettingsProvider = ({ children }) => {
 
   // Get the logo to display (agent's own or agent branding for buyers)
   const getLogo = useCallback(() => {
-    const baseUrl = API.replace('/api', '');
+    const baseUrl = process.env.REACT_APP_BACKEND_URL;
     if (agentBranding?.company_logo_url) {
       // Logo URLs are stored as /api/uploads/... to ensure proper routing
       return `${baseUrl}${agentBranding.company_logo_url}`;

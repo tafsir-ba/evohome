@@ -209,7 +209,7 @@ export const AgentInvoiceUpload = () => {
             notes: editedData.notes,
             due_date: editedData.due_date,
             pdf_filename: invoiceData.pdf_filename,
-            pdf_path: invoiceData.pdf_path,
+            pdf_stored_filename: invoiceData.pdf_stored_filename,
             ai_extraction_confidence: invoiceData.ai_extraction_confidence
           })
         });

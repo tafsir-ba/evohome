@@ -364,7 +364,7 @@ const TimelineCard = ({ event, onAction, onDownloadPdf, onPreviewPdf, onShowQrPa
           {event.heroImageUrl ? (
             <>
               <img 
-                src={`${API.replace('/api', '')}${event.heroImageUrl}`}
+                src={`${process.env.REACT_APP_BACKEND_URL}${event.heroImageUrl}`}
                 alt={event.title}
                 className="w-full h-full object-cover"
               />

@@ -41,6 +41,7 @@ import {
 import { cn } from '../../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
+const BASE_URL = process.env.REACT_APP_BACKEND_URL;
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('auth_token');
@@ -289,7 +290,7 @@ export const AgentSettings = () => {
       
       if (res.ok) {
         const data = await res.json();
-        setSettings(prev => ({ ...prev, company_logo_url: data.logo_url }));
+        setSettings(prev => ({ ...prev, company_logo_url: data.url }));
         toast.success('Logo uploaded successfully');
       } else {
         const error = await res.json();
@@ -536,7 +537,7 @@ export const AgentSettings = () => {
                     <div className="flex items-center gap-4">
                       <div className="w-20 h-20 rounded-lg border border-border overflow-hidden bg-muted flex items-center justify-center">
                         <img 
-                          src={`${API.replace('/api', '')}${settings.company_logo_url}`}
+                          src={`${BASE_URL}${settings.company_logo_url}`}
                           alt="Company logo"
                           className="max-w-full max-h-full object-contain"
                           onError={(e) => {

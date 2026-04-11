@@ -25,6 +25,7 @@ import {
 import { cn } from '../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
+const BASE_URL = process.env.REACT_APP_BACKEND_URL;
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('auth_token');
@@ -276,11 +277,12 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
 
       if (res.ok) {
         const data = await res.json();
-        onUpdate(data.hero_image_url);
+        onUpdate(data.url);
         toast.success('Hero image uploaded');
       } else {
         const error = await res.json();
-        throw new Error(error.detail || 'Upload failed');
+        const msg = error.detail?.message || error.detail || 'Upload failed';
+        throw new Error(typeof msg === 'string' ? msg : 'Upload failed');
       }
     } catch (error) {
       toast.error(error.message || 'Failed to upload hero image');
@@ -318,7 +320,7 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
       {heroImageUrl ? (
         <div className="relative group">
           <img
-            src={`${API.replace('/api', '')}${heroImageUrl}`}
+            src={`${BASE_URL}${heroImageUrl}`}
             alt="Hero"
             className="w-full h-32 object-cover rounded-lg border border-border"
           />

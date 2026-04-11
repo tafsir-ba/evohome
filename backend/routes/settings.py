@@ -23,18 +23,14 @@ from core.rate_limit import rate_limit_check, check_rate_limit
 from core.monitoring import capture_exception, capture_auth_failure, capture_payment_error, capture_email_error, capture_ai_error, capture_websocket_error, capture_document_error, ErrorContext
 from core.responses import AuthSessionResponse, AuthLoginResponse, AuthRefreshResponse, AuthLogoutResponse, DocumentResponse, VaultDocumentResponse, NotificationResponse, ActivityResponse, ActivitiesListResponse, SuccessResponse
 
-# helpers: no longer needed
 from services.email_service import send_email_async, send_notification_email, get_email_template
 from services.realtime_service import ws_manager, notify_realtime, send_milestone_notification
 from services.qr_service import generate_swiss_qr_code, generate_swiss_qr_code_base64, DEFAULT_IBAN, DEFAULT_COMPANY_NAME
 from services.ai_service import extract_document_from_pdf, OPENAI_API_KEY
+from services import file_service
 
 
 logger = logging.getLogger(__name__)
-
-ROOT_DIR = Path(__file__).parent.parent
-UPLOAD_DIR = ROOT_DIR / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
 
 from services.billing_service import get_subscription_status
 
@@ -181,54 +177,44 @@ async def upload_company_logo(
     user: dict = Depends(get_current_agent)
 ):
     """Upload company logo (Pro plan required)"""
-    # Check if user has Pro plan or above
     subscription_data = await get_subscription_status(user['user_id'])
     if subscription_data['plan_id'] not in ['pro', 'enterprise']:
-        raise HTTPException(status_code=403, detail="Logo upload requires Pro plan or higher")
-    
-    # Validate file
-    allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-    if file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, and WebP images are allowed")
-    
-    # Read file content
-    content = await file.read()
-    
-    # Check file size (max 2MB)
-    if len(content) > 2 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Image must be less than 2MB")
-    
-    # Delete old logo if exists
+        raise HTTPException(status_code=403, detail={"error": "plan_required", "message": "Logo upload requires Pro plan or higher"})
+
+    # Delete old logo
     user_doc = await db.users.find_one({"user_id": user['user_id']}, {"_id": 0})
-    if user_doc and user_doc.get('company_logo_path'):
-        old_path = Path(user_doc['company_logo_path'])
-        if old_path.exists():
-            try:
-                old_path.unlink()
-            except OSError:
-                pass
-    
-    # Save new logo
-    file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
-    logo_filename = f"logo_{user['user_id']}_{uuid.uuid4().hex[:8]}.{file_ext}"
-    logo_path = UPLOAD_DIR / logo_filename
-    
-    with open(logo_path, "wb") as f:
-        f.write(content)
-    
-    logo_url = f"/api/uploads/{logo_filename}"
-    
+    if user_doc and user_doc.get('company_logo_stored_filename'):
+        file_service.delete_file(user_doc['company_logo_stored_filename'])
+
+    result = await file_service.save_logo(file, user['user_id'])
+
     await db.users.update_one(
         {"user_id": user['user_id']},
         {"$set": {
-            "company_logo_url": logo_url,
-            "company_logo_path": str(logo_path),
+            "company_logo_url": result['url'],
+            "company_logo_stored_filename": result['stored_filename'],
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
     )
-    
-    return {
-        "logo_url": logo_url,
-        "message": "Logo uploaded successfully"
-    }
+
+    return {"url": result['url'], "filename": result['original_filename'], "size": result['file_size']}
+
+
+@router.delete("/settings/logo")
+async def delete_company_logo(user: dict = Depends(get_current_agent)):
+    """Delete company logo."""
+    user_doc = await db.users.find_one({"user_id": user['user_id']}, {"_id": 0})
+    if user_doc and user_doc.get('company_logo_stored_filename'):
+        file_service.delete_file(user_doc['company_logo_stored_filename'])
+
+    await db.users.update_one(
+        {"user_id": user['user_id']},
+        {"$set": {
+            "company_logo_url": None,
+            "company_logo_stored_filename": None,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+
+    return {"message": "Logo removed"}
 

@@ -36,7 +36,7 @@ async def create_document(
     summary: Optional[str] = None,
     due_date: Optional[str] = None,
     pdf_filename: Optional[str] = None,
-    pdf_path: Optional[str] = None,
+    pdf_stored_filename: Optional[str] = None,
     ai_extraction_confidence: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a document. Returns the created document dict."""
@@ -94,10 +94,10 @@ async def create_document(
         "notes": notes,
         "summary": summary or '',
         "hero_image_url": None,
-        "hero_image_path": None,
+        "hero_image_stored_filename": None,
         "change_request_comment": None,
         "pdf_filename": pdf_filename,
-        "pdf_path": pdf_path,
+        "pdf_stored_filename": pdf_stored_filename,
         "ai_extraction_confidence": ai_extraction_confidence,
         "parent_document_id": None,
         "due_date": parsed_due,
@@ -231,13 +231,11 @@ async def delete_document(document_id: str, agent_id: str, force: bool = False) 
     if doc['status'] != 'Draft' and not force:
         raise ValueError("Can only delete Draft documents. Use force=true for others.")
 
-    # Cleanup files
-    for fk in ('pdf_path', 'hero_image_path'):
-        if doc.get(fk) and os.path.exists(doc[fk]):
-            try:
-                os.remove(doc[fk])
-            except Exception:
-                pass
+    # Cleanup files via file_service
+    from services.file_service import delete_file
+    for fk in ('pdf_stored_filename', 'hero_image_stored_filename'):
+        if doc.get(fk):
+            delete_file(doc[fk])
 
     await db.documents.delete_one(query)
     return True
@@ -449,7 +447,7 @@ async def document_action(
 
 async def reupload_document(
     document_id: str, agent_id: str,
-    new_pdf_path: str, new_pdf_filename: str,
+    new_stored_filename: str, new_original_filename: str,
     extraction: dict, original_doc: dict,
 ) -> Dict[str, Any]:
     """Update a document with a re-uploaded PDF. Returns updated doc."""
@@ -458,10 +456,10 @@ async def reupload_document(
     current_version = original_doc.get('version', 1)
 
     version_history = original_doc.get('version_history', []) or []
-    if original_doc.get('pdf_path'):
+    if original_doc.get('pdf_stored_filename'):
         version_history.append({
             'version': current_version,
-            'pdf_path': original_doc['pdf_path'],
+            'pdf_stored_filename': original_doc['pdf_stored_filename'],
             'pdf_filename': original_doc.get('pdf_filename'),
             'title': original_doc.get('title'),
             'amount': original_doc.get('amount'),
@@ -477,8 +475,8 @@ async def reupload_document(
         "amount": amount,
         "items": extraction.get('items') if extraction.get('items') else original_doc['items'],
         "supplier_name": extraction.get('supplier_name') or original_doc.get('supplier_name'),
-        "pdf_filename": new_pdf_filename,
-        "pdf_path": new_pdf_path,
+        "pdf_filename": new_original_filename,
+        "pdf_stored_filename": new_stored_filename,
         "ai_extraction_confidence": extraction.get('confidence', 'low'),
         "updated_at": now,
         "version": current_version + 1,

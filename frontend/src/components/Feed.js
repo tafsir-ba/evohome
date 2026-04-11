@@ -97,7 +97,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
   // Check if the attachment is an image
   const hasImageAttachment = activity.file_name && isImageFile(activity.file_name);
   const imageUrl = hasImageAttachment && activity.file_url 
-    ? `${API.replace('/api', '')}${activity.file_url}` 
+    ? `${process.env.REACT_APP_BACKEND_URL}${activity.file_url}` 
     : null;
   
   // Lazy-load replies when expanding
@@ -346,7 +346,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
                 asChild
                 data-testid={`download-file-${activity.activity_id}`}
               >
-                <a href={`${API.replace('/api', '')}${activity.file_url}`} download target="_blank" rel="noopener noreferrer">
+                <a href={`${process.env.REACT_APP_BACKEND_URL}${activity.file_url}`} download target="_blank" rel="noopener noreferrer">
                   <Download className="w-4 h-4" />
                 </a>
               </Button>
