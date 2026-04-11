@@ -2,27 +2,30 @@
 
 ## Architecture
 - **Backend**: FastAPI + Motor (MongoDB async) — canonical SSOT services, thin routes
-- **Frontend**: React 18 + TailwindCSS + Shadcn/UI — decomposed dashboard components
-- **Database**: MongoDB Atlas (`evohome_cmp` — isolated from website `evohome`)
+- **Frontend**: React 18 + TailwindCSS + Shadcn/UI — decomposed dashboard
+- **Database**: MongoDB Atlas (`evohome_cmp`)
 - **Integrations**: OpenAI GPT-4o, Stripe (webhooks verified), Resend, Google OAuth
 
-## What's Been Implemented
-- Complete Real Estate SaaS: auth, projects/units/clients, documents (AI extraction), timelines/workflows
-- Stripe billing with webhook signature verification (production-ready)
-- Control Tower dashboard, decomposed into 5 clean components
-- Real-time feed with batch enrichment (1.0s response)
-- **Unified Change Request System** (FEAT-002): canonical change_request_service, full lifecycle (create/respond/resolve/close), ChangeRequestPanel component on invoice/quote detail pages
-- Code quality: explicit imports, no circular deps, env-var secrets, stable React keys, centralized auth headers
+## Features Implemented
+- Auth (JWT + Google OAuth), Projects/Units/Clients CRUD
+- Documents: Quotes/Invoices with AI extraction, PDF generation, hero images
+- Timelines/Workflows, Real-time Feed, Notifications
+- Stripe billing (webhook verified), Team management, Vault
+- **FEAT-002**: Unified Change Request System (canonical, shared across all entity types)
+- **FEAT-001**: Decisions Module (full lifecycle: create → send → approve/reject/change-request → close)
+- Control Tower dashboard, decomposed architecture
 
-## Production Status
-- Backend: Canonical, clean, all endpoints verified
-- Frontend: Decomposed, auth headers applied to all 23+ files
-- Billing: Webhook endpoint live at `https://app.evo-home.ch/api/billing/webhook`
-- Database: Isolated `evohome_cmp` (no cross-project contamination)
+## Data Model
+- `decisions` + `decision_recipients`: Formal approval requests with lifecycle tracking
+- `change_requests`: Canonical threaded conversations for buyer-agent exchange
+- `documents`, `clients`, `projects`, `units`, `users`, `activities`, `timelines`, `notifications`, `vault_documents`, `team_members`
+
+## Test Accounts
+- Agent: agent@evohome-test.ch / Evohome2026!
+- Buyer: buyer@evohome-test.ch / Evohome2026!
 
 ## Remaining
-- **FEAT-001**: Decisions Module (next — builds on FEAT-002 change request foundation)
-- P2: Hook dependency warnings (74 instances)
+- P2: Hook dependency warnings, BuyerTimeline decomposition
 - P3: Email digests, reporting/export
 
 ---
