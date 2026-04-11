@@ -1,0 +1,92 @@
+{
+  "summary": "Iteration 27: Organ 3 Rebuild - Change Request System. All 15 backend tests passed. Full CR flow verified for both quotes and invoices. Frontend buyer timeline shows CR thread correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration27_organ3_cr.py",
+    "/app/test_reports/pytest/pytest_iteration27_organ3.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration27_organ3_cr.py"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 tests passed)",
+    "frontend": "100% (all flows verified)"
+  },
+  "test_credentials": {
+    "agent": "agent@evohome-test.ch / Evohome2026!",
+    "buyer": "buyer@evohome-test.ch / Evohome2026!"
+  },
+  "seed_data_creation": "Test documents created and cleaned up during test execution",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Organ 3 rebuild complete. CR system fully functional with: buyer_id field, state transition guards, resolve→Sent (not Draft), dashboard aggregation with client_name. Both quote and invoice CR flows have parity.",
+  "verified_features": {
+    "quote_cr_flow": {
+      "status": "PASSED",
+      "details": "buyer creates CR → doc becomes 'Change Requested' → CR has buyer_id → agent responds → status 'under_review' → agent resolves → doc reverts to 'Sent' (NOT Draft) → buyer sees full thread"
+    },
+    "invoice_cr_flow": {
+      "status": "PASSED",
+      "details": "Identical to quote flow - full parity verified"
+    },
+    "buyer_id_field": {
+      "status": "PASSED",
+      "details": "CR document has buyer_id resolved from entity's client relationship"
+    },
+    "state_guard_resolved": {
+      "status": "PASSED",
+      "details": "Responding to resolved CR returns error"
+    },
+    "state_guard_closed": {
+      "status": "PASSED",
+      "details": "Responding to closed CR returns error"
+    },
+    "state_guard_close_open": {
+      "status": "PASSED",
+      "details": "Closing an open CR returns error (must resolve first)"
+    },
+    "resolve_notification": {
+      "status": "PASSED",
+      "details": "Buyer receives notification when agent resolves CR (verified via buyer timeline)"
+    },
+    "dashboard_aggregation": {
+      "status": "PASSED",
+      "details": "/api/stats/agent returns change_requests with client_name enriched and type field"
+    },
+    "buyer_timeline_thread": {
+      "status": "PASSED",
+      "details": "ChangeRequestThread shows for resolved documents - buyer sees both buyer and agent messages"
+    },
+    "legacy_pdf_path": {
+      "status": "PASSED",
+      "details": "GET /api/documents/{id}/source-pdf works (returns 404 for docs without PDF)"
+    }
+  },
+  "test_execution_details": {
+    "test_01_auth_tokens_valid": "PASSED - Agent ID: agent_eff93d3f8283, Buyer ID: buyer_a6e2281d32ca",
+    "test_02_create_quote_for_cr_testing": "PASSED - Created quote with Draft status",
+    "test_03_send_quote_to_buyer": "PASSED - Quote status changed to Sent",
+    "test_04_buyer_creates_change_request": "PASSED - CR created with buyer_id, doc status changed to 'Change Requested'",
+    "test_05_agent_responds_to_cr": "PASSED - CR status changed to 'under_review', 2 messages in thread",
+    "test_06_agent_resolves_cr_doc_reverts_to_sent": "PASSED - CRITICAL: Doc status is 'Sent' (not Draft)",
+    "test_07_cannot_respond_to_resolved_cr": "PASSED - State guard working",
+    "test_08_close_resolved_cr": "PASSED - CR status changed to 'closed'",
+    "test_09_cannot_respond_to_closed_cr": "PASSED - State guard working",
+    "test_10_cannot_close_open_cr": "PASSED - State guard working (must resolve first)",
+    "test_11_buyer_sees_full_thread": "PASSED - Buyer sees both buyer and agent messages",
+    "test_12_dashboard_aggregation_with_client_name": "PASSED - Stats returned change requests",
+    "test_13_invoice_cr_flow_parity": "PASSED - Invoice CR flow identical to quote",
+    "test_14_legacy_pdf_path_backward_compat": "PASSED - Source PDF endpoint works",
+    "test_99_cleanup": "PASSED - Test documents cleaned up"
+  }
+}

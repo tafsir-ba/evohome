@@ -2,7 +2,12 @@
 Canonical Change Request Service.
 
 Single source of truth for all change request operations.
-Supports: quotes, invoices, documents, decisions, and any future entity types.
+One change_requests collection. Message history embedded inside the CR document.
+No second hidden comment system anywhere else.
+
+Supports: quotes, invoices, decisions, and any future entity types.
+Quote and invoice behavior is IDENTICAL. No entity-specific logic except
+for the revert status on resolve (Sent for documents, none for decisions).
 """
 import logging
 import uuid
@@ -13,6 +18,30 @@ from database import db
 
 logger = logging.getLogger(__name__)
 
+# ── Allowed state transitions ──
+ALLOWED_TRANSITIONS = {
+    "open": {"under_review", "resolved"},
+    "under_review": {"resolved"},
+    "resolved": {"closed"},
+    # closed is terminal — no transitions out
+}
+
+
+def _can_transition(current: str, target: str) -> bool:
+    return target in ALLOWED_TRANSITIONS.get(current, set())
+
+
+# ── Entity mapping ──
+
+def _get_entity_collection(entity_type: str) -> Optional[str]:
+    return {"quote": "documents", "invoice": "documents", "document": "documents", "decision": "decisions"}.get(entity_type)
+
+
+def _get_entity_id_field(entity_type: str) -> Optional[str]:
+    return {"quote": "document_id", "invoice": "document_id", "document": "document_id", "decision": "decision_id"}.get(entity_type)
+
+
+# ── Core operations ──
 
 async def create_change_request(
     entity_type: str,
@@ -28,11 +57,28 @@ async def create_change_request(
     cr_id = f"cr_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
 
+    # Resolve buyer_id from the entity's client relationship
+    buyer_id = None
+    if created_by_role == "buyer":
+        buyer_id = created_by
+    else:
+        # Agent creating a CR — resolve buyer from entity
+        collection = _get_entity_collection(entity_type)
+        id_field = _get_entity_id_field(entity_type)
+        if collection and id_field:
+            entity = await db[collection].find_one({id_field: entity_id}, {"_id": 0, "buyer_id": 1, "client_id": 1})
+            if entity:
+                buyer_id = entity.get("buyer_id")
+                if not buyer_id and entity.get("client_id"):
+                    client = await db.clients.find_one({"client_id": entity["client_id"]}, {"_id": 0, "buyer_id": 1})
+                    buyer_id = client.get("buyer_id") if client else None
+
     change_request = {
         "change_request_id": cr_id,
         "entity_type": entity_type,
         "entity_id": entity_id,
         "agent_id": agent_id,
+        "buyer_id": buyer_id,
         "project_id": project_id,
         "status": "open",
         "messages": [
@@ -54,7 +100,7 @@ async def create_change_request(
 
     await db.change_requests.insert_one(change_request)
 
-    # Also update entity status to 'Change Requested' for backwards compatibility
+    # Update entity status to 'Change Requested' + denormalized comment
     collection = _get_entity_collection(entity_type)
     id_field = _get_entity_id_field(entity_type)
     if collection and id_field:
@@ -66,19 +112,15 @@ async def create_change_request(
     logger.info(f"Change request {cr_id} created on {entity_type}/{entity_id} by {created_by}")
     change_request.pop("_id", None)
 
-    # Notify the agent when a buyer creates a change request
+    # Notify agent when buyer creates a CR
     if created_by_role == "buyer" and agent_id:
-        try:
-            from services.notification_service import create_notification
-            await create_notification(
-                user_id=agent_id,
-                title="New Change Request",
-                message=f"Change requested on {entity_type}: {message[:100]}",
-                notification_type="change_request_created",
-                data={"change_request_id": cr_id, "entity_type": entity_type, "entity_id": entity_id},
-            )
-        except Exception as e:
-            logger.warning(f"Failed to create notification for new CR: {e}")
+        await _notify(
+            user_id=agent_id,
+            title="New Change Request",
+            message_text=f"Change requested on {entity_type}: {message[:100]}",
+            notification_type="change_request_created",
+            data={"change_request_id": cr_id, "entity_type": entity_type, "entity_id": entity_id},
+        )
 
     return change_request
 
@@ -91,6 +133,13 @@ async def respond_to_change_request(
     attachments: Optional[List[dict]] = None,
 ) -> Dict[str, Any]:
     """Add a response message to a change request."""
+    # Verify current status allows transition
+    cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0, "status": 1})
+    if not cr:
+        raise ValueError(f"Change request {change_request_id} not found")
+    if cr["status"] not in ("open", "under_review"):
+        raise ValueError(f"Cannot respond to change request in status '{cr['status']}'")
+
     now = datetime.now(timezone.utc).isoformat()
 
     new_message = {
@@ -112,37 +161,29 @@ async def respond_to_change_request(
         projection={"_id": 0},
     )
 
-    if not result:
-        raise ValueError(f"Change request {change_request_id} not found")
-
-    # Create notification for the other party
-    try:
-        if author_role == "agent":
-            # Notify the buyer who created the change request
-            buyer_id = result.get("created_by")
-            if buyer_id and buyer_id != author_id:
-                from services.notification_service import create_notification
-                await create_notification(
-                    user_id=buyer_id,
-                    title="Change Request Response",
-                    message=f"Your change request received a response: {message[:100]}",
-                    notification_type="change_request_response",
-                    data={"change_request_id": change_request_id, "entity_type": result.get("entity_type"), "entity_id": result.get("entity_id")},
-                )
-        elif author_role == "buyer":
-            # Notify the agent
-            agent_id = result.get("agent_id")
-            if agent_id:
-                from services.notification_service import create_notification
-                await create_notification(
-                    user_id=agent_id,
-                    title="New Change Request Message",
-                    message=f"Buyer sent a message: {message[:100]}",
-                    notification_type="change_request_message",
-                    data={"change_request_id": change_request_id, "entity_type": result.get("entity_type"), "entity_id": result.get("entity_id")},
-                )
-    except Exception as e:
-        logger.warning(f"Failed to create notification for CR response: {e}")
+    # Notify the other party
+    if author_role == "agent":
+        # Notify buyer
+        buyer_id = result.get("buyer_id") or result.get("created_by")
+        if buyer_id and buyer_id != author_id:
+            await _notify(
+                user_id=buyer_id,
+                title="Change Request Response",
+                message_text=f"Your agent responded: {message[:100]}",
+                notification_type="change_request_response",
+                data={"change_request_id": change_request_id, "entity_type": result.get("entity_type"), "entity_id": result.get("entity_id")},
+            )
+    elif author_role == "buyer":
+        # Notify agent
+        agent_id = result.get("agent_id")
+        if agent_id:
+            await _notify(
+                user_id=agent_id,
+                title="New Change Request Message",
+                message_text=f"Buyer sent a message: {message[:100]}",
+                notification_type="change_request_message",
+                data={"change_request_id": change_request_id, "entity_type": result.get("entity_type"), "entity_id": result.get("entity_id")},
+            )
 
     logger.info(f"Response added to {change_request_id} by {author_id}")
     return result
@@ -153,7 +194,14 @@ async def resolve_change_request(
     resolved_by: str,
     resolution_note: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Mark a change request as resolved."""
+    """Mark a change request as resolved. Document reverts to Sent (NEVER Draft)."""
+    # Verify current status allows transition
+    cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0, "status": 1})
+    if not cr:
+        raise ValueError(f"Change request {change_request_id} not found")
+    if not _can_transition(cr["status"], "resolved"):
+        raise ValueError(f"Cannot resolve change request in status '{cr['status']}'")
+
     now = datetime.now(timezone.utc).isoformat()
 
     update = {
@@ -182,12 +230,12 @@ async def resolve_change_request(
     if not result:
         raise ValueError(f"Change request {change_request_id} not found")
 
-    # Update entity status — revert to appropriate pre-change-request state
+    # Revert entity status — ALWAYS to Sent for documents, never Draft
     collection = _get_entity_collection(result["entity_type"])
     id_field = _get_entity_id_field(result["entity_type"])
     if collection and id_field:
-        # Invoices/quotes go back to "Sent" (the state before Change Requested)
-        # Decisions stay as-is (handled by decision_service)
+        # Quote and invoice: revert to Sent (identical behavior)
+        # Decision: no status change (handled by decision service)
         revert_status = "Sent" if result["entity_type"] in ("invoice", "quote") else None
         update_fields = {"change_request_comment": None, "updated_at": now}
         if revert_status:
@@ -195,6 +243,17 @@ async def resolve_change_request(
         await db[collection].update_one(
             {id_field: result["entity_id"]},
             {"$set": update_fields}
+        )
+
+    # Notify buyer that CR is resolved
+    buyer_id = result.get("buyer_id") or result.get("created_by")
+    if buyer_id and buyer_id != resolved_by:
+        await _notify(
+            user_id=buyer_id,
+            title="Change Request Resolved",
+            message_text=f"Your change request on {result.get('entity_type', 'document')} has been resolved",
+            notification_type="change_request_resolved",
+            data={"change_request_id": change_request_id, "entity_type": result.get("entity_type"), "entity_id": result.get("entity_id")},
         )
 
     logger.info(f"Change request {change_request_id} resolved by {resolved_by}")
@@ -205,7 +264,13 @@ async def close_change_request(
     change_request_id: str,
     closed_by: str,
 ) -> Dict[str, Any]:
-    """Close a change request (final state)."""
+    """Close a change request (final state). No notification."""
+    cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0, "status": 1})
+    if not cr:
+        raise ValueError(f"Change request {change_request_id} not found")
+    if not _can_transition(cr["status"], "closed"):
+        raise ValueError(f"Cannot close change request in status '{cr['status']}'")
+
     now = datetime.now(timezone.utc).isoformat()
 
     result = await db.change_requests.find_one_and_update(
@@ -221,6 +286,8 @@ async def close_change_request(
     logger.info(f"Change request {change_request_id} closed by {closed_by}")
     return result
 
+
+# ── Query operations ──
 
 async def list_change_requests(
     agent_id: str,
@@ -248,39 +315,30 @@ async def list_change_requests(
 
 
 async def get_change_request(change_request_id: str) -> Optional[Dict[str, Any]]:
-    """Get a single change request by ID."""
-    cr = await db.change_requests.find_one(
+    return await db.change_requests.find_one(
         {"change_request_id": change_request_id}, {"_id": 0}
     )
-    return cr
 
 
 async def get_change_requests_for_entity(entity_type: str, entity_id: str) -> List[Dict[str, Any]]:
-    """Get all change requests for a specific entity."""
-    items = await db.change_requests.find(
+    return await db.change_requests.find(
         {"entity_type": entity_type, "entity_id": entity_id},
         {"_id": 0}
     ).sort("created_at", -1).to_list(50)
-    return items
 
 
-def _get_entity_collection(entity_type: str) -> Optional[str]:
-    """Map entity type to MongoDB collection."""
-    mapping = {
-        "quote": "documents",
-        "invoice": "documents",
-        "document": "documents",
-        "decision": "decisions",
-    }
-    return mapping.get(entity_type)
+# ── Private helpers ──
 
-
-def _get_entity_id_field(entity_type: str) -> Optional[str]:
-    """Map entity type to its ID field name."""
-    mapping = {
-        "quote": "document_id",
-        "invoice": "document_id",
-        "document": "document_id",
-        "decision": "decision_id",
-    }
-    return mapping.get(entity_type)
+async def _notify(user_id: str, title: str, message_text: str, notification_type: str, data: dict):
+    """Create a notification. Failure is non-blocking."""
+    try:
+        from services.notification_service import create_notification
+        await create_notification(
+            user_id=user_id,
+            title=title,
+            message=message_text,
+            notification_type=notification_type,
+            data=data,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to create notification ({notification_type}): {e}")

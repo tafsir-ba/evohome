@@ -174,47 +174,52 @@ export const AgentDashboard = () => {
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Change Requests - Priority - Clickable header */}
+          {/* Change Requests - Priority - Aggregated across entity types */}
           <Card className="border-border rounded-lg">
             <CardHeader className="border-b border-border">
-              <Link to="/agent/quotes?status=Change+Requested" className="flex items-center justify-between hover:opacity-80 transition-opacity">
+              <div className="flex items-center justify-between">
                 <CardTitle className="text-lg font-outfit font-semibold flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-amber-500" />
                   Change Requests
                 </CardTitle>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium px-2 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-400 rounded-lg">
-                    {stats?.change_requests?.length || 0} pending
-                  </span>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                </div>
-              </Link>
+                <span className="text-xs font-medium px-2 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-400 rounded-lg">
+                  {stats?.change_requests?.length || 0} pending
+                </span>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               {stats?.change_requests?.length > 0 ? (
                 <div className="divide-y divide-border">
-                  {stats.change_requests.map((quote) => (
-                    <Link 
-                      key={quote.document_id} 
-                      to={`/agent/quotes/${quote.document_id}`}
-                      className="flex items-start gap-4 p-4 hover:bg-muted/50 transition-colors"
-                      data-testid={`change-request-${quote.document_id}`}
-                    >
-                      <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <MessageSquare className="w-4 h-4 text-amber-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground truncate">{quote.title}</p>
-                        <p className="text-sm text-muted-foreground">{[quote.document_number, quote.client_name, quote.unit_reference].filter(Boolean).join(' · ')}</p>
-                        {quote.change_request_comment && (
-                          <p className="text-sm text-amber-700 dark:text-amber-400 mt-2 line-clamp-2 bg-amber-500/10 p-2 rounded-lg">
-                            "{quote.change_request_comment}"
-                          </p>
-                        )}
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
-                    </Link>
-                  ))}
+                  {stats.change_requests.map((doc) => {
+                    const detailPath = doc.type === 'invoice' 
+                      ? `/agent/invoices/${doc.document_id}` 
+                      : `/agent/quotes/${doc.document_id}`;
+                    return (
+                      <Link 
+                        key={doc.document_id} 
+                        to={detailPath}
+                        className="flex items-start gap-4 p-4 hover:bg-muted/50 transition-colors"
+                        data-testid={`change-request-${doc.document_id}`}
+                      >
+                        <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <MessageSquare className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-foreground truncate">{doc.title}</p>
+                            <span className="text-xs px-1.5 py-0.5 bg-muted rounded capitalize">{doc.type}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">{[doc.document_number, doc.client_name, doc.unit_reference].filter(Boolean).join(' · ')}</p>
+                          {doc.change_request_comment && (
+                            <p className="text-sm text-amber-700 dark:text-amber-400 mt-2 line-clamp-2 bg-amber-500/10 p-2 rounded-lg">
+                              "{doc.change_request_comment}"
+                            </p>
+                          )}
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
+                      </Link>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="p-8 text-center">

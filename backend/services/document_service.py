@@ -236,6 +236,13 @@ async def delete_document(document_id: str, agent_id: str, force: bool = False) 
     for fk in ('pdf_stored_filename', 'hero_image_stored_filename'):
         if doc.get(fk):
             delete_file(doc[fk])
+    # Backward compatibility: clean up legacy absolute paths
+    for fk in ('pdf_path', 'hero_image_path'):
+        if doc.get(fk) and os.path.exists(doc[fk]):
+            try:
+                os.remove(doc[fk])
+            except Exception:
+                pass
 
     await db.documents.delete_one(query)
     return True

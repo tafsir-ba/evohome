@@ -202,6 +202,12 @@ async def get_document_source_pdf(document_id: str, user: dict = Depends(get_cur
         raise HTTPException(status_code=404, detail="Document not found")
 
     stored = doc.get("pdf_stored_filename")
+    # Backward compatibility: old documents have pdf_path (absolute path)
+    legacy_path = doc.get("pdf_path")
+    if not stored and legacy_path:
+        import os
+        if os.path.exists(legacy_path):
+            return FileResponse(legacy_path, media_type="application/pdf", filename=doc.get("pdf_filename", "document.pdf"))
     if not stored:
         raise HTTPException(status_code=404, detail="Source PDF not found")
 
@@ -244,6 +250,14 @@ async def get_hero_image(document_id: str, user: dict = Depends(get_current_user
         raise HTTPException(status_code=404, detail="Document not found")
 
     stored = doc.get("hero_image_stored_filename")
+    # Backward compatibility: old documents have hero_image_path (absolute path)
+    legacy_path = doc.get("hero_image_path")
+    if not stored and legacy_path:
+        import os
+        if os.path.exists(legacy_path):
+            ext = legacy_path.split(".")[-1].lower()
+            media = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
+            return FileResponse(legacy_path, media_type=media)
     if not stored:
         raise HTTPException(status_code=404, detail="Hero image not found")
 
@@ -267,11 +281,21 @@ async def delete_hero_image(document_id: str, user: dict = Depends(get_current_a
     stored = doc.get("hero_image_stored_filename")
     if stored:
         file_service.delete_file(stored)
+    # Backward compatibility: clean up legacy absolute path
+    legacy_path = doc.get("hero_image_path")
+    if legacy_path:
+        import os
+        if os.path.exists(legacy_path):
+            try:
+                os.remove(legacy_path)
+            except OSError:
+                pass
 
     from datetime import timezone
     await db.documents.update_one(query, {"$set": {
         "hero_image_url": None,
         "hero_image_stored_filename": None,
+        "hero_image_path": None,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }})
     return {"message": "Hero image deleted"}

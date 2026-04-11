@@ -78,6 +78,17 @@ async def get_agent_stats(user: dict = Depends(get_current_agent)):
         {"agent_id": agent_id, "status": "Change Requested"},
         {"_id": 0}
     ).to_list(20)
+
+    # Enrich change requests with client_name
+    cr_client_ids = list({d["client_id"] for d in change_requests if d.get("client_id")})
+    if cr_client_ids:
+        cr_clients = await db.clients.find(
+            {"client_id": {"$in": cr_client_ids}}, {"_id": 0, "client_id": 1, "name": 1}
+        ).to_list(len(cr_client_ids))
+        cr_client_map = {c["client_id"]: c["name"] for c in cr_clients}
+        for d in change_requests:
+            if not d.get("client_name"):
+                d["client_name"] = cr_client_map.get(d.get("client_id"))
     
     # Open change requests from canonical system
     open_change_requests = await db.change_requests.count_documents(
