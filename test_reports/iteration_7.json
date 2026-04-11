@@ -1,0 +1,74 @@
+{
+  "summary": "Phase 2 Content Layer - Backend API Regression Tests PASSED. All 32 tests passed covering 4 Phase 2 modules (Activity, Document, VaultDocument, Notification) with V2 routes and canonical services. Verified is_demo field is NOT present in any Phase 2 module response.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase2_content_layer.py",
+    "/app/test_reports/pytest/pytest_phase2_content_layer.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "All Phase 2 services correctly exclude is_demo via MongoDB projection {'is_demo': 0}",
+    "activity_service.enrich_activity() also pops is_demo as a safety net",
+    "notification_bridge.py correctly wraps legacy create_notification with is_demo=False",
+    "All V2 routes (activities_v2, documents_v2, vault_v2, notifications_v2) are thin layers delegating to canonical services",
+    "Document timeline endpoint moved from timeline_view.py to documents_v2.py as GET /api/timeline"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase2_content_layer.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A (backend only test)"
+  },
+  "test_credentials": {
+    "email": "e2e@evohome-test.com",
+    "password": "Test2026!"
+  },
+  "seed_data_creation": "Test data created and cleaned up during tests (TEST_ prefixed resources)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 2 Content Layer complete. All 4 modules (Activity, Document, VaultDocument, Notification) have V2 routes working correctly. is_demo field is properly excluded from all Phase 2 responses. Phase 1 modules (Project, Client, Timeline) continue to work correctly (regression verified).",
+  "tests_executed": {
+    "total": 32,
+    "passed": 32,
+    "failed": 0,
+    "skipped": 0
+  },
+  "endpoints_tested": [
+    "GET /api/health",
+    "GET /api/ready",
+    "GET /api/projects (Phase 1 regression)",
+    "GET /api/clients (Phase 1 regression)",
+    "GET /api/project-timeline (Phase 1 regression)",
+    "GET /api/activities",
+    "POST /api/activities",
+    "GET /api/activities/{id}",
+    "POST /api/activities/{id}/reply",
+    "POST /api/activities/mark-seen",
+    "GET /api/activities/unread-count",
+    "PUT /api/activities/{id}",
+    "DELETE /api/activities/{id}",
+    "GET /api/documents",
+    "POST /api/documents/create",
+    "GET /api/documents/{id}",
+    "PUT /api/documents/{id}",
+    "DELETE /api/documents/{id}",
+    "POST /api/documents/{id}/send",
+    "POST /api/documents/{id}/revert-to-draft",
+    "GET /api/documents/{id}/pdf",
+    "GET /api/timeline",
+    "GET /api/vault/documents",
+    "GET /api/vault/categories",
+    "GET /api/notifications",
+    "PATCH /api/notifications/read-all"
+  ],
+  "is_demo_verification": "PASSED - is_demo field NOT found in any Phase 2 module response (Activity, Document, Vault, Notification)"
+}

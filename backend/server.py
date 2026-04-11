@@ -201,15 +201,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 from routes.auth import router as auth_router
 from routes.projects_v2 import router as projects_router
 from routes.clients_v2 import router as clients_router
-from routes.documents import router as documents_router
-from routes.timeline_view import router as timeline_view_router
-from routes.notifications import router as notifications_router
+from routes.documents_v2 import router as documents_router
+from routes.notifications_v2 import router as notifications_router
 from routes.steps_v2 import router as steps_router
 from routes.dashboard import router as dashboard_router
-from routes.activities import router as activities_router
+from routes.activities_v2 import router as activities_router
 from routes.timelines_v2 import router as timelines_router
 from routes.stats import router as stats_router
-from routes.vault import router as vault_router
+from routes.vault_v2 import router as vault_router
 from routes.analytics import router as analytics_router
 from routes.test_endpoints import router as test_endpoints_router
 from routes.demo import router as demo_router
@@ -225,7 +224,7 @@ from routes.projects import router as projects_team_router  # Team endpoints onl
 
 for r in [
     auth_router, projects_router, clients_router, documents_router,
-    timeline_view_router, notifications_router, steps_router,
+    notifications_router, steps_router,
     dashboard_router, activities_router, timelines_router,
     stats_router, vault_router, analytics_router, test_endpoints_router,
     demo_router, billing_router, invitations_router, settings_router,
