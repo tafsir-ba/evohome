@@ -1,11 +1,27 @@
 {
-  "timestamp": "2026-04-10T23:50:05.033164+00:00",
+  "timestamp": "2026-04-11T00:28:31.742001+00:00",
   "total": 76,
-  "passed": 75,
-  "failed": 1,
-  "pass_rate": "98.7%",
-  "verdict": "ISOLATED",
+  "passed": 71,
+  "failed": 5,
+  "pass_rate": "93.4%",
+  "verdict": "FRAGILE",
   "findings": [
+    {
+      "test": "Unit has is_demo field",
+      "detail": "keys: ['unit_id', 'project_id', 'agent_id', 'unit_reference', 'assigned_client_id', 'is_available', 'status', 'notes', 'created_at', 'assigned_client_name']"
+    },
+    {
+      "test": "Assign client to unit",
+      "detail": ""
+    },
+    {
+      "test": "Client.unit_id updated",
+      "detail": ""
+    },
+    {
+      "test": "Unit shows assigned_client_id",
+      "detail": "got: None"
+    },
     {
       "test": "PDF generation works",
       "detail": "got 0: {'error': \"'utf-8' codec can't decode byte 0x93 in position 10: invalid start byte\"}"

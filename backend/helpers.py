@@ -20,23 +20,15 @@ def secure_filename(filename: str) -> str:
 # ==================== DEMO FILTER HELPERS ====================
 
 def get_demo_filter(user: dict) -> dict:
-    """
-    Get is_demo filter for queries during migration period.
-    Production: filter by user's is_demo flag.
-    Demo deployment (DEMO_MODE=true): no filter needed.
-    """
-    if app_config.DEMO_MODE:
-        return {}
-    else:
-        return {"is_demo": user.get('is_demo', False)}
+    """DEPRECATED — returns empty dict. is_demo removed from canonical architecture."""
+    return {}
 
 
 def build_query(user: dict, **filters) -> dict:
-    """Build a query with proper ownership and demo isolation."""
+    """Build a query with proper ownership. No is_demo filtering."""
     query = {**filters}
     if user.get('role') == 'agent' and 'agent_id' not in query:
         query['agent_id'] = user['user_id']
-    query.update(get_demo_filter(user))
     return query
 
 

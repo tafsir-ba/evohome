@@ -84,29 +84,30 @@ async def lifespan(app: FastAPI):
 
     # ── P2: Compound indexes for hot query paths ──
     try:
-        # Projects: agent dashboard list (most common query)
-        await db.projects.create_index([("agent_id", 1), ("is_demo", 1)])
-        # Units: project detail page + assignment check
-        await db.units.create_index([("project_id", 1), ("is_demo", 1)])
+        # Projects: agent dashboard list
+        await db.projects.create_index([("agent_id", 1), ("status", 1)])
+        # Units: project detail page
+        await db.units.create_index([("project_id", 1), ("status", 1)])
+        await db.units.create_index([("agent_id", 1)])
         # Clients: project client list + buyer lookup
-        await db.clients.create_index([("agent_id", 1), ("is_demo", 1)])
-        await db.clients.create_index([("project_id", 1), ("is_demo", 1)])
-        await db.clients.create_index([("buyer_id", 1), ("is_demo", 1)])
-        await db.clients.create_index([("unit_id", 1), ("is_demo", 1)])
+        await db.clients.create_index([("agent_id", 1), ("status", 1)])
+        await db.clients.create_index([("project_id", 1)])
+        await db.clients.create_index([("buyer_id", 1)])
+        await db.clients.create_index([("unit_id", 1)])
         # Documents: agent document list
-        await db.documents.create_index([("agent_id", 1), ("is_demo", 1)])
-        await db.documents.create_index([("project_id", 1), ("is_demo", 1)])
-        await db.documents.create_index([("client_id", 1), ("is_demo", 1)])
+        await db.documents.create_index([("agent_id", 1), ("type", 1)])
+        await db.documents.create_index([("project_id", 1)])
+        await db.documents.create_index([("client_id", 1)])
         # Timeline steps: ordered by timeline + order_index
         await db.timeline_steps.create_index([("timeline_id", 1), ("order_index", 1)])
-        await db.timeline_steps.create_index([("project_id", 1), ("is_demo", 1)])
+        await db.timeline_steps.create_index([("project_id", 1)])
         # Activities: project feed
-        await db.activities.create_index([("project_id", 1), ("is_demo", 1)])
-        await db.activities.create_index([("agent_id", 1), ("is_demo", 1)])
+        await db.activities.create_index([("project_id", 1)])
+        await db.activities.create_index([("agent_id", 1)])
         # Notifications: user + read status (unread count query)
-        await db.notifications.create_index([("user_id", 1), ("read", 1)])
+        await db.notifications.create_index([("user_id", 1), ("is_read", 1)])
         # Vault: agent vault list
-        await db.vault_documents.create_index([("agent_id", 1), ("is_demo", 1)])
+        await db.vault_documents.create_index([("agent_id", 1)])
         logger.info("Compound indexes created/verified")
     except Exception as e:
         logger.warning(f"Compound index creation warning: {e}")
@@ -199,11 +200,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 from routes.auth import router as auth_router
 from routes.projects import router as projects_router
-from routes.clients import router as clients_router
+from routes.clients_v2 import router as clients_router
 from routes.documents import router as documents_router
 from routes.timeline_view import router as timeline_view_router
 from routes.notifications import router as notifications_router
-from routes.steps import router as steps_router
+from routes.steps_v2 import router as steps_router
 from routes.dashboard import router as dashboard_router
 from routes.activities import router as activities_router
 from routes.timelines import router as timelines_router
@@ -217,6 +218,7 @@ from routes.invitations import router as invitations_router
 from routes.settings import router as settings_router
 from routes.admin import router as admin_router
 from routes.commands import router as commands_router
+from routes.units import router as units_router
 from routes.doc_extraction import router as doc_extraction_router
 from routes.workflows import router as workflows_router
 
@@ -227,6 +229,7 @@ for r in [
     stats_router, vault_router, analytics_router, test_endpoints_router,
     demo_router, billing_router, invitations_router, settings_router,
     admin_router, commands_router, doc_extraction_router, workflows_router,
+    units_router,
 ]:
     api_router.include_router(r)
 
