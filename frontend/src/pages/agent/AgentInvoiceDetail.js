@@ -26,8 +26,12 @@ import {
   CreditCard,
   User,
   Pencil,
-  Trash2
+  Trash2,
+  AlertCircle,
+  MessageSquare,
+  Send
 } from 'lucide-react';
+import { Textarea } from '../../components/ui/textarea';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
@@ -133,8 +137,28 @@ export const AgentInvoiceDetail = () => {
   };
 
   const handleEdit = () => {
-    // Navigate to edit page with invoice data
     navigate(`/agent/invoices/edit/${invoiceId}`);
+  };
+
+  const handleResend = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`${API}/documents/${invoiceId}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'send' })
+      });
+      if (response.ok) {
+        toast.success('Invoice resent to buyer');
+        fetchInvoice();
+      } else {
+        const error = await response.json();
+        toast.error(error.detail || 'Failed to resend');
+      }
+    } catch (error) {
+      toast.error('Failed to resend invoice');
+    }
   };
 
   if (loading) {
@@ -213,6 +237,47 @@ export const AgentInvoiceDetail = () => {
             )}
           </div>
         </div>
+
+        {/* Change Request Alert */}
+        {invoice.status === 'Change Requested' && invoice.change_request_comment && (
+          <Card className="border-amber-500/30 bg-amber-500/5 rounded-lg" data-testid="change-request-alert">
+            <CardContent className="p-5">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0">
+                  <AlertCircle className="w-5 h-5 text-amber-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-amber-800 dark:text-amber-200">Change Requested by Buyer</h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1 whitespace-pre-wrap">
+                    {invoice.change_request_comment}
+                  </p>
+                  <div className="flex gap-2 mt-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-500/30 text-amber-700 hover:bg-amber-500/10"
+                      onClick={handleEdit}
+                      data-testid="edit-from-change-request"
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Edit Invoice
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-500/30 text-amber-700 hover:bg-amber-500/10"
+                      onClick={handleResend}
+                      data-testid="resend-from-change-request"
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Resend to Buyer
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content */}

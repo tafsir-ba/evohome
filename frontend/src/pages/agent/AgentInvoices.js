@@ -204,6 +204,11 @@ export const AgentInvoices = () => {
                           Due {formatDate(invoice.due_date)}
                           {invoice.paid_date && ` · Paid ${formatDate(invoice.paid_date)}`}
                         </p>
+                        {invoice.status === 'Change Requested' && invoice.change_request_comment && (
+                          <div className="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/20" data-testid={`change-request-${id}`}>
+                            <p className="text-xs font-medium text-amber-700">Buyer comment: {invoice.change_request_comment}</p>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="text-right mr-2">
