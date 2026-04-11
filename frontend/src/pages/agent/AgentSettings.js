@@ -385,7 +385,9 @@ export const AgentSettings = () => {
     );
   }
 
-  const usagePercent = subscriptionStatus?.usage_percent || 0;
+  const usagePercent = subscriptionStatus?.property_limit 
+    ? Math.round((subscriptionStatus.unit_usage / subscriptionStatus.property_limit) * 100) 
+    : 0;
   const canUploadLogo = subscriptionStatus?.plan_id === 'pro' || subscriptionStatus?.plan_id === 'enterprise';
 
   return (
@@ -855,7 +857,7 @@ export const AgentSettings = () => {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-muted-foreground">Project Usage</span>
                       <span className="text-sm font-medium">
-                        {subscriptionStatus?.property_usage} / {subscriptionStatus?.property_limit ?? '∞'}
+                        {subscriptionStatus?.unit_usage} / {subscriptionStatus?.property_limit ?? '∞'}
                       </span>
                     </div>
                     <Progress value={usagePercent} className="h-2" />

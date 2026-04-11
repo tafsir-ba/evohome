@@ -112,7 +112,7 @@ export const AgentProjects = () => {
     }
 
     // Check subscription limit before creating (frontend validation)
-    if (!editingProject && subscriptionStatus && !subscriptionStatus.can_create_property) {
+    if (!editingProject && subscriptionStatus && !subscriptionStatus.can_create_unit) {
       setShowDialog(false);
       setShowLimitModal(true);
       return;
@@ -274,7 +274,7 @@ export const AgentProjects = () => {
             </h1>
             <p className="text-muted-foreground mt-1">{t('projects.subtitle')}</p>
           </div>
-          {subscriptionStatus && !subscriptionStatus.can_create_property ? (
+          {subscriptionStatus && !subscriptionStatus.can_create_unit ? (
             <Link to="/agent/billing">
               <Button className="rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600" data-testid="upgrade-plan-btn">
                 <Zap className="w-4 h-4 mr-2" />
@@ -294,13 +294,15 @@ export const AgentProjects = () => {
         </div>
 
         {/* 80% Usage Warning (soft warning) */}
-        {subscriptionStatus && subscriptionStatus.near_limit && subscriptionStatus.can_create_property && (
+        {subscriptionStatus && subscriptionStatus.property_limit && 
+         subscriptionStatus.unit_usage >= subscriptionStatus.property_limit * 0.8 && 
+         subscriptionStatus.can_create_unit && (
           <Card className="border-amber-500/30 bg-amber-500/5 rounded-lg">
             <CardContent className="py-3 px-5 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-500" />
                 <p className="text-sm text-muted-foreground">
-                  You're approaching your property limit ({subscriptionStatus.property_usage} / {subscriptionStatus.property_limit} used)
+                  You're approaching your property limit ({subscriptionStatus.unit_usage} / {subscriptionStatus.property_limit} used)
                 </p>
               </div>
               <Link to="/agent/billing">
@@ -314,7 +316,7 @@ export const AgentProjects = () => {
         )}
 
         {/* Property Limit Warning Banner (hard limit) */}
-        {subscriptionStatus && !subscriptionStatus.can_create_property && (
+        {subscriptionStatus && !subscriptionStatus.can_create_unit && (
           <Card className="border-amber-500/50 bg-amber-500/5 rounded-lg">
             <CardContent className="py-4 px-5 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -345,11 +347,11 @@ export const AgentProjects = () => {
             <span className="text-muted-foreground">Property usage:</span>
             <div className="flex items-center gap-2 flex-1 max-w-xs">
               <Progress 
-                value={(subscriptionStatus.property_usage / subscriptionStatus.property_limit) * 100} 
+                value={(subscriptionStatus.unit_usage / subscriptionStatus.property_limit) * 100} 
                 className="h-2 flex-1" 
               />
               <span className="font-medium text-foreground">
-                {subscriptionStatus.property_usage} / {subscriptionStatus.property_limit}
+                {subscriptionStatus.unit_usage} / {subscriptionStatus.property_limit}
               </span>
             </div>
           </div>
@@ -645,7 +647,7 @@ export const AgentProjects = () => {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Current usage</span>
                 <span className="font-semibold">
-                  {subscriptionStatus?.property_usage} / {subscriptionStatus?.property_limit}
+                  {subscriptionStatus?.unit_usage} / {subscriptionStatus?.property_limit}
                 </span>
               </div>
               <Progress 

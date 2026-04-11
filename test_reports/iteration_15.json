@@ -1,0 +1,66 @@
+{
+  "summary": "Frontend canonical alignment testing complete. All 12 test cases PASSED. Verified: (1) is_demo blocks removed from AgentLayout.js and BuyerLayout.js - no DEMO badges visible, (2) billing field names aligned to Phase 4 backend contract (unit_usage, can_create_unit, property_limit), (3) usage_percent and near_limit computed locally in frontend, (4) demo agent and buyer login flows work end-to-end.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_15.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AGENTLAYOUT.JS VERIFIED: No is_demo block - DEMO badge removed",
+    "BUYERLAYOUT.JS VERIFIED: No is_demo block - DEMO badge removed",
+    "AGENTBILLING.JS VERIFIED: Uses unit_usage (not property_usage), can_create_unit (not can_create_property), usage_percent computed locally",
+    "AGENTPROJECTS.JS VERIFIED: Uses unit_usage, can_create_unit, near_limit computed locally (>= 80% of property_limit)",
+    "AGENTSETTINGS.JS VERIFIED: Uses unit_usage, usage_percent computed locally",
+    "BACKEND CONTRACT VERIFIED: /api/billing/status returns unit_usage, can_create_unit, property_limit (not property_usage, can_create_property)"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend only test)",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "demo_agent": {
+      "email": "demo.agent@upgradeflow.com",
+      "password": "demo123"
+    },
+    "demo_buyers": ["Sophie", "Thomas"]
+  },
+  "seed_data_creation": "Demo seed via POST /api/demo/seed creates agent with 'pro' plan",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Frontend canonical alignment complete. All billing pages now use unit_usage (not property_usage) and can_create_unit (not can_create_property). The is_demo UI blocks have been removed from both AgentLayout.js and BuyerLayout.js. Backend billing/status endpoint returns: plan_id, plan_name, property_limit, current_unit_count, subscription_status, subscription_period_end, stripe_subscription_id, stripe_customer_id, unit_limit, unit_usage, can_create_unit.",
+  "tests_executed": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0,
+    "skipped": 0
+  },
+  "frontend_alignment_verification": {
+    "is_demo_removal": {
+      "AgentLayout_no_demo_badge": "PASSED",
+      "BuyerLayout_no_demo_badge": "PASSED"
+    },
+    "billing_field_alignment": {
+      "AgentBilling_uses_unit_usage": "PASSED",
+      "AgentBilling_uses_can_create_unit": "PASSED",
+      "AgentBilling_computes_usage_percent_locally": "PASSED",
+      "AgentBilling_computes_near_limit_locally": "PASSED",
+      "AgentProjects_uses_unit_usage": "PASSED",
+      "AgentProjects_uses_can_create_unit": "PASSED",
+      "AgentProjects_computes_near_limit_locally": "PASSED",
+      "AgentSettings_uses_unit_usage": "PASSED"
+    },
+    "demo_login_flows": {
+      "demo_agent_login_e2e": "PASSED",
+      "demo_buyer_login_e2e": "PASSED"
+    }
+  }
+}

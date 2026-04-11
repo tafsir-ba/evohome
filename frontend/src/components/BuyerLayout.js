@@ -112,11 +112,6 @@ export const BuyerLayout = ({ children }) => {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                {user?.is_demo && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded mt-1">
-                    DEMO
-                  </span>
-                )}
               </div>
             </div>
             <Button

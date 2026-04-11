@@ -234,9 +234,12 @@ export const AgentBilling = () => {
     );
   }
 
-  const usagePercent = subscriptionStatus?.usage_percent || 0;
-  const isNearLimit = subscriptionStatus?.near_limit;
-  const isAtLimit = !subscriptionStatus?.can_create_property && subscriptionStatus?.property_limit;
+  const usagePercent = subscriptionStatus?.property_limit 
+    ? Math.round((subscriptionStatus.unit_usage / subscriptionStatus.property_limit) * 100) 
+    : 0;
+  const isNearLimit = subscriptionStatus?.property_limit && 
+    subscriptionStatus.unit_usage >= subscriptionStatus.property_limit * 0.8;
+  const isAtLimit = !subscriptionStatus?.can_create_unit && subscriptionStatus?.property_limit;
 
   return (
     <AgentLayout>
@@ -259,7 +262,7 @@ export const AgentBilling = () => {
               <div className="flex-1">
                 <p className="font-medium text-foreground">Approaching property limit</p>
                 <p className="text-sm text-muted-foreground">
-                  You're using {subscriptionStatus?.property_usage} of {subscriptionStatus?.property_limit} properties ({Math.round(usagePercent)}%). 
+                  You're using {subscriptionStatus?.unit_usage} of {subscriptionStatus?.property_limit} properties ({Math.round(usagePercent)}%). 
                   Consider upgrading to avoid interruption.
                 </p>
               </div>
@@ -341,7 +344,7 @@ export const AgentBilling = () => {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-muted-foreground">Property Usage</span>
                   <span className="text-sm font-medium">
-                    {subscriptionStatus?.property_usage} / {subscriptionStatus?.property_limit ?? '∞'}
+                    {subscriptionStatus?.unit_usage} / {subscriptionStatus?.property_limit ?? '∞'}
                   </span>
                 </div>
                 <Progress 
@@ -352,7 +355,7 @@ export const AgentBilling = () => {
                   {isAtLimit 
                     ? 'Property limit reached - upgrade to create more'
                     : subscriptionStatus?.property_limit 
-                      ? `${subscriptionStatus.property_limit - subscriptionStatus.property_usage} properties remaining`
+                      ? `${subscriptionStatus.property_limit - subscriptionStatus.unit_usage} properties remaining`
                       : 'Unlimited properties'
                   }
                 </p>
@@ -519,7 +522,7 @@ export const AgentBilling = () => {
               <div className="flex justify-between items-center py-2 border-b border-border">
                 <span className="text-muted-foreground">Property Usage</span>
                 <span className="font-medium">
-                  {subscriptionStatus.property_usage} / {subscriptionStatus.property_limit ?? '∞'}
+                  {subscriptionStatus.unit_usage} / {subscriptionStatus.property_limit ?? '∞'}
                 </span>
               </div>
               {subscriptionStatus.current_period_end && (
