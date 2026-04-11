@@ -310,12 +310,15 @@ export const AgentQuoteUpload = () => {
                 onSelect={setSelectedClient}
                 loading={false}
               />
-              {clients.find(c => c.client_id === selectedClient) && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  Project: {clients.find(c => c.client_id === selectedClient)?.project_name || 'N/A'} | 
-                  Unit: {clients.find(c => c.client_id === selectedClient)?.unit_reference}
-                </p>
-              )}
+              {clients.find(c => c.client_id === selectedClient) && (() => {
+                const c = clients.find(c => c.client_id === selectedClient);
+                const parts = [c?.project_name, c?.unit_reference].filter(Boolean);
+                return parts.length > 0 ? (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {parts.join(' · ')}
+                  </p>
+                ) : null;
+              })()}
             </CardContent>
           </Card>
         )}

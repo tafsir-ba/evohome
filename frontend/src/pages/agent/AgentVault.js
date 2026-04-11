@@ -600,7 +600,7 @@ const AccessLevelPicker = ({ accessLevel, clientIds, clients, projectId, onAcces
                 }} className="rounded border-border" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{client.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{client.unit_reference || 'No unit'} &middot; {client.email}</p>
+                  <p className="text-xs text-muted-foreground truncate">{[client.project_name, client.unit_reference].filter(Boolean).join(' / ') || client.email}</p>
                 </div>
               </label>
             ))

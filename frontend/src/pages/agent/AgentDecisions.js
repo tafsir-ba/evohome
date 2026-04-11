@@ -367,7 +367,7 @@ export const AgentDecisions = () => {
                           client_ids: checked ? [...f.client_ids, c.client_id] : f.client_ids.filter(id => id !== c.client_id)
                         }))}
                       />
-                      <label className="text-sm">{c.name}{c.unit_reference && <span className="text-muted-foreground ml-1">({c.unit_reference})</span>}</label>
+                      <label className="text-sm">{[c.name, c.project_name, c.unit_reference].filter(Boolean).join(' — ')}</label>
                     </div>
                   ))}
                 </div>

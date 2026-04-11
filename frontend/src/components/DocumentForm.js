@@ -22,7 +22,7 @@ import {
   Eye,
   ImageIcon
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatClientContextCompact } from '../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 const BASE_URL = process.env.REACT_APP_BACKEND_URL;
@@ -436,12 +436,7 @@ export const ClientSelector = ({ clients, selectedClient, onSelect, loading }) =
         <SelectContent>
           {clients.map(client => (
             <SelectItem key={client.client_id} value={client.client_id}>
-              {client.name}
-              {(client.project_name || client.unit_reference) && (
-                <span className="text-muted-foreground ml-1">
-                  ({[client.project_name, client.unit_reference].filter(Boolean).join(' / ')})
-                </span>
-              )}
+              {formatClientContextCompact(client)}
             </SelectItem>
           ))}
         </SelectContent>

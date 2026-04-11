@@ -384,7 +384,7 @@ export const AgentInvoiceDetail = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4">
-                <p className="font-medium text-[#1A1A1A]">{invoice.project_name || invoice.project?.name || 'N/A'}</p>
+                <p className="font-medium text-[#1A1A1A]">{invoice.project_name || invoice.project?.name}</p>
                 <div className="flex items-start gap-2 mt-2 text-sm text-muted-foreground">
                   <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
                   <p>{invoice.project?.address}</p>

@@ -201,7 +201,7 @@ export const AgentClients = () => {
 
   const getProjectName = (projectId) => {
     const project = projects.find(p => p.project_id === projectId);
-    return project?.name || 'Unknown Project';
+    return project?.name;
   };
 
   if (loading) {
@@ -306,12 +306,16 @@ export const AgentClients = () => {
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-2">
-                          <span className="text-xs font-medium px-2 py-1 bg-[#F0F2F5] rounded-lg">
-                            {getProjectName(client.project_id)}
-                          </span>
-                          <span className="text-xs font-medium px-2 py-1 bg-[#F0F2F5] rounded-lg">
-                            {client.unit_reference}
-                          </span>
+                          {(client.project_name || getProjectName(client.project_id)) && (
+                            <span className="text-xs font-medium px-2 py-1 bg-[#F0F2F5] rounded-lg">
+                              {client.project_name || getProjectName(client.project_id)}
+                            </span>
+                          )}
+                          {client.unit_reference && (
+                            <span className="text-xs font-medium px-2 py-1 bg-[#F0F2F5] rounded-lg">
+                              {client.unit_reference}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

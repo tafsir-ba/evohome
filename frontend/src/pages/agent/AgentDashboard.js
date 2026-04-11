@@ -205,7 +205,7 @@ export const AgentDashboard = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-foreground truncate">{quote.title}</p>
-                        <p className="text-sm text-muted-foreground">{quote.document_number} · {quote.unit_reference}</p>
+                        <p className="text-sm text-muted-foreground">{[quote.document_number, quote.client_name, quote.unit_reference].filter(Boolean).join(' · ')}</p>
                         {quote.change_request_comment && (
                           <p className="text-sm text-amber-700 dark:text-amber-400 mt-2 line-clamp-2 bg-amber-500/10 p-2 rounded-lg">
                             "{quote.change_request_comment}"
