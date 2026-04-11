@@ -482,7 +482,7 @@ const TimelineCard = ({ event, onAction, onDownloadPdf, onPreviewPdf, onShowQrPa
                     {event.items.slice(0, 4).map((item, idx) => (
                       <div key={idx} className="flex items-center justify-between text-sm py-1.5 px-3 bg-background rounded-lg">
                         <span className="text-foreground">{item.description}</span>
-                        <span className="text-muted-foreground font-medium">{formatCurrency(item.total, event.currency)}</span>
+                        <span className="text-muted-foreground font-medium">{formatCurrency(item.total || 0, event.currency)}</span>
                       </div>
                     ))}
                     {event.items.length > 4 && (
