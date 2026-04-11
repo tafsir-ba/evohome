@@ -204,7 +204,7 @@ export const AgentQuotes = () => {
                           <StatusBadge status={quote.status} />
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {number} · {quote.unit_reference}
+                          {number} · {quote.client_name || 'Unknown client'} · {quote.project_name || quote.unit_reference || 'N/A'}
                         </p>
                         <p className="text-sm text-muted-foreground mt-0.5">
                           Created {formatDate(quote.created_at)}

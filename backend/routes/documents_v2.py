@@ -246,7 +246,7 @@ async def upload_hero_image(document_id: str, file: UploadFile = File(...), user
     image_path = UPLOAD_DIR / image_filename
     image_path.write_bytes(await file.read())
 
-    hero_url = f"/api/documents/{document_id}/hero-image"
+    hero_url = f"/api/uploads/{image_filename}"
     await db.documents.update_one(query, {"$set": {
         "hero_image_url": hero_url, "hero_image_path": str(image_path),
         "updated_at": datetime.now(timezone.utc).isoformat(),

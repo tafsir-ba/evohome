@@ -344,7 +344,7 @@ async def api_root():
 # ==================== MOUNT ====================
 
 app.include_router(api_router)
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # CORS — config-driven, no wildcard fallback
 _cors_origins = list(app_config.CORS_ORIGINS)

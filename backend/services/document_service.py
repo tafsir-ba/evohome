@@ -58,6 +58,23 @@ async def create_document(
 
     parsed_due = _parse_due_date(due_date, doc_type)
 
+    # Resolve unit_reference from unit_id if client has one
+    unit_reference = client.get('unit_reference', 'General')
+    if not unit_reference or unit_reference == 'General':
+        unit_id = client.get('unit_id')
+        if unit_id:
+            unit = await db.units.find_one({"unit_id": unit_id}, {"_id": 0, "unit_reference": 1})
+            if unit:
+                unit_reference = unit.get('unit_reference', 'General')
+
+    # Resolve project_name
+    project_name = None
+    project_id = client.get('project_id')
+    if project_id:
+        project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "name": 1})
+        if project:
+            project_name = project.get('name')
+
     doc = {
         "document_id": doc_id,
         "document_number": doc_number,
@@ -66,8 +83,9 @@ async def create_document(
         "agent_id": agent_id,
         "client_id": client_id,
         "buyer_id": client.get('buyer_id'),
-        "project_id": client['project_id'],
-        "unit_reference": client.get('unit_reference', 'General'),
+        "project_id": project_id,
+        "project_name": project_name,
+        "unit_reference": unit_reference,
         "title": title,
         "amount": float(amount),
         "items": items,
@@ -127,7 +145,31 @@ async def list_documents(
     if status:
         query["status"] = status
 
-    return await db.documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    docs = await db.documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+    # Batch enrich with project_name and client_name for display
+    project_ids = list({d["project_id"] for d in docs if d.get("project_id")})
+    client_ids = list({d["client_id"] for d in docs if d.get("client_id")})
+
+    if project_ids:
+        projects = await db.projects.find(
+            {"project_id": {"$in": project_ids}}, {"_id": 0, "project_id": 1, "name": 1}
+        ).to_list(len(project_ids))
+        proj_map = {p["project_id"]: p["name"] for p in projects}
+        for d in docs:
+            if not d.get("project_name"):
+                d["project_name"] = proj_map.get(d.get("project_id"))
+
+    if client_ids:
+        clients = await db.clients.find(
+            {"client_id": {"$in": client_ids}}, {"_id": 0, "client_id": 1, "name": 1}
+        ).to_list(len(client_ids))
+        client_map = {c["client_id"]: c["name"] for c in clients}
+        for d in docs:
+            if not d.get("client_name"):
+                d["client_name"] = client_map.get(d.get("client_id"))
+
+    return docs
 
 
 async def update_document(document_id: str, agent_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:

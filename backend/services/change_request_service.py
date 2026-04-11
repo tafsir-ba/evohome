@@ -65,6 +65,21 @@ async def create_change_request(
 
     logger.info(f"Change request {cr_id} created on {entity_type}/{entity_id} by {created_by}")
     change_request.pop("_id", None)
+
+    # Notify the agent when a buyer creates a change request
+    if created_by_role == "buyer" and agent_id:
+        try:
+            from services.notification_service import create_notification
+            await create_notification(
+                user_id=agent_id,
+                title="New Change Request",
+                message=f"Change requested on {entity_type}: {message[:100]}",
+                notification_type="change_request_created",
+                data={"change_request_id": cr_id, "entity_type": entity_type, "entity_id": entity_id},
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create notification for new CR: {e}")
+
     return change_request
 
 
@@ -99,6 +114,35 @@ async def respond_to_change_request(
 
     if not result:
         raise ValueError(f"Change request {change_request_id} not found")
+
+    # Create notification for the other party
+    try:
+        if author_role == "agent":
+            # Notify the buyer who created the change request
+            buyer_id = result.get("created_by")
+            if buyer_id and buyer_id != author_id:
+                from services.notification_service import create_notification
+                await create_notification(
+                    user_id=buyer_id,
+                    title="Change Request Response",
+                    message=f"Your change request received a response: {message[:100]}",
+                    notification_type="change_request_response",
+                    data={"change_request_id": change_request_id, "entity_type": result.get("entity_type"), "entity_id": result.get("entity_id")},
+                )
+        elif author_role == "buyer":
+            # Notify the agent
+            agent_id = result.get("agent_id")
+            if agent_id:
+                from services.notification_service import create_notification
+                await create_notification(
+                    user_id=agent_id,
+                    title="New Change Request Message",
+                    message=f"Buyer sent a message: {message[:100]}",
+                    notification_type="change_request_message",
+                    data={"change_request_id": change_request_id, "entity_type": result.get("entity_type"), "entity_id": result.get("entity_id")},
+                )
+    except Exception as e:
+        logger.warning(f"Failed to create notification for CR response: {e}")
 
     logger.info(f"Response added to {change_request_id} by {author_id}")
     return result
@@ -138,13 +182,19 @@ async def resolve_change_request(
     if not result:
         raise ValueError(f"Change request {change_request_id} not found")
 
-    # Update entity status back
+    # Update entity status — revert to appropriate pre-change-request state
     collection = _get_entity_collection(result["entity_type"])
     id_field = _get_entity_id_field(result["entity_type"])
     if collection and id_field:
+        # Invoices/quotes go back to "Sent" (the state before Change Requested)
+        # Decisions stay as-is (handled by decision_service)
+        revert_status = "Sent" if result["entity_type"] in ("invoice", "quote") else None
+        update_fields = {"change_request_comment": None, "updated_at": now}
+        if revert_status:
+            update_fields["status"] = revert_status
         await db[collection].update_one(
             {id_field: result["entity_id"]},
-            {"$set": {"status": "Draft", "change_request_comment": None, "updated_at": now}}
+            {"$set": update_fields}
         )
 
     logger.info(f"Change request {change_request_id} resolved by {resolved_by}")

@@ -14,6 +14,7 @@ import {
   DollarSign,
   BarChart3,
   MessageSquareWarning,
+  CheckSquare,
 } from 'lucide-react';
 
 export const ControlTower = ({ projectCount = 0, onRefresh }) => {
@@ -88,13 +89,13 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
       </div>
 
       {/* Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="action-cards">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="action-cards">
         <ActionCard
-          count={stats.change_requests?.length || 0}
+          count={(stats.change_requests?.length || 0) + (stats.open_change_requests || 0)}
           label="Change Requests"
           icon={MessageSquareWarning}
           activeColor="amber"
-          onClick={() => navigate('/agent/quotes')}
+          onClick={() => navigate('/agent/invoices')}
           testId="action-card-change-requests"
         />
         <ActionCard
@@ -112,6 +113,14 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
           activeColor="blue"
           onClick={() => navigate('/agent/quotes')}
           testId="action-card-pending-quotes"
+        />
+        <ActionCard
+          count={(stats.pending_decisions || 0) + (stats.challenged_decisions || 0)}
+          label="Pending Decisions"
+          icon={CheckSquare}
+          activeColor="amber"
+          onClick={() => navigate('/agent/decisions')}
+          testId="action-card-pending-decisions"
         />
       </div>
 

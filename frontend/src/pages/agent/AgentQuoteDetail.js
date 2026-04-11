@@ -325,7 +325,7 @@ export const AgentQuoteDetail = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4">
-                <p className="font-medium text-[#1A1A1A]">{quote.project?.name}</p>
+                <p className="font-medium text-[#1A1A1A]">{quote.project_name || quote.project?.name || 'N/A'}</p>
                 <div className="flex items-start gap-2 mt-2 text-sm text-muted-foreground">
                   <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
                   <p>{quote.project?.address}</p>

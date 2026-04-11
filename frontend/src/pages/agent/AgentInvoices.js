@@ -203,7 +203,7 @@ export const AgentInvoices = () => {
                           <StatusBadge status={invoice.status} />
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {number} · {invoice.unit_reference}
+                          {number} · {invoice.client_name || 'Unknown client'} · {invoice.project_name || invoice.unit_reference || 'N/A'}
                         </p>
                         <p className="text-sm text-muted-foreground mt-0.5">
                           Due {formatDate(invoice.due_date)}
