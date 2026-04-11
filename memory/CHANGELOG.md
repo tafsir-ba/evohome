@@ -57,6 +57,37 @@ Rebuild the Comment Center / Command Service as a pure orchestration brain that 
 
 ---
 
+## P1 Legacy Cleanup — COMPLETE (2026-04-11)
+
+### Deleted V1 Route Files (9 total)
+- [x] `routes/activities.py` — dead code, replaced by `activities_v2.py`
+- [x] `routes/clients.py` — dead code, replaced by `clients_v2.py`
+- [x] `routes/documents.py` — dead code, replaced by `documents_v2.py`
+- [x] `routes/notifications.py` — dead code, replaced by `notifications_v2.py`
+- [x] `routes/steps.py` — dead code, replaced by `steps_v2.py`
+- [x] `routes/timeline_view.py` — dead code, replaced by `timelines_v2.py`
+- [x] `routes/timelines.py` — dead code, replaced by `timelines_v2.py`
+- [x] `routes/vault.py` — dead code, replaced by `vault_v2.py`
+- [x] `routes/projects.py` — team endpoints extracted to `team_v2.py`, then deleted
+
+### Team Module Extraction
+- [x] `services/team_service.py` — canonical team member lifecycle, no is_demo
+- [x] `routes/team_v2.py` — thin route for CRUD + directory + AI extraction
+- [x] 7 endpoints: GET/POST/PUT/DELETE team, bulk, directory, extract-contacts
+- [x] `server.py` wired `team_router`, removed `projects_team_router`
+
+### Workflow Sanitization
+- [x] `routes/workflows.py` — 10 is_demo refs removed (imports, queries, writes)
+- [x] `services/workflow_service.py` — 5 is_demo refs removed (model, create, query)
+
+### Dead Import Cleanup
+- [x] `create_notification` import removed from 11 route files
+- [x] `email_service.create_notification` shim deleted entirely
+
+### Regression: 33/33 passed (100%) — `/app/test_reports/iteration_10.json`
+
+---
+
 ## Phase 2: Content Layer — COMPLETE (2026-04-11)
 
 ### Objective

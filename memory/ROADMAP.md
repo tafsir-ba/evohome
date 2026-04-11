@@ -14,11 +14,15 @@
 - notification_service.py is canonical notification module
 - is_demo purged from all orchestration code
 - 20/20 tests passed
+- Notification contract fix: response shape, is_read field, DB migration (19/19)
 
-## P1 — Legacy Cleanup
-- Delete legacy V1 route files (projects.py CRUD, timelines.py, activities.py, documents.py, vault.py, notifications.py, timeline_view.py, steps.py, clients.py)
-- Clean routes/workflows.py is_demo contamination
-- Clean routes/billing.py is_demo contamination
+## P1 — Legacy Cleanup COMPLETE (2026-04-11)
+- 9 dead V1 route files deleted (activities, clients, documents, notifications, steps, timeline_view, timelines, vault, projects)
+- Team endpoints extracted into team_v2.py + team_service.py (zero is_demo)
+- routes/workflows.py + workflow_service.py sanitized (10 is_demo refs removed)
+- Dead create_notification imports removed from 10 active routes
+- email_service.create_notification shim removed
+- 33/33 tests passed
 
 ## P2 — Phase 4: Commercial Systems
 - **Billing** module canonical rebuild

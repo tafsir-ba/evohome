@@ -13,6 +13,14 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 
 ## What's Been Implemented (March 2026)
 
+### P1 Legacy Cleanup — COMPLETE (April 11, 2026)
+- [x] 9 dead V1 route files deleted
+- [x] Team module extracted: team_v2.py + team_service.py (zero is_demo)
+- [x] Workflows sanitized: 15 is_demo refs removed from workflows.py + workflow_service.py
+- [x] Dead create_notification imports removed from 11 routes
+- [x] email_service.create_notification shim removed
+- [x] 33/33 regression tests passed
+
 ### Phase 3 Orchestration Rebuild — COMPLETE (April 11, 2026)
 - [x] Command Service rebuilt as pure routing brain (no direct DB writes for documents/activities)
 - [x] notification_bridge.py eliminated entirely
