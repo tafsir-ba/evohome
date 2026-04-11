@@ -1,0 +1,92 @@
+{
+  "summary": "Phase 4 Billing Rebuild - All 33 tests PASSED. Verified canonical billing_service.py SSOT implementation: plans endpoint (4 plans with correct pricing), status endpoint (entitlement fields), checkout session creation, all webhook event types (checkout.completed, subscription.updated, subscription.deleted, payment_failed), cancel/sync/verify-session endpoints, entitlement enforcement (unit limits), and auth requirements.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase4_billing_rebuild.py",
+    "/app/test_reports/pytest/pytest_phase4_billing.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "BILLING_SERVICE.PY VERIFIED: Canonical SSOT with apply_subscription_update() sentinel pattern working correctly",
+    "WEBHOOK EVENTS VERIFIED: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted, invoice.payment_failed all handled correctly",
+    "ENTITLEMENT ENFORCEMENT VERIFIED: Free plan limit (2 units) enforced, upgrade via webhook allows more units",
+    "THIN ROUTES VERIFIED: billing.py delegates to billing_service.py, no business logic in routes",
+    "AUTH REQUIREMENTS VERIFIED: All 7 billing endpoints require authentication (401 without token)",
+    "PLAN PRICING VERIFIED: free=CHF0/2units, starter=CHF29/10units, pro=CHF79/50units, enterprise=custom/unlimited",
+    "DEMO SEED VERIFIED: Seeds demo agent with 'pro' plan, idempotent cleanup works"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase4_billing_rebuild.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A (backend only test)"
+  },
+  "test_credentials": {
+    "demo_agent": {
+      "email": "demo.agent@upgradeflow.com",
+      "password": "demo123"
+    },
+    "e2e_agent": {
+      "email": "e2e@evohome-test.com",
+      "password": "Test2026!"
+    }
+  },
+  "seed_data_creation": "Demo seed creates agent with 'pro' plan. Test created multiple test agents for entitlement testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 4 billing rebuild complete. All 33 tests passed verifying: (1) GET /api/billing/plans returns 4 plans with correct pricing, (2) GET /api/billing/status returns entitlement fields (plan_id, property_limit, unit_usage, can_create_unit), (3) POST /api/billing/create-checkout-session creates Stripe sessions for starter/pro, rejects free/enterprise, (4) POST /api/billing/webhook handles all 4 event types correctly, (5) POST /api/billing/cancel returns 400 when no subscription, (6) POST /api/billing/sync returns sync status, (7) Entitlement enforcement blocks unit creation at limit, allows after upgrade, (8) All endpoints require auth. Demo agent response is FLAT (user_id, email, name, role, token) not nested under 'user'.",
+  "tests_executed": {
+    "total": 33,
+    "passed": 33,
+    "failed": 0,
+    "skipped": 0
+  },
+  "billing_rebuild_verification": {
+    "plans_endpoint": {
+      "returns_4_plans": "PASSED",
+      "free_plan_pricing": "PASSED - CHF 0, 2 units",
+      "starter_plan_pricing": "PASSED - CHF 29, 10 units",
+      "pro_plan_pricing": "PASSED - CHF 79, 50 units",
+      "enterprise_plan_pricing": "PASSED - custom, unlimited"
+    },
+    "status_endpoint": {
+      "entitlement_fields": "PASSED - plan_id, property_limit, unit_usage, can_create_unit",
+      "stripe_fields": "PASSED - stripe_subscription_id, stripe_customer_id, subscription_period_end",
+      "demo_agent_pro_plan": "PASSED"
+    },
+    "checkout_endpoint": {
+      "starter_plan": "PASSED - creates Stripe checkout session",
+      "pro_plan": "PASSED - creates Stripe checkout session",
+      "free_plan_rejected": "PASSED - returns 400",
+      "enterprise_plan_rejected": "PASSED - returns 400"
+    },
+    "webhook_events": {
+      "checkout_session_completed": "PASSED - updates plan, customer_id, subscription_id",
+      "subscription_updated": "PASSED - changes status",
+      "subscription_deleted": "PASSED - downgrades to free, clears subscription_id",
+      "payment_failed": "PASSED - sets status to past_due"
+    },
+    "cancel_endpoint": {
+      "no_subscription": "PASSED - returns 400"
+    },
+    "sync_endpoint": {
+      "returns_status": "PASSED"
+    },
+    "entitlement_enforcement": {
+      "free_plan_limit": "PASSED - 2 units, 3rd blocked with 403",
+      "upgrade_allows_more": "PASSED - webhook upgrade to pro allows unit creation"
+    },
+    "auth_requirements": {
+      "all_endpoints_require_auth": "PASSED - 7/7 endpoints return 401 without token"
+    }
+  }
+}

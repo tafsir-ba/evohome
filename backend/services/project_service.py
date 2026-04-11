@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from database import db
-from services.billing_service import get_agent_subscription_data
+from services.billing_service import get_subscription_status
 
 logger = logging.getLogger(__name__)
 

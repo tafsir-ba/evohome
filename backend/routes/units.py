@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from core.auth import get_current_user, get_current_agent
 from core.access_control import can_access_project, is_agent
 from services import unit_service
-from services.billing_service import get_agent_subscription_data
+from services.billing_service import can_create_unit, get_unit_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -41,12 +41,11 @@ async def create_unit(project_id: str, data: CreateUnitRequest, user=Depends(get
         raise HTTPException(status_code=403, detail="Access denied to this project")
 
     # Subscription limit check
-    sub = await get_agent_subscription_data(user)
-    current_count = await unit_service.count_units_by_agent(user['user_id'])
-    if current_count >= sub['property_limit']:
+    if not await can_create_unit(user['user_id']):
+        limit = await get_unit_limit(user['user_id'])
         raise HTTPException(
             status_code=403,
-            detail=f"Unit limit reached ({sub['property_limit']}). Upgrade your plan."
+            detail=f"Unit limit reached ({limit}). Upgrade your plan."
         )
 
     unit = await unit_service.create_unit(

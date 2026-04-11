@@ -37,7 +37,7 @@ ROOT_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-from services.billing_service import get_agent_subscription_data
+from services.billing_service import get_subscription_status
 
 router = APIRouter()
 
@@ -183,7 +183,7 @@ async def upload_company_logo(
 ):
     """Upload company logo (Pro plan required)"""
     # Check if user has Pro plan or above
-    subscription_data = await get_agent_subscription_data(user)
+    subscription_data = await get_subscription_status(user['user_id'])
     if subscription_data['plan_id'] not in ['pro', 'enterprise']:
         raise HTTPException(status_code=403, detail="Logo upload requires Pro plan or higher")
     
