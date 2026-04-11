@@ -86,6 +86,14 @@ Rebuild the Comment Center / Command Service as a pure orchestration brain that 
 
 ### Regression: 33/33 passed (100%) — `/app/test_reports/iteration_10.json`
 
+### P1 Corrective Pass — COMPLETE (2026-04-11)
+- [x] C1: `RESEND_API_KEY` imported from `email_service` into `workflows.py` (was NameError)
+- [x] I1: `doc_extraction.py` zero `is_demo` references (was writing to documents collection)
+- [x] I2: `stats.py` zero `is_demo` filtering (was filtering buyer stats by `is_demo`)
+- [x] I3: Dead `get_is_demo` import removed from 9 route files
+- [x] DB migration: `is_demo` field removed from 127 documents across 9 collections
+### Regression: 24/24 passed (100%) — `/app/test_reports/iteration_11.json`
+
 ---
 
 ## Phase 2: Content Layer — COMPLETE (2026-04-11)

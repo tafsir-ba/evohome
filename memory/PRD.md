@@ -20,6 +20,9 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - [x] Dead create_notification imports removed from 11 routes
 - [x] email_service.create_notification shim removed
 - [x] 33/33 regression tests passed
+- [x] Corrective pass: RESEND_API_KEY fix, doc_extraction/stats is_demo purge, dead imports
+- [x] DB migration: is_demo removed from 127 docs across 9 collections
+- [x] 24/24 corrective regression tests passed
 
 ### Phase 3 Orchestration Rebuild — COMPLETE (April 11, 2026)
 - [x] Command Service rebuilt as pure routing brain (no direct DB writes for documents/activities)
