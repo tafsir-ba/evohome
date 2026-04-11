@@ -101,9 +101,15 @@ async def lifespan(app: FastAPI):
         # Timeline steps: ordered by timeline + order_index
         await db.timeline_steps.create_index([("timeline_id", 1), ("order_index", 1)])
         await db.timeline_steps.create_index([("project_id", 1)])
-        # Activities: project feed
+        # Activities: project feed + author lookup
         await db.activities.create_index([("project_id", 1)])
         await db.activities.create_index([("agent_id", 1)])
+        await db.activities.create_index([("author_id", 1), ("created_at", -1)])
+        # Activity recipients: batch lookup by activity_id and client_id
+        await db.activity_recipients.create_index("activity_id")
+        await db.activity_recipients.create_index("client_id")
+        # Activity replies: batch count and lookup by activity_id
+        await db.activity_replies.create_index("activity_id")
         # Notifications: user + read status (unread count query)
         await db.notifications.create_index([("user_id", 1), ("is_read", 1)])
         # Vault: agent vault list

@@ -42,7 +42,8 @@ async def get_buyer_context(buyer_id: str) -> Optional[Dict[str, Any]]:
 
 
 async def enrich_activity(activity: dict, include_replies: bool = False) -> dict:
-    """Enrich activity with author name, project name, recipients, replies."""
+    """Enrich a SINGLE activity. Used for detail views only.
+    For list views, use batch_enrich_activities() instead."""
 
     author = await db.users.find_one({"user_id": activity['author_id']}, {"_id": 0, "name": 1})
     activity['author_name'] = author['name'] if author else 'Unknown'
@@ -76,6 +77,75 @@ async def enrich_activity(activity: dict, include_replies: bool = False) -> dict
         activity['replies'] = replies
 
     return activity
+
+
+async def batch_enrich_activities(activities: List[dict]) -> List[dict]:
+    """Batch-enrich a list of activities using O(1) queries instead of O(N*M).
+    
+    Replaces serial enrich_activity() calls for list views.
+    Uses $in batch lookups and in-memory joins.
+    """
+    if not activities:
+        return []
+
+    # Collect unique IDs
+    activity_ids = [a['activity_id'] for a in activities]
+    author_ids = list({a['author_id'] for a in activities})
+    project_ids = list({a['project_id'] for a in activities if a.get('project_id')})
+    unit_ids = list({a['unit_id'] for a in activities if a.get('unit_id')})
+
+    # Batch fetch: 6 queries total (regardless of page size)
+    authors_list = await db.users.find(
+        {"user_id": {"$in": author_ids}}, {"_id": 0, "user_id": 1, "name": 1}
+    ).to_list(len(author_ids))
+    author_map = {u['user_id']: u['name'] for u in authors_list}
+
+    projects_list = await db.projects.find(
+        {"project_id": {"$in": project_ids}}, {"_id": 0, "project_id": 1, "name": 1}
+    ).to_list(len(project_ids)) if project_ids else []
+    project_map = {p['project_id']: p['name'] for p in projects_list}
+
+    units_list = await db.units.find(
+        {"unit_id": {"$in": unit_ids}}, {"_id": 0, "unit_id": 1, "unit_reference": 1}
+    ).to_list(len(unit_ids)) if unit_ids else []
+    unit_map = {u['unit_id']: u.get('unit_reference') for u in units_list}
+
+    # Batch fetch recipients for all activities at once
+    all_recipients = await db.activity_recipients.find(
+        {"activity_id": {"$in": activity_ids}}, {"_id": 0}
+    ).to_list(1000)
+
+    # Batch fetch client names for all recipients
+    recipient_client_ids = list({r['client_id'] for r in all_recipients})
+    clients_list = await db.clients.find(
+        {"client_id": {"$in": recipient_client_ids}}, {"_id": 0, "client_id": 1, "name": 1}
+    ).to_list(len(recipient_client_ids)) if recipient_client_ids else []
+    client_map = {c['client_id']: c['name'] for c in clients_list}
+
+    # Group recipients by activity_id
+    recipients_by_activity = {}
+    for r in all_recipients:
+        r['client_name'] = client_map.get(r['client_id'], 'Unknown')
+        recipients_by_activity.setdefault(r['activity_id'], []).append(r)
+
+    # Batch count replies using aggregation
+    reply_counts_pipeline = [
+        {"$match": {"activity_id": {"$in": activity_ids}}},
+        {"$group": {"_id": "$activity_id", "count": {"$sum": 1}}}
+    ]
+    reply_counts = await db.activity_replies.aggregate(reply_counts_pipeline).to_list(len(activity_ids))
+    reply_count_map = {r['_id']: r['count'] for r in reply_counts}
+
+    # Enrich in-memory
+    for a in activities:
+        a['author_name'] = author_map.get(a['author_id'], 'Unknown')
+        a['project_name'] = project_map.get(a.get('project_id'))
+        if a.get('unit_id'):
+            a['unit_reference'] = unit_map.get(a['unit_id'])
+        a['recipients'] = recipients_by_activity.get(a['activity_id'], [])
+        a['reply_count'] = reply_count_map.get(a['activity_id'], 0)
+
+    return activities
 
 
 # ── Core CRUD ──
@@ -212,7 +282,7 @@ async def _list_agent_activities(
     activities = await db.activities.find(
         query, {"_id": 0}
     ).sort("created_at", -1).skip(offset).limit(limit).to_list(limit)
-    enriched = [await enrich_activity(a) for a in activities]
+    enriched = await batch_enrich_activities(activities)
     return {"activities": enriched, "total": total, "limit": limit, "offset": offset}
 
 
@@ -236,7 +306,7 @@ async def _list_buyer_activities(buyer_id, activity_type, limit, offset):
     activities = await db.activities.find(
         query, {"_id": 0}
     ).sort("created_at", -1).skip(offset).limit(limit).to_list(limit)
-    enriched = [await enrich_activity(a) for a in activities]
+    enriched = await batch_enrich_activities(activities)
     return {"activities": enriched, "total": total, "limit": limit, "offset": offset}
 
 
