@@ -252,7 +252,8 @@ export const AgentQuoteUpload = () => {
       if (andSend) {
         const sendRes = await fetch(`${API}/documents/${documentId}/send`, {
           method: 'POST',
-          credentials: 'include'
+          credentials: 'include',
+          headers: getAuthHeaders()
         });
 
         if (sendRes.ok) {

@@ -124,7 +124,8 @@ export const AgentInvoiceDetail = () => {
     try {
       const response = await fetch(`${API}/documents/${invoiceId}`, {
         method: 'DELETE',
-        credentials: 'include'
+        credentials: 'include',
+        headers: getAuthHeaders()
       });
       
       if (response.ok) {

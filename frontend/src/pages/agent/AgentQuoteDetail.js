@@ -74,7 +74,8 @@ export const AgentQuoteDetail = () => {
     try {
       const response = await fetch(`${API}/documents/${quoteId}/send`, {
         method: 'POST',
-        credentials: 'include'
+        credentials: 'include',
+        headers: getAuthHeaders()
       });
 
       const data = await response.json();
@@ -126,7 +127,8 @@ export const AgentQuoteDetail = () => {
     try {
       const response = await fetch(`${API}/documents/${quoteId}`, {
         method: 'DELETE',
-        credentials: 'include'
+        credentials: 'include',
+        headers: getAuthHeaders()
       });
       
       if (response.ok) {

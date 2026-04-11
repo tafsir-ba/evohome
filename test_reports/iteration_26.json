@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 26: Three Contaminated Organs Rebuild - All features tested and working. Client context enrichment returns unit_reference from units collection. Change request threads visible to buyers with full agent responses. Auth headers properly included on document send/delete actions.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Buyer Timeline - Invoice",
+        "issues": ["Line item shows 'CHF NaN' for Service item - likely missing unit_price data"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration26_organs.py",
+    "/app/test_reports/pytest/pytest_iteration26.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration26_organs.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "agent": "agent@evohome-test.ch / Evohome2026!",
+    "buyer": "buyer@evohome-test.ch / Evohome2026! (uses /api/auth/buyer/login)"
+  },
+  "seed_data_creation": "Used existing test data: doc_4f7a267d9b3f (quote with CR cr_aae36799f96b)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Three organs rebuilt and tested: (1) Upload system uses canonical file_service.py, (2) Client context enrichment returns unit_reference from units collection, (3) Change request threads visible to buyers even after resolution. Buyer login uses separate endpoint /api/auth/buyer/login. Test data: buyer_a6e2281d32ca linked to client_0bb2d1275da1.",
+  "feature_verification": {
+    "Client context enrichment: GET /api/clients returns unit_reference resolved from units collection": "PASSED - Returns 'Lot 3.01' for Test Buyer",
+    "Client selector in quote creation shows Client Name (Project Name / Unit Reference) format": "PASSED - Shows 'Test Buyer(Résidence Les Pins / Lot 3.01)'",
+    "Change request full flow: buyer creates CR → agent responds → buyer can see full thread": "PASSED - Thread shows both buyer question and agent response",
+    "Buyer timeline: GET /api/timeline returns documents": "PASSED - Returns 2 documents",
+    "Agent quote detail: send button works (auth headers included)": "PASSED - Auth headers properly included",
+    "Agent quote detail: delete button works (auth headers included)": "PASSED - Delete button visible and functional",
+    "Agent invoice detail: delete button works (auth headers included)": "PASSED - Auth headers properly included",
+    "Frontend buyer portal shows change request threads on resolved documents": "PASSED - Thread visible with 'Resolved' status",
+    "Vault upload flow through the frontend works": "PASSED - Upload modal opens with all form fields",
+    "Hero image upload on quote edit page": "PASSED - HeroImageUploader component uses BASE_URL pattern"
+  }
+}

@@ -72,11 +72,9 @@ const ChangeRequestThread = ({ entityType, entityId, buyerComment }) => {
         );
         if (res.ok) {
           const data = await res.json();
-          // Get the most recent open/under_review/resolved request
-          const active = (data.change_requests || []).find(
-            cr => ['open', 'under_review', 'resolved'].includes(cr.status)
-          );
-          setThread(active || null);
+          // Get the most recent thread (any status — buyer should see full history)
+          const mostRecent = (data.change_requests || [])[0];
+          setThread(mostRecent || null);
         }
       } catch {
         // Fallback to just showing the buyer comment
@@ -87,10 +85,11 @@ const ChangeRequestThread = ({ entityType, entityId, buyerComment }) => {
     fetchThread();
   }, [entityType, entityId]);
 
-  // If no canonical thread exists, show the legacy comment
+  // If no canonical thread exists and no legacy comment, hide
   if (loading) return null;
 
   if (!thread) {
+    if (!buyerComment) return null;
     return (
       <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
         <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Your question</p>
@@ -104,6 +103,9 @@ const ChangeRequestThread = ({ entityType, entityId, buyerComment }) => {
       <div className="px-3 py-2 bg-blue-500/10 border-b border-blue-500/20">
         <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">
           Change Request
+          {thread.status === 'closed' && (
+            <span className="ml-2 text-muted-foreground font-normal">Closed</span>
+          )}
           {thread.status === 'resolved' && (
             <span className="ml-2 text-emerald-600 font-normal">Resolved</span>
           )}
@@ -490,8 +492,8 @@ const TimelineCard = ({ event, onAction, onDownloadPdf, onPreviewPdf, onShowQrPa
                 </div>
               )}
 
-              {/* Change Request Thread */}
-              {event.changeComment && (
+              {/* Change Request Thread — always attempt render, component handles empty state */}
+              {event.status !== 'Draft' && (
                 <ChangeRequestThread
                   entityType={event.type?.toLowerCase() || 'document'}
                   entityId={event.id}

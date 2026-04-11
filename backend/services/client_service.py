@@ -75,13 +75,40 @@ async def list_clients_by_agent(agent_id: str) -> List[Dict[str, Any]]:
         for c in clients:
             c["project_name"] = project_map.get(c.get("project_id"))
 
+    # Batch-enrich with unit_reference from units collection
+    unit_ids = list({c["unit_id"] for c in clients if c.get("unit_id")})
+    if unit_ids:
+        units = await db.units.find(
+            {"unit_id": {"$in": unit_ids}}, {"_id": 0, "unit_id": 1, "unit_reference": 1}
+        ).to_list(len(unit_ids))
+        unit_map = {u["unit_id"]: u.get("unit_reference") for u in units}
+        for c in clients:
+            c["unit_reference"] = unit_map.get(c.get("unit_id")) or c.get("unit_reference")
+
     return clients
 
 
 async def list_clients_by_project(project_id: str) -> List[Dict[str, Any]]:
-    return await db.clients.find(
+    clients = await db.clients.find(
         {"project_id": project_id}, {"_id": 0}
     ).to_list(500)
+
+    # Enrich with project name
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "name": 1})
+    project_name = project.get("name") if project else None
+
+    # Batch-enrich with unit_reference
+    unit_ids = list({c["unit_id"] for c in clients if c.get("unit_id")})
+    if unit_ids:
+        units = await db.units.find(
+            {"unit_id": {"$in": unit_ids}}, {"_id": 0, "unit_id": 1, "unit_reference": 1}
+        ).to_list(len(unit_ids))
+        unit_map = {u["unit_id"]: u.get("unit_reference") for u in units}
+        for c in clients:
+            c["unit_reference"] = unit_map.get(c.get("unit_id")) or c.get("unit_reference")
+            c["project_name"] = project_name
+
+    return clients
 
 
 async def update_client(

@@ -255,7 +255,8 @@ export const AgentInvoiceUpload = () => {
       if (send) {
         const sendRes = await fetch(`${API}/documents/${documentId}/send`, {
           method: 'POST',
-          credentials: 'include'
+          credentials: 'include',
+          headers: getAuthHeaders()
         });
 
         if (!sendRes.ok) {
