@@ -274,9 +274,11 @@ export const AgentSettings = () => {
     formData.append('file', file);
     
     try {
+      const token = localStorage.getItem('auth_token');
       const res = await fetch(`${API}/settings/logo`, {
         method: 'POST',
         credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
         body: formData
       });
       
@@ -298,9 +300,11 @@ export const AgentSettings = () => {
 
   const handleDeleteLogo = async () => {
     try {
+      const token = localStorage.getItem('auth_token');
       const res = await fetch(`${API}/settings/logo`, {
         method: 'DELETE',
-        credentials: 'include'
+        credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
       
       if (res.ok) {

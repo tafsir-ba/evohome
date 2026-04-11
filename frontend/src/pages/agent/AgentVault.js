@@ -104,9 +104,11 @@ export const AgentVault = () => {
 
   const fetchVaultData = async () => {
     try {
+      const token = localStorage.getItem('auth_token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
       const [docsRes, clientsRes] = await Promise.all([
-        fetch(`${API}/vault`, { credentials: 'include' }),
-        fetch(`${API}/clients`, { credentials: 'include' })
+        fetch(`${API}/vault`, { credentials: 'include', headers }),
+        fetch(`${API}/clients`, { credentials: 'include', headers })
       ]);
       
       if (docsRes.ok) setDocuments(await docsRes.json());
@@ -210,6 +212,8 @@ export const AgentVault = () => {
         
         xhr.open('POST', `${API}/vault/upload`);
         xhr.withCredentials = true;
+        const token = localStorage.getItem('auth_token');
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         xhr.send(formData);
       });
       
@@ -249,7 +253,8 @@ export const AgentVault = () => {
     try {
       const res = await fetch(`${API}/vault/${deleteDoc.vault_id}`, {
         method: 'DELETE',
-        credentials: 'include'
+        credentials: 'include',
+        headers: (() => { const t = localStorage.getItem('auth_token'); return t ? { 'Authorization': `Bearer ${t}` } : {}; })(),
       });
       
       if (res.ok) {
@@ -280,7 +285,7 @@ export const AgentVault = () => {
       };
       const res = await fetch(`${API}/vault/${editDoc.vault_id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(() => { const t = localStorage.getItem('auth_token'); return t ? { 'Authorization': `Bearer ${t}` } : {}; })() },
         credentials: 'include',
         body: JSON.stringify(formToSend)
       });

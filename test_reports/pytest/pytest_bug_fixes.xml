@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="12" failures="0" skipped="0" tests="12" time="1.021" timestamp="2026-04-11T18:29:39.490467+00:00" hostname="agent-env-946e1f0a-066a-4a0f-8537-83bf3998a779"><testcase classname="backend.tests.test_bug_fixes.TestAuth" name="test_login_success" time="0.909"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestBug001ClientPreview" name="test_get_clients_list" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestBug001ClientPreview" name="test_client_preview_returns_project_field" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestBug001ClientPreview" name="test_client_preview_with_project_has_project_data" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestBug002ClientDropdown" name="test_clients_have_project_and_unit_info" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestBug003HeroImageUpload" name="test_hero_image_endpoint_exists" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestBug004LogoUpload" name="test_logo_upload_endpoint_exists" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestBug004LogoUpload" name="test_logo_delete_endpoint_exists" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestBug005VaultUpload" name="test_vault_list_endpoint" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestBug005VaultUpload" name="test_vault_upload_endpoint_exists" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestRegressionDashboard" name="test_agent_stats_endpoint" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_bug_fixes.TestRegressionFeed" name="test_activities_endpoint" time="0.000"><error message="failed on setup with &quot;AssertionError: Login failed: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code&quot;">backend/tests/test_bug_fixes.py:31: in auth_token
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</error></testcase></testsuite></testsuites>

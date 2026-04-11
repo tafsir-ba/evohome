@@ -261,9 +261,11 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
     formData.append('file', file);
 
     try {
+      const token = localStorage.getItem('auth_token');
       const res = await fetch(`${API}/documents/${documentId}/hero-image`, {
         method: 'POST',
         credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
         body: formData
       });
 
@@ -286,9 +288,11 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
     if (!documentId) return;
     
     try {
+      const token = localStorage.getItem('auth_token');
       const res = await fetch(`${API}/documents/${documentId}/hero-image`, {
         method: 'DELETE',
-        credentials: 'include'
+        credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
 
       if (res.ok) {
@@ -425,7 +429,12 @@ export const ClientSelector = ({ clients, selectedClient, onSelect, loading }) =
         <SelectContent>
           {clients.map(client => (
             <SelectItem key={client.client_id} value={client.client_id}>
-              {client.name} - {client.unit_reference}
+              {client.name}
+              {(client.project_name || client.unit_reference) && (
+                <span className="text-muted-foreground ml-1">
+                  ({[client.project_name, client.unit_reference].filter(Boolean).join(' / ')})
+                </span>
+              )}
             </SelectItem>
           ))}
         </SelectContent>

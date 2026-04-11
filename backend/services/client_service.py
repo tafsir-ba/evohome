@@ -130,7 +130,7 @@ async def link_buyer(client_id: str, buyer_id: str) -> Optional[Dict[str, Any]]:
 
 
 async def get_client_preview(client_id: str) -> Dict[str, Any]:
-    """Get client preview data for agent dashboard."""
+    """Get client preview data for agent 'view as client' page."""
     client = await get_client(client_id)
     if not client:
         return {}
@@ -153,9 +153,27 @@ async def get_client_preview(client_id: str) -> Dict[str, Any]:
             {"_id": 0, "unit_id": 1, "unit_reference": 1}
         )
 
+    # Get project info
+    project = None
+    if client.get("project_id"):
+        project = await db.projects.find_one(
+            {"project_id": client["project_id"]},
+            {"_id": 0, "project_id": 1, "name": 1, "address": 1}
+        )
+
+    # Get team members for this project
+    team = []
+    if client.get("project_id"):
+        team = await db.team_members.find(
+            {"project_id": client["project_id"]},
+            {"_id": 0}
+        ).to_list(50)
+
     return {
         "client": client,
+        "project": project,
         "documents": documents,
         "activities": activities,
+        "team": team,
         "unit": unit,
     }
