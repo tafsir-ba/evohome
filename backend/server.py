@@ -110,6 +110,9 @@ async def lifespan(app: FastAPI):
         await db.activity_recipients.create_index("client_id")
         # Activity replies: batch count and lookup by activity_id
         await db.activity_replies.create_index("activity_id")
+        # Change requests: entity lookup and agent listing
+        await db.change_requests.create_index([("entity_type", 1), ("entity_id", 1)])
+        await db.change_requests.create_index([("agent_id", 1), ("status", 1)])
         # Notifications: user + read status (unread count query)
         await db.notifications.create_index([("user_id", 1), ("is_read", 1)])
         # Vault: agent vault list
@@ -227,6 +230,7 @@ from routes.units import router as units_router
 from routes.doc_extraction import router as doc_extraction_router
 from routes.workflows import router as workflows_router
 from routes.team_v2 import router as team_router
+from routes.change_requests import router as change_requests_router
 
 for r in [
     auth_router, projects_router, clients_router, documents_router,
@@ -235,7 +239,7 @@ for r in [
     stats_router, vault_router, analytics_router, test_endpoints_router,
     demo_router, billing_router, invitations_router, settings_router,
     admin_router, commands_router, doc_extraction_router, workflows_router,
-    units_router, team_router,
+    units_router, team_router, change_requests_router,
 ]:
     api_router.include_router(r)
 

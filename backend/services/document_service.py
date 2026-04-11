@@ -374,6 +374,20 @@ async def document_action(
             raise ValueError("Cannot request changes in current status")
         await db.documents.update_one({"document_id": document_id}, {"$set": {"status": target, "change_request_comment": comment, "updated_at": now}})
         await _notify_agent_action(doc, "Change Requested", f"Changes requested for {doc['type']} {doc['document_number']}", "change_requested", user_name, {"comment": comment})
+
+        # Create canonical change request
+        from services.change_request_service import create_change_request
+        entity_type = doc.get('type', 'document').lower()
+        await create_change_request(
+            entity_type=entity_type,
+            entity_id=document_id,
+            message=comment,
+            created_by=user_id,
+            created_by_role="buyer",
+            agent_id=doc.get("agent_id", ""),
+            project_id=doc.get("project_id"),
+        )
+
         return {"message": "Change requested", "status": target}
 
     if action == 'confirm_payment' and doc['type'] == 'invoice' and user_role == 'buyer':

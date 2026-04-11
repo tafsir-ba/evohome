@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
 import { StatusBadge, formatCurrency, formatDate } from '../../components/StatusBadge';
+import { ChangeRequestPanel } from '../../components/ChangeRequestPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import {
@@ -361,6 +362,13 @@ export const AgentQuoteDetail = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Change Requests */}
+            <ChangeRequestPanel
+              entityType={quote.type?.toLowerCase() || 'quote'}
+              entityId={quoteId}
+              isAgent={true}
+            />
           </div>
         </div>
       </div>

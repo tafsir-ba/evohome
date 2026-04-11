@@ -73,11 +73,16 @@ async def get_agent_stats(user: dict = Depends(get_current_agent)):
         {"_id": 0}
     ).sort("updated_at", -1).limit(5).to_list(5)
     
-    # Change requests (both quotes and invoices)
+    # Change requests (both quotes and invoices) - from documents
     change_requests = await db.documents.find(
         {"agent_id": agent_id, "status": "Change Requested"},
         {"_id": 0}
     ).to_list(20)
+    
+    # Open change requests from canonical system
+    open_change_requests = await db.change_requests.count_documents(
+        {"agent_id": agent_id, "status": {"$in": ["open", "under_review"]}}
+    )
     
     # Approved quotes ready to convert
     approved_quotes = await db.documents.find(
@@ -92,6 +97,7 @@ async def get_agent_stats(user: dict = Depends(get_current_agent)):
         "total_revenue": total_revenue,
         "recent_documents": recent_docs,
         "change_requests": change_requests,
+        "open_change_requests": open_change_requests,
         "approved_quotes": approved_quotes
     }
 
