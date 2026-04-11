@@ -225,12 +225,20 @@ async def verify_checkout(agent_id: str, session_id: str) -> Dict[str, Any]:
     return {"success": True, "plan_id": plan_id, "subscription_status": "active"}
 
 
-async def handle_webhook_event(event_type: str, event_data: dict) -> Dict[str, Any]:
+async def handle_webhook_event(event_type: str, event_data) -> Dict[str, Any]:
     """
     Process a Stripe webhook event. PRIMARY truth authority.
     Dispatches to the canonical updater.
+    event_data may be a Stripe Event object (when signature-verified) or a plain dict.
     """
-    obj = event_data.get('data', {}).get('object', {})
+    # Stripe Event objects use attribute access; plain dicts use .get()
+    if hasattr(event_data, 'data'):
+        obj = event_data.data.object
+        # Convert Stripe object to dict for consistent downstream handling
+        if hasattr(obj, 'to_dict'):
+            obj = obj.to_dict()
+    else:
+        obj = event_data.get('data', {}).get('object', {})
 
     if event_type == 'checkout.session.completed':
         return await _handle_checkout_completed(obj)
