@@ -21,6 +21,9 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - [x] CommandExecutor routes MESSAGE → activity_service.create_draft_activity()
 - [x] is_demo purged from command_service.py (12→0), commands.py (3→0), realtime_service (2→0)
 - [x] 20/20 regression tests passed
+- [x] Notification contract fix: response shape, is_read field, DB migration
+- [x] Frontend fix: NotificationCenter PUT→PATCH
+- [x] 19/19 notification contract tests passed
 - [x] Route map: /app/memory/PHASE3_ROUTE_MAP.md
 - [x] See: /app/memory/CHANGELOG.md, /app/memory/ROADMAP.md
 

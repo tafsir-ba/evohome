@@ -44,6 +44,15 @@ Rebuild the Comment Center / Command Service as a pure orchestration brain that 
 - [x] notification_bridge.py: DELETED entirely
 
 ### Regression: 20/20 passed (100%) — `/app/test_reports/iteration_8.json`
+
+### Notification Contract Fix (post-evaluation) — COMPLETE (2026-04-11)
+- [x] C1: Response shape restored: `{"notifications": [...], "unread_count": N}` (was flat array)
+- [x] C2: Standardized on `is_read` field (was `read` — broke frontend + mark_read queries)
+- [x] I1: `mark_read`/`mark_all_read` queries now use `is_read` (matched legacy data + frontend)
+- [x] DB migration: removed `read` field (0 docs) and `is_demo` field (1 doc) from notifications collection
+- [x] Frontend fix: `NotificationCenter.js` HTTP method PUT→PATCH (matched notifications_v2.py)
+- [x] MongoDB clean: 5/5 docs with `is_read`, 0 with `read`, 0 with `is_demo`
+### Regression: 19/19 passed (100%) — `/app/test_reports/iteration_9.json`
 ### Route Map: `/app/memory/PHASE3_ROUTE_MAP.md`
 
 ---
