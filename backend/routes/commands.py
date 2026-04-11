@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, EmailStr
 
 from database import db
 from core.auth import get_current_user, get_current_agent, get_current_buyer, verify_token
-from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer, get_is_demo
+from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer
 from core.rate_limit import rate_limit_check, check_rate_limit
 from core.monitoring import capture_exception, capture_auth_failure, capture_payment_error, capture_email_error, capture_ai_error, capture_websocket_error, capture_document_error, ErrorContext
 from core.responses import AuthSessionResponse, AuthLoginResponse, AuthRefreshResponse, AuthLogoutResponse, DocumentResponse, VaultDocumentResponse, NotificationResponse, ActivityResponse, ActivitiesListResponse, SuccessResponse
@@ -221,7 +221,6 @@ async def execute_command(
             draft_id=request.draft_id,
             user_id=user['user_id'],
             confirmed=request.confirmed,
-            is_demo=user.get('is_demo', False)
         )
         
         return result
@@ -314,7 +313,6 @@ async def get_command_history(
     Get recent command history for the user.
     Includes both executed drafts and recent extractions.
     """
-    is_demo = user.get('is_demo', False)
     
     # Get recent drafts
     drafts = await db.command_drafts.find(

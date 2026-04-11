@@ -14,7 +14,7 @@ from typing import Optional, List, Dict, Any
 
 from database import db
 from helpers import validate_transition
-from services.notification_bridge import emit_notification, emit_email, emit_realtime
+from services.notification_service import emit_notification, emit_email, emit_realtime
 
 logger = logging.getLogger(__name__)
 

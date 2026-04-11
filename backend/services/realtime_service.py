@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from fastapi import WebSocket
 
 from database import db
-from services.email_service import send_notification_email, create_notification
+from services.email_service import send_notification_email
+from services.notification_service import create_notification
 
 logger = logging.getLogger("evohome.realtime")
 
@@ -74,7 +75,7 @@ async def notify_realtime(user_ids: list[str], event_type: str, data: dict):
     await ws_manager.broadcast_to_users(user_ids, message)
 
 
-async def send_milestone_notification(step: dict, project: dict, timeline: dict, user: dict, is_demo: bool):
+async def send_milestone_notification(step: dict, project: dict, timeline: dict, user: dict):
     """Send notifications when a construction milestone is completed"""
     try:
         units = await db.units.find(
@@ -122,7 +123,6 @@ async def send_milestone_notification(step: dict, project: dict, timeline: dict,
                 message=f"The '{step.get('title')}' phase has been completed for {unit_ref}. Overall progress: {progress_percent}%",
                 notification_type="milestone_completed",
                 link="/buyer/dashboard",
-                is_demo=is_demo,
                 metadata={
                     "step_id": step.get('step_id'),
                     "project_id": project.get('project_id'),

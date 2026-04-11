@@ -156,7 +156,7 @@ async def update_timeline_step(step_id: str, data: TimelineStepUpdateRequest, us
         if project and timeline:
             await send_milestone_notification(
                 step=step, project=project, timeline=timeline,
-                user=user, is_demo=False
+                user=user
             )
 
     return updated

@@ -1062,13 +1062,15 @@ class CommandInterpreter:
 
 
 # =============================================================================
-# COMMAND EXECUTOR
+# COMMAND EXECUTOR — Pure routing to canonical services.
+# No direct DB writes for domain objects. Only manages drafts/logs.
 # =============================================================================
 
 class CommandExecutor:
     """
-    Executes validated command plans.
-    All execution creates drafts first, then confirms.
+    Executes validated command plans by routing to canonical services.
+    Manages draft lifecycle (create/confirm/execute/cancel/fail).
+    Does NOT write documents or activities directly.
     """
     
     def __init__(self, db):
@@ -1104,7 +1106,7 @@ class CommandExecutor:
             created_by=user_id
         )
         
-        # Store draft in DB
+        # Store draft in DB (draft management is orchestration's responsibility)
         await self.db.command_drafts.insert_one(draft.model_dump())
         
         # Log the action
@@ -1120,11 +1122,9 @@ class CommandExecutor:
         draft_id: str,
         user_id: str,
         confirmed: bool = True,
-        is_demo: bool = False
     ) -> Dict[str, Any]:
         """
-        Execute a confirmed draft.
-        Creates the actual object through existing services.
+        Execute a confirmed draft by routing to canonical services.
         """
         # Fetch draft
         draft_doc = await self.db.command_drafts.find_one({"draft_id": draft_id})
@@ -1159,9 +1159,9 @@ class CommandExecutor:
             }}
         )
         
-        # Execute based on intent
+        # Route to canonical service
         try:
-            result = await self._execute_by_intent(draft, user_id, is_demo)
+            result = await self._route_to_service(draft, user_id)
             
             # Mark as executed
             await self.db.command_drafts.update_one(
@@ -1201,117 +1201,83 @@ class CommandExecutor:
             
             raise
     
-    async def _execute_by_intent(self, draft: CommandDraft, user_id: str, is_demo: bool = False) -> Dict[str, Any]:
-        """Execute the draft based on its intent"""
+    async def _route_to_service(self, draft: CommandDraft, user_id: str) -> Dict[str, Any]:
+        """Route draft execution to the correct canonical service."""
         data = draft.draft_data
-        
-        if draft.intent == CommandIntent.CREATE_QUOTE:
-            return await self._create_document(data, "quote", user_id, is_demo)
-        
-        elif draft.intent == CommandIntent.CREATE_INVOICE:
-            return await self._create_document(data, "invoice", user_id, is_demo)
-        
-        elif draft.intent == CommandIntent.EXTRACT_QUOTE:
-            # Extract intents also create documents - the extraction was already done
-            return await self._create_document(data, "quote", user_id, is_demo)
-        
-        elif draft.intent == CommandIntent.EXTRACT_INVOICE:
-            # Extract intents also create documents - the extraction was already done
-            return await self._create_document(data, "invoice", user_id, is_demo)
-        
-        elif draft.intent == CommandIntent.CREATE_MESSAGE:
-            return await self._create_feed_activity(data, user_id, is_demo)
-        
-        else:
-            raise ValueError(f"Unknown intent: {draft.intent}")
-    
-    async def _create_document(self, data: Dict, doc_type: str, user_id: str, is_demo: bool = False) -> Dict[str, Any]:
-        """Create a quote or invoice document"""
-        document_id = f"doc_{uuid.uuid4().hex[:12]}"
-        
-        # Get next document number
-        counter = await self.db.counters.find_one_and_update(
-            {"_id": f"{doc_type}_number"},
-            {"$inc": {"seq": 1}},
-            upsert=True,
-            return_document=True
+
+        if draft.intent in (
+            CommandIntent.CREATE_QUOTE,
+            CommandIntent.CREATE_INVOICE,
+            CommandIntent.EXTRACT_QUOTE,
+            CommandIntent.EXTRACT_INVOICE,
+        ):
+            return await self._route_document(data, user_id)
+
+        if draft.intent == CommandIntent.CREATE_MESSAGE:
+            return await self._route_activity(data, user_id)
+
+        raise ValueError(f"Unknown intent: {draft.intent}")
+
+    async def _route_document(self, data: Dict, user_id: str) -> Dict[str, Any]:
+        """Delegate document creation to document_service."""
+        from services.document_service import create_document
+
+        doc_type = data.get("document_type", "quote")
+        client_id = data.get("client_id")
+        if not client_id:
+            raise ValueError("client_id is required to create a document")
+
+        # Map extracted_data fields for extraction intents
+        extracted = data.get("extracted_data", {})
+        title = data.get("title") or extracted.get("description") or ""
+        amount = data.get("total_amount") or extracted.get("total_amount") or 0
+        items = data.get("items") or extracted.get("line_items", [])
+        supplier_name = data.get("supplier_name") or extracted.get("supplier_name")
+        notes = data.get("notes") or extracted.get("notes")
+        due_date = data.get("due_date") or extracted.get("due_date")
+
+        doc = await create_document(
+            agent_id=user_id,
+            doc_type=doc_type,
+            client_id=client_id,
+            title=title,
+            amount=float(amount) if amount else 0,
+            items=items,
+            supplier_name=supplier_name,
+            notes=notes,
+            due_date=due_date,
         )
-        doc_number = f"{doc_type.upper()[:3]}-{counter['seq']:05d}"
-        
-        document = {
-            "document_id": document_id,
-            "type": doc_type,  # Primary field
-            "document_type": doc_type,  # Alias for compatibility
-            "document_number": doc_number,
-            "project_id": data.get("project_id"),
-            "client_id": data.get("client_id"),
-            "client_name": data.get("client_name", ""),
-            "project_name": data.get("project_name", ""),
-            "title": data.get("title", ""),
-            "items": data.get("items", []),
-            "amount": data.get("total_amount") or 0,  # Primary field
-            "total_amount": data.get("total_amount") or 0,  # Alias for compatibility
-            "status": "Draft",
-            "agent_id": user_id,  # Required - ownership scoping
-            "created_by": user_id,
-            "is_demo": is_demo,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "notes": data.get("notes", ""),
-        }
-        
-        if doc_type == "quote":
-            document["valid_until"] = data.get("valid_until")
-        elif doc_type == "invoice":
-            document["due_date"] = data.get("due_date")
-        
-        await self.db.documents.insert_one(document)
-        
+
         return {
             "type": doc_type,
-            "id": document_id,
-            "number": doc_number,
-            "redirect": f"/agent/{doc_type}s/{document_id}"
+            "id": doc["document_id"],
+            "number": doc["document_number"],
+            "redirect": f"/agent/{doc_type}s/{doc['document_id']}",
         }
-    
-    async def _create_feed_activity(self, data: Dict, user_id: str, is_demo: bool = False) -> Dict[str, Any]:
-        """
-        Create a feed activity/message as a DRAFT.
-        The message is prepared but NOT sent - user must review and confirm manually.
-        """
-        activity_id = f"act_{uuid.uuid4().hex[:12]}"
-        now = datetime.now(timezone.utc).isoformat()
-        
-        activity = {
-            "activity_id": activity_id,
-            "type": "message",  # Use 'type' not 'activity_type' to match main API
-            "title": data.get("title", ""),
-            "content": data.get("content", ""),
-            "file_url": None,
-            "file_name": None,
-            "file_size": None,
-            "file_type": None,
-            "author_id": user_id,
-            "author_role": "agent",
-            "project_id": data.get("project_id"),
-            "unit_id": None,
-            "is_demo": is_demo,
-            "is_draft": True,  # Mark as draft - user must review before sending
-            "draft_recipients": [data.get("client_id")] if data.get("client_id") else [],
-            "created_at": now,
-            "updated_at": now
-        }
-        
-        await self.db.activities.insert_one(activity)
-        
-        # DON'T create activity_recipients yet - that happens when user sends
-        # This keeps it as a draft that only the agent can see
-        
+
+    async def _route_activity(self, data: Dict, user_id: str) -> Dict[str, Any]:
+        """Delegate draft activity creation to activity_service."""
+        from services.activity_service import create_draft_activity
+
+        project_id = data.get("project_id")
+        if not project_id:
+            raise ValueError("project_id is required to create a message")
+
+        recipient_ids = [data["client_id"]] if data.get("client_id") else []
+
+        activity = await create_draft_activity(
+            author_id=user_id,
+            project_id=project_id,
+            title=data.get("title"),
+            content=data.get("content"),
+            recipient_client_ids=recipient_ids,
+        )
+
         return {
             "type": "message_draft",
-            "id": activity_id,
+            "id": activity["activity_id"],
             "message": "Message draft created. Please review and send from the Feed page.",
-            "redirect": f"/agent/feed?draft={activity_id}"
+            "redirect": f"/agent/feed?draft={activity['activity_id']}",
         }
     
     async def _log_action(

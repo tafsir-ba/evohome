@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from database import db
-from services.notification_bridge import emit_notification, emit_email, emit_realtime
+from services.notification_service import emit_notification, emit_email, emit_realtime
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +323,41 @@ async def create_reply(
     author = await db.users.find_one({"user_id": author_id}, {"_id": 0, "name": 1})
     doc['author_name'] = author['name'] if author else 'Unknown'
     return doc
+
+
+async def create_draft_activity(
+    author_id: str,
+    project_id: str,
+    title: Optional[str],
+    content: Optional[str],
+    recipient_client_ids: List[str],
+) -> Dict[str, Any]:
+    """Create a draft activity. No distribution, no notifications.
+    Returns the created activity dict. Canonical — no is_demo."""
+    now = datetime.now(timezone.utc).isoformat()
+    activity_id = f"act_{uuid.uuid4().hex[:12]}"
+
+    doc = {
+        "activity_id": activity_id,
+        "type": "message",
+        "title": title or "",
+        "content": content or "",
+        "file_url": None,
+        "file_name": None,
+        "file_size": None,
+        "author_id": author_id,
+        "author_role": "agent",
+        "project_id": project_id,
+        "unit_id": None,
+        "is_draft": True,
+        "draft_recipients": recipient_client_ids,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.activities.insert_one(doc)
+    result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0, "is_demo": 0})
+    return result
+
 
 
 async def send_draft_activity(activity_id: str, author_id: str, agent_user: dict) -> Optional[Dict[str, Any]]:

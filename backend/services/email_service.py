@@ -133,20 +133,8 @@ async def send_notification_email(template_type: str, to_email: str, data: dict)
 
 
 async def create_notification(user_id: str, title: str, message: str, notification_type: str,
-                             link: str = None, metadata: dict = None, is_demo: bool = False) -> str:
-    """Create a notification in the database"""
-    notification_id = f"notif_{uuid.uuid4().hex[:12]}"
-    notification_doc = {
-        "notification_id": notification_id,
-        "user_id": user_id,
-        "title": title,
-        "message": message,
-        "notification_type": notification_type,
-        "link": link,
-        "metadata": metadata or {},
-        "is_read": False,
-        "is_demo": is_demo,
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.notifications.insert_one(notification_doc)
-    return notification_id
+                             link: str = None, metadata: dict = None, **kwargs) -> str:
+    """Legacy shim — canonical path is notification_service.create_notification.
+    Accepts **kwargs to absorb is_demo from legacy callers."""
+    from services.notification_service import create_notification as _canonical
+    return await _canonical(user_id, title, message, notification_type, link, metadata)

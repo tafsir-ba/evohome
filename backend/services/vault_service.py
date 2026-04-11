@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from database import db
-from services.notification_bridge import emit_notification
+from services.notification_service import emit_notification
 
 logger = logging.getLogger(__name__)
 
