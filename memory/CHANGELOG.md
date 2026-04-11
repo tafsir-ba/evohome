@@ -1,3 +1,57 @@
+# System Perimeter `is_demo` Purge — COMPLETE (2026-04-11)
+
+### Objective
+Purge `is_demo` from ALL remaining system ingress points: invitations, demo seeding, Pydantic schemas, and auth signatures. After this pass, no non-test backend code writes, reads, or branches on `is_demo`.
+
+### Completed Work
+
+#### `invitations.py` — Purged
+- [x] Removed 2 defensive `"is_demo": 0` projections (lines 114, 147)
+- [x] File already had zero is_demo writes from previous overwrite
+
+#### `demo.py` — Fully Rewritten (Canonical)
+- [x] Deterministic `demo_*` ID namespace for ALL seeded entities
+- [x] Cleanup via ID prefix regex (`{id_field: {"$regex": "^demo_"}}`) — no is_demo deletes
+- [x] Zero `is_demo` writes across all seeded documents
+- [x] Zero `is_demo` branching (DEMO_MODE logic removed)
+- [x] Trimmed imports (removed ~20 unused imports from mechanical extraction)
+- [x] ID namespace: demo_agent_*, demo_buyer_*, demo_proj_*, demo_client_*, demo_doc_*, demo_act_*, demo_rcpt_*, demo_reply_*, demo_member_*, demo_unit_*, demo_tmpl_*, demo_tmpl_step_*, demo_timeline_*, demo_step_*, demo_link_*, demo_note_*
+
+#### `schemas.py` — 7 Dead Fields Removed
+- [x] `UserBase.is_demo` removed
+- [x] `Client.is_demo` removed
+- [x] `TeamMember.is_demo` removed
+- [x] `Document.is_demo` removed
+- [x] `ProjectStage.is_demo` removed
+- [x] `Activity.is_demo` removed
+- [x] `Notification.is_demo` removed
+
+#### `core/auth.py` — Dead Wrapper Deleted
+- [x] `create_jwt_token(user_id, role, is_demo=False)` wrapper deleted entirely
+- [x] Stale is_demo comments cleaned from docstrings
+- [x] Added `JWT_EXPIRY_DAYS = 7` (was missing, needed by invitations.py import)
+
+#### `routes/auth.py` — Cleaned
+- [x] Local `create_jwt_token` wrapper deleted
+- [x] All 10 callers replaced with direct `create_access_token`
+- [x] 5 defensive `"is_demo": 0` projections removed
+- [x] is_demo filter in `/auth/me` response removed
+
+#### `admin.py`, `analytics.py` — Dead Assignments Removed
+- [x] 2 dead `is_demo = user.get('is_demo', False)` assignments removed from admin.py
+- [x] 1 dead `is_demo = user.get('is_demo', False)` assignment removed from analytics.py
+
+#### Database Cleanup
+- [x] 16 orphaned legacy demo records (activity_recipients, activity_replies, timeline_templates) cleaned
+- [x] Post-seed verification: zero is_demo fields across ALL 16 checked collections
+
+### Regression
+- 24/24 tests passed (iteration_13)
+- Demo seed, demo login, agent login, auth/me, auth/session, team invitations, data relationships, agent registration, E2E access all verified
+
+---
+
+
 # Evohome CMP — Canonical Surgical Rebuild Changelog
 
 ## Phase 3: Orchestration — COMPLETE (2026-04-11)
