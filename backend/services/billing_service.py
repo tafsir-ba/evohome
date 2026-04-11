@@ -119,7 +119,7 @@ async def get_subscription_status(agent_id: str) -> Dict[str, Any]:
         "property_limit": prop_limit,
         "current_unit_count": unit_count,
         "subscription_status": user_doc.get('subscription_status', 'active') if user_doc else 'active',
-        "subscription_period_end": user_doc.get('subscription_period_end') if user_doc else None,
+        "current_period_end": user_doc.get('subscription_period_end') if user_doc else None,
         "stripe_subscription_id": user_doc.get('stripe_subscription_id') if user_doc else None,
         "stripe_customer_id": user_doc.get('stripe_customer_id') if user_doc else None,
         # Derived entitlements
