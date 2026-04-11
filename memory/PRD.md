@@ -115,9 +115,13 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 
 ## Pending/Backlog
 
-### P1 — Phase 4: Commercial Systems (Billing/Stripe Rebuild)
-- [ ] Canonical Stripe integration rebuild
-- [ ] Must start ONLY after is_demo perimeter purge is verified complete
+### P1 — Phase 4: Commercial Systems (Billing/Stripe Rebuild) — COMPLETE
+- [x] Canonical billing_service.py as SSOT
+- [x] Thin routes in billing.py
+- [x] Webhook signature verification
+- [x] Real Stripe cancel
+- [x] Centralized entitlement checks
+- [x] 33/33 regression tests passed
 
 ### P2 — Frontend Canonical Alignment
 - [ ] Remove is_demo conditionals from AgentLayout.js, BuyerLayout.js

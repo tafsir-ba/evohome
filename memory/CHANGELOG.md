@@ -1,3 +1,58 @@
+# Phase 4: Canonical Billing Rebuild — COMPLETE (2026-04-11)
+
+### Objective
+Rebuild billing as a canonical subsystem: single source of truth for subscription state, thin routes, webhook signature verification, real Stripe cancel, centralized entitlements.
+
+### Domain Model (Frozen)
+- **Plan**: Static config in helpers.py. Immutable.
+- **Subscription**: Local projection of Stripe state on users collection.
+- **Entitlement**: Computed from Plan + Subscription. Never stored.
+- **Truth hierarchy**: Webhook = primary authority. verify-session = reconciliation. Local DB = projection.
+
+### Completed Work
+
+#### `billing_service.py` — Fully Rewritten as SSOT
+- `apply_subscription_update()` with `_UNSET` sentinel pattern (distinguishes "not provided" from "set to None")
+- `get_subscription_status()` — full status with derived entitlements
+- `can_create_unit()`, `get_unit_limit()` — centralized entitlement checks
+- `create_checkout_session()` — Stripe session creation
+- `verify_checkout()` — recovery/reconciliation (calls canonical updater)
+- `handle_webhook_event()` — PRIMARY truth dispatcher for 4 event types
+- `cancel_subscription()` — real Stripe cancel via `stripe.Subscription.modify(cancel_at_period_end=True)`
+- `sync_subscription()` — recovery from Stripe (tries sub first, falls back to session)
+- `create_billing_portal()` — Stripe portal session
+- `get_all_plans()`, `get_plan()` — plan lookup
+
+#### `routes/billing.py` — Rewritten as Thin Routes
+- 8 endpoints, each: validate → auth → delegate to service → return response
+- Zero business logic, zero direct DB writes, zero Stripe SDK calls
+- Webhook signature verification when STRIPE_WEBHOOK_SECRET is configured
+- Clean imports (only what's used)
+
+#### Entitlement Checks Centralized
+- `units.py`: Uses `can_create_unit()` + `get_unit_limit()` from billing_service
+- `projects_v2.py`: Uses `get_subscription_status()` from billing_service
+- `settings.py`: Uses `get_subscription_status()` from billing_service
+- `project_service.py`: Updated import
+
+#### Webhook Events Handled
+- `checkout.session.completed` → activates subscription
+- `customer.subscription.updated` → updates status/plan
+- `customer.subscription.deleted` → downgrades to free, clears stripe_subscription_id
+- `invoice.payment_failed` → sets status to past_due
+
+### Regression
+- 33/33 tests passed (iteration_14)
+- Plans, status, checkout, webhook (all 4 events), cancel, sync, entitlement enforcement, auth requirements all verified.
+- Sentinel pattern verified: subscription.deleted correctly writes `stripe_subscription_id: null`
+
+### Architecture Notes
+- Plan catalog lives in app config (helpers.py), not Stripe Products. Acceptable for now. Future: Stripe-native product catalog optional.
+- Inline price_data at checkout (not pre-created Stripe Prices). Documented as intentional.
+
+---
+
+
 # System Perimeter `is_demo` Purge — COMPLETE (2026-04-11)
 
 ### Objective
