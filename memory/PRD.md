@@ -13,6 +13,16 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 
 ## What's Been Implemented (March 2026)
 
+### Phase 2 Content Layer Rebuild — COMPLETE (April 11, 2026)
+- [x] 4 content modules rebuilt canonically: Activity, Document, VaultDocument, Notification
+- [x] Services: activity_service, document_service, vault_service, notification_service
+- [x] V2 thin routes: activities_v2.py, documents_v2.py, vault_v2.py, notifications_v2.py
+- [x] notification_bridge.py wraps legacy is_demo dependency
+- [x] Traffic switched module-by-module, regression after each switch
+- [x] 32/32 regression tests passed
+- [x] Route map: /app/memory/PHASE2_ROUTE_MAP.md
+- [x] See: /app/memory/CHANGELOG.md, /app/memory/ROADMAP.md
+
 ### Phase 1 Canonical Surgical Rebuild — COMPLETE (April 11, 2026)
 - [x] 5 core modules rebuilt canonically: Unit, Project, Timeline, TimelineStep, Client
 - [x] Service layer: unit_service, project_service, timeline_service, step_service, client_service

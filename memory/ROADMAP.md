@@ -1,33 +1,30 @@
 # Evohome CMP — Prioritized Roadmap
 
-## P0 — Phase 1: Canonical Core ✅ COMPLETE (2026-04-11)
+## P0 — Phase 1: Canonical Core COMPLETE (2026-04-11)
 - Unit, Project, Timeline, TimelineStep, Client
-- Services + thin routes + is_demo eradication
-- 33/33 regression tests passed
+- 33/33 tests passed
 
-## P1 — Phase 2: Content Layer Rebuild
-- **Activity** module — canonical service + V2 route
-- **Document** module — canonical service + V2 route
-- **VaultDocument** module — canonical service + V2 route
-- **Notification** module — canonical service + V2 route
-- is_demo cleanup scoped to these 4 modules
+## P0 — Phase 2: Content Layer COMPLETE (2026-04-11)
+- Activity, Document, VaultDocument, Notification
+- 32/32 tests passed
 
-## P2 — Phase 3: Orchestration
+## P1 — Phase 3: Orchestration
 - **Comment Center** rebuild as orchestration hub
 - Cross-module coordination patterns
+- `notification_bridge.py` cleanup (remove `is_demo=False` wrapper)
 
-## P3 — Phase 4: Commercial Systems
+## P2 — Phase 4: Commercial Systems
 - **Billing** module canonical rebuild
 - **Plan/Upgrade** workflow rebuild
 - Stripe integration hardening
 
-## P4 — Phase 5: Optimization
+## P3 — Phase 5: Optimization
 - AI Precision Enhancements
 - Dashboard performance improvements
 - Query optimization
 
 ## Backlog
-- Global is_demo cleanup (non-module files: auth.py, email_service.py, etc.)
-- Legacy route file cleanup (remove dead code from projects.py, timelines.py)
+- `is_demo` cleanup in non-canonical files (auth.py, email_service.py, realtime_service.py, etc.)
+- Legacy route file deletion (projects.py CRUD removed, timelines.py fully replaced, etc.)
 - Frontend canonical alignment (remove is_demo references in React components)
-- Test coverage expansion (integration tests, load tests)
+- Test coverage expansion
