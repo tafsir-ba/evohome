@@ -26,7 +26,7 @@ from core.monitoring import capture_exception, capture_auth_failure, capture_pay
 from core.responses import AuthSessionResponse, AuthLoginResponse, AuthRefreshResponse, AuthLogoutResponse, DocumentResponse, VaultDocumentResponse, NotificationResponse, ActivityResponse, ActivitiesListResponse, SuccessResponse
 
 from helpers import get_demo_filter, build_query, secure_filename, VALID_TRANSITIONS, validate_transition, SUBSCRIPTION_PLANS, VAULT_CATEGORIES, VAULT_DOC_TYPES
-from services.email_service import send_email_async, send_notification_email, get_email_template
+from services.email_service import send_email_async, send_notification_email, get_email_template, RESEND_API_KEY
 from services.realtime_service import ws_manager, notify_realtime, send_milestone_notification
 from services.qr_service import generate_swiss_qr_code, generate_swiss_qr_code_base64, DEFAULT_IBAN, DEFAULT_COMPANY_NAME
 from services.ai_service import extract_document_from_pdf, OPENAI_API_KEY

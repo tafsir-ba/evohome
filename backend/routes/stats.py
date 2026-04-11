@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, EmailStr
 
 from database import db
 from core.auth import get_current_user, get_current_agent, get_current_buyer, verify_token
-from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer, get_is_demo
+from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer
 from core.rate_limit import rate_limit_check, check_rate_limit
 from core.monitoring import capture_exception, capture_auth_failure, capture_payment_error, capture_email_error, capture_ai_error, capture_websocket_error, capture_document_error, ErrorContext
 from core.responses import AuthSessionResponse, AuthLoginResponse, AuthRefreshResponse, AuthLogoutResponse, DocumentResponse, VaultDocumentResponse, NotificationResponse, ActivityResponse, ActivitiesListResponse, SuccessResponse
@@ -46,7 +46,6 @@ router = APIRouter()
 @router.get("/stats/agent")
 async def get_agent_stats(user: dict = Depends(get_current_agent)):
     """Get agent dashboard stats"""
-    is_demo = user.get('is_demo', False)
     agent_id = user['user_id']
     
     total_clients = await db.clients.count_documents({"agent_id": agent_id})
@@ -101,7 +100,6 @@ async def get_agent_stats(user: dict = Depends(get_current_agent)):
 @router.get("/stats/buyer")
 async def get_buyer_stats(user: dict = Depends(get_current_buyer)):
     """Get buyer dashboard stats"""
-    is_demo = user.get('is_demo', False)
     
     clients = await db.clients.find(
         {"buyer_id": user['user_id']},
@@ -118,12 +116,12 @@ async def get_buyer_stats(user: dict = Depends(get_current_buyer)):
         }
     
     pending_quotes = await db.documents.count_documents({
-        "client_id": {"$in": client_ids}, "is_demo": is_demo,
+        "client_id": {"$in": client_ids},
         "type": "quote", "status": "Sent"
     })
     
     pending_invoices = await db.documents.count_documents({
-        "client_id": {"$in": client_ids}, "is_demo": is_demo,
+        "client_id": {"$in": client_ids},
         "type": "invoice", "status": "Sent"
     })
     

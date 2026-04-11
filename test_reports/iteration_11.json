@@ -1,0 +1,89 @@
+{
+  "summary": "P1 Corrective Pass Tests - All 24 tests PASSED. Verified: (1) C1 fix - RESEND_API_KEY properly imported in workflows.py from email_service, send_document workflow executes without NameError, (2) I1 fix - doc_extraction.py has zero is_demo references, (3) I2 fix - stats.py has zero is_demo filtering, agent/buyer stats work correctly, (4) I3 fix - no get_is_demo imports in any route file, (5) All canonical endpoints return data without is_demo field.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p1_corrective_pass.py",
+    "/app/test_reports/pytest/pytest_p1_corrective_pass.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "C1 VERIFIED: workflows.py line 29 imports RESEND_API_KEY from services.email_service",
+    "C1 VERIFIED: send_document workflow executes without NameError (status 200)",
+    "I1 VERIFIED: doc_extraction.py has zero is_demo references (non-import)",
+    "I2 VERIFIED: stats.py has zero is_demo references, agent_stats and buyer_stats work without is_demo filtering",
+    "I3 VERIFIED: No get_is_demo import found in any route file under /app/backend/routes/",
+    "All workflow endpoints (templates, execute, history) return data without is_demo",
+    "All Phase 1/2/3 endpoints verified: projects, project-timeline, clients, documents, activities, vault-documents, command interpret/draft",
+    "Team CRUD (create/get/update/delete) and team directory work without is_demo",
+    "Notification endpoint returns correct structure: {notifications, unread_count} with is_read field"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_p1_corrective_pass.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A (backend only test)"
+  },
+  "test_credentials": {
+    "email": "e2e@evohome-test.com",
+    "password": "Test2026!"
+  },
+  "seed_data_creation": "Test team member created with TEST_ prefix during tests (then deleted). Test agent has project_id=proj_f763e6ef3aaf and client_id=client_0d050a240d04.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "P1 Corrective Pass verified. All 4 issues from P1 evaluation fixed: C1 (RESEND_API_KEY NameError), I1 (doc_extraction is_demo), I2 (stats is_demo filtering), I3 (dead get_is_demo imports). DB migration cleaned is_demo from all canonical collections. Previous iterations: Phase 1 (33/33), Phase 2 (32/32), Phase 3 (20/20), Notification Contract (19/19), P1 Legacy Cleanup (33/33), P1 Corrective Pass (24/24).",
+  "tests_executed": {
+    "total": 24,
+    "passed": 24,
+    "failed": 0,
+    "skipped": 0
+  },
+  "endpoints_tested": [
+    "GET /api/health",
+    "POST /api/auth/login",
+    "GET /api/workflows/templates - returns templates without is_demo",
+    "POST /api/workflows/execute (send_document) - executes without NameError",
+    "POST /api/workflows/execute (new_client_onboarding) - executes without is_demo",
+    "POST /api/workflows/execute (project_announcement) - executes without is_demo",
+    "GET /api/workflows/history - returns executions without is_demo",
+    "GET /api/stats/agent - returns stats without is_demo filtering",
+    "GET /api/stats/buyer - returns stats without is_demo filtering",
+    "GET /api/notifications - returns {notifications, unread_count} with is_read",
+    "GET /api/projects - returns projects without is_demo",
+    "GET /api/project-timeline - returns timeline without is_demo",
+    "GET /api/clients - returns clients without is_demo",
+    "GET /api/documents - returns documents without is_demo",
+    "GET /api/activities - returns activities without is_demo",
+    "GET /api/vault/documents - returns vault documents without is_demo",
+    "POST /api/command/interpret - interprets command without is_demo",
+    "POST /api/command/draft - creates draft without is_demo",
+    "POST /api/projects/{id}/team - creates team member without is_demo",
+    "GET /api/projects/{id}/team - lists team members without is_demo",
+    "PUT /api/projects/{id}/team/{member_id} - updates team member without is_demo",
+    "DELETE /api/projects/{id}/team/{member_id} - deletes team member",
+    "GET /api/team/directory - returns contacts without is_demo"
+  ],
+  "p1_corrective_verification": {
+    "C1_RESEND_API_KEY_fix": "PASSED - workflows.py imports RESEND_API_KEY from email_service, send_document workflow executes without NameError",
+    "I1_doc_extraction_fix": "PASSED - doc_extraction.py has zero is_demo references (non-import)",
+    "I2_stats_fix": "PASSED - stats.py has zero is_demo references, no is_demo filtering in queries",
+    "I3_dead_imports_fix": "PASSED - no get_is_demo import found in any route file"
+  },
+  "is_demo_verification": {
+    "workflow_endpoints": "PASSED - no is_demo in templates, executions, history",
+    "stats_endpoints": "PASSED - no is_demo in agent_stats or buyer_stats",
+    "notification_endpoints": "PASSED - no is_demo in notifications",
+    "phase1_endpoints": "PASSED - no is_demo in projects, timelines, clients",
+    "phase2_endpoints": "PASSED - no is_demo in documents, activities, vault-documents",
+    "phase3_endpoints": "PASSED - no is_demo in command interpret/draft",
+    "team_endpoints": "PASSED - no is_demo in team CRUD or directory"
+  }
+}
