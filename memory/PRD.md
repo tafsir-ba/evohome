@@ -9,57 +9,52 @@
 ## Canonical Service Layer
 
 ### file_service.py (Organ 1)
-- Single upload pipeline. Frozen validation rules. No absolute disk paths in DB.
+- Single upload pipeline. Frozen validation: images 2-5MB, vault 50MB, PDF 20MB
 - Storage: `/app/backend/uploads/` with prefixed stored_filenames
 - Public images at `/api/uploads/` (no auth). Private files via authenticated download.
 - Parent entities persist: url, stored_filename, original_filename, file_size, content_type
+- Legacy backward compat for old pdf_path and hero_image_path fields
 
-### client_service.py (Organ 2)
-- Batch-enriches clients with project_name AND unit_reference on all UI-facing endpoints
-- Canonical formatters in `lib/utils.js`: formatClientContext, formatClientContextCompact, formatDocContext
-- No N/A. Missing parts omitted, never replaced with placeholder text.
-- Current rule: client → one unit (operational, not eternal domain law)
+### Client Context (Organ 2)
+- Backend: client_service.py batch-enriches project_name + unit_reference on UI-facing endpoints
+- Frontend: Canonical formatters in lib/utils.js (single source of truth):
+  - formatClientContext: "Name — Project — Unit" (cards, detail)
+  - formatClientContextCompact: "Name (Project / Unit)" (selectors)
+  - formatContextSubtitle: "Project / Unit" (below-selector context)
+  - formatDocContext: "Number · Client · Project · Unit" (list rows)
+- All 14 mandatory files audited. Zero inline formatting. Zero N/A placeholders.
 
 ### change_request_service.py (Organ 3)
 - One change_requests collection. Embedded messages. No second comment system.
 - Fields: change_request_id, entity_type, entity_id, agent_id, buyer_id, status, messages
-- State: open → under_review → resolved → closed (no reopen; new CR instead)
+- State: open → under_review → resolved → closed (forbidden: closed→anything, resolved→under_review)
 - Resolve always returns document to Sent (NEVER Draft)
-- Quote and invoice behavior identical. No entity-specific logic.
+- Quote and invoice behavior identical. Dashboard aggregates across entity types.
 - Notifications: buyer→agent on create, agent→buyer on respond/resolve
 
-### vault_service.py (rebuilt with Organ 1)
-- Canonical fields: vault_document_id, title, category, stored_filename, content_type, access_level, client_ids
-- Routes: /api/vault/upload, /api/vault/documents, /api/vault/documents/{id}/download
-
-## Features Implemented
-- Auth (JWT + Google OAuth), Projects/Units/Clients CRUD
-- Documents: Quotes/Invoices with AI extraction, PDF generation, hero images
-- Timelines/Workflows, Real-time Feed, Notifications
-- Stripe billing (webhook verified), Team management, Vault
-- Control Tower dashboard (CR aggregation across entity types)
-- FEAT-001: Decisions Module, FEAT-002: Unified Change Requests
-
-## Organ Status
-1. **Upload/Media** — provisionally accepted, pending production verification
-2. **Client/Project/Unit Context** — provisionally accepted, pending production verification
-3. **Change Request Thread** — provisionally accepted, pending production verification
-4. **Control Tower Dashboard** — not started (Tier 2)
-5. **Decisions** — existing, not rebuilt yet (Tier 3)
+## Organ Status (Contractual)
+| Organ | Status |
+|-------|--------|
+| 1. Upload/Media | Implemented — Pending Production Verification |
+| 2. Client/Project/Unit | Implemented — Pending Production Verification |
+| 3. Change Request Thread | Implemented — Pending Production Verification |
+| 4. Control Tower Dashboard | Drafted (contract needed) |
+| 5. Decisions | Drafted (depends on Organ 3) |
 
 ## Test Accounts
 - Agent: agent@evohome-test.ch / Evohome2026!
 - Buyer: buyer@evohome-test.ch / Evohome2026! (login via /api/auth/buyer/login)
 
-## Legacy Backward Compatibility
-- Documents with old `pdf_path` field served via absolute path fallback
-- Documents with old `hero_image_path` field served via absolute path fallback
-- Delete operations clean up both old and new field paths
+## Test Reports
+- iteration_25: Organ 1 upload system (100% pass)
+- iteration_26: Organ 2 initial + Organ 3 initial (100% pass)
+- iteration_27: Organ 3 backend (15/15 pass)
+- iteration_28: Organ 2 corrective + Organ 3 frontend (100% pass)
 
 ## Remaining
+- P0: Production verification of Organs 1-3 on app.evo-home.ch (requires deployment)
 - P1: Control Tower Dashboard restructuring
 - P1: Decisions rebuild on unified CR thread
-- P2: Production verification of Organs 1-3 on app.evo-home.ch
 - P2: Hook dependency warnings
 - P3: Email digests, reporting/export
 
