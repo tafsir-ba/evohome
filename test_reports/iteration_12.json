@@ -1,0 +1,66 @@
+{
+  "summary": "Auth Surgery Tests - All 20 tests PASSED. Verified complete removal of is_demo from auth system: (1) Agent/buyer login responses have NO is_demo, (2) /auth/me and /auth/session return NO is_demo, (3) Demo login uses user_id prefix convention (demo_*) instead of is_demo field, (4) Registration creates users WITHOUT is_demo, (5) get_is_demo deleted from access_control.py, (6) get_demo_filter deleted from helpers.py, (7) No dead imports in route files, (8) Canonical endpoints still work without is_demo.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_surgery.py",
+    "/app/test_reports/pytest/pytest_auth_surgery.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AUTH SURGERY VERIFIED: is_demo completely removed from all auth paths",
+    "DEMO LOGIN CONVENTION: Now uses user_id prefix 'demo_*' instead of is_demo:true field",
+    "CODE CLEANUP VERIFIED: get_is_demo deleted from access_control.py, get_demo_filter deleted from helpers.py",
+    "NO DEAD IMPORTS: No get_demo_filter or get_is_demo imports found in any route file",
+    "LOGIN RESPONSE KEYS: user_id, email, name, role, token (exactly as specified, no is_demo)",
+    "CANONICAL ENDPOINTS: projects, documents, notifications, stats, team, workflows all work without is_demo"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth_surgery.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A (backend only test)"
+  },
+  "test_credentials": {
+    "email": "e2e@evohome-test.com",
+    "password": "Test2026!"
+  },
+  "seed_data_creation": "Test agent registered with unique email during registration test (test_auth_surgery_*@test.com)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Auth surgery complete. All is_demo references removed from auth system. Demo login now uses user_id prefix convention (demo_agent_001, demo_buyer_001) instead of is_demo:true field. Previous iterations: Phase 1 (33/33), Phase 2 (32/32), Phase 3 (20/20), Notification Contract (19/19), P1 Legacy Cleanup (33/33), P1 Corrective Pass (24/24), Auth Surgery (20/20).",
+  "tests_executed": {
+    "total": 20,
+    "passed": 20,
+    "failed": 0,
+    "skipped": 0
+  },
+  "auth_surgery_verification": {
+    "login_responses_no_is_demo": "PASSED - Agent login, buyer login, demo login all return NO is_demo",
+    "auth_me_no_is_demo": "PASSED - GET /auth/me returns user with NO is_demo",
+    "auth_session_no_is_demo": "PASSED - GET /auth/session returns user with NO is_demo",
+    "demo_login_prefix_convention": "PASSED - Demo agent found by user_id regex ^demo_, demo buyer by demo_buyer_001",
+    "registration_no_is_demo": "PASSED - Agent registration creates user WITHOUT is_demo in response",
+    "login_exact_keys": "PASSED - Response contains exactly: user_id, email, name, role, token",
+    "get_is_demo_deleted": "PASSED - Function does NOT exist in access_control.py",
+    "get_demo_filter_deleted": "PASSED - Function does NOT exist in helpers.py",
+    "no_dead_imports": "PASSED - No get_demo_filter or get_is_demo imports in route files"
+  },
+  "canonical_endpoints_regression": {
+    "projects": "PASSED - Returns projects without is_demo",
+    "documents": "PASSED - Returns documents without is_demo",
+    "notifications": "PASSED - Returns {notifications, unread_count} with is_read, no is_demo",
+    "stats_agent": "PASSED - Returns stats without is_demo filtering",
+    "team_directory": "PASSED - Returns contacts without is_demo",
+    "team_list": "PASSED - Returns team members without is_demo",
+    "workflow_templates": "PASSED - Returns templates without is_demo"
+  }
+}

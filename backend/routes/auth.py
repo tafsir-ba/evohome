@@ -35,7 +35,7 @@ GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 
 # ---- helpers kept local (thin wrappers) ----
 
-def create_jwt_token(user_id: str, role: str, is_demo: bool = False) -> str:
+def create_jwt_token(user_id: str, role: str) -> str:
     return create_access_token(user_id, role)
 
 def verify_jwt_token(token: str) -> dict:
@@ -114,12 +114,12 @@ async def register_agent(data: AgentRegister, response: Response, request: Reque
                     "name": data.name if data.name else existing['name']
                 }}
             )
-            token = create_jwt_token(existing['user_id'], "agent", existing.get('is_demo', False))
+            token = create_jwt_token(existing['user_id'], "agent")
             _set_session_cookie(response, token)
             return {
                 "user_id": existing['user_id'], "email": data.email,
                 "name": data.name if data.name else existing['name'],
-                "role": "agent", "is_demo": existing.get('is_demo', False),
+                "role": "agent",
                 "token": token, "account_linked": True,
                 "message": "Password successfully added to your Google account. You can now login with email/password."
             }
@@ -131,14 +131,14 @@ async def register_agent(data: AgentRegister, response: Response, request: Reque
     user_doc = {
         "user_id": user_id, "email": data.email, "name": data.name,
         "password_hash": hashed_password.decode('utf-8'),
-        "role": "agent", "picture": None, "is_demo": False,
+        "role": "agent", "picture": None,
         "subscription_plan": "free", "subscription_status": "active",
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
-    token = create_jwt_token(user_id, "agent", False)
+    token = create_jwt_token(user_id, "agent")
     _set_session_cookie(response, token)
-    return {"user_id": user_id, "email": data.email, "name": data.name, "role": "agent", "is_demo": False, "token": token}
+    return {"user_id": user_id, "email": data.email, "name": data.name, "role": "agent", "token": token}
 
 
 @router.post("/auth/login")
@@ -154,9 +154,9 @@ async def login_agent(data: AgentLogin, response: Response, request: Request):
     if not bcrypt.checkpw(data.password.encode('utf-8'), user['password_hash'].encode('utf-8')):
         capture_auth_failure("wrong_password", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_jwt_token(user['user_id'], "agent", user.get('is_demo', False))
+    token = create_jwt_token(user['user_id'], "agent")
     _set_session_cookie(response, token)
-    return {"user_id": user['user_id'], "email": user['email'], "name": user['name'], "role": "agent", "is_demo": user.get('is_demo', False), "token": token}
+    return {"user_id": user['user_id'], "email": user['email'], "name": user['name'], "role": "agent", "token": token}
 
 
 @router.post("/auth/buyer/register")
@@ -166,26 +166,26 @@ async def register_buyer(data: BuyerRegister, response: Response):
         if not existing.get('password_hash'):
             hashed_password = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt())
             await db.users.update_one({"user_id": existing['user_id']}, {"$set": {"password_hash": hashed_password.decode('utf-8'), "name": data.name if data.name else existing['name']}})
-            token = create_jwt_token(existing['user_id'], "buyer", existing.get('is_demo', False))
+            token = create_jwt_token(existing['user_id'], "buyer")
             _set_session_cookie(response, token)
-            return {"user_id": existing['user_id'], "email": data.email, "name": data.name if data.name else existing['name'], "role": "buyer", "is_demo": existing.get('is_demo', False), "token": token, "account_linked": True, "message": "Password successfully added to your Google account. You can now login with email/password."}
+            return {"user_id": existing['user_id'], "email": data.email, "name": data.name if data.name else existing['name'], "role": "buyer", "token": token, "account_linked": True, "message": "Password successfully added to your Google account. You can now login with email/password."}
         else:
             raise HTTPException(status_code=400, detail="An account with this email already exists. Please login instead, or use 'Forgot Password' to reset.")
 
     hashed_password = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt())
     user_id = f"buyer_{uuid.uuid4().hex[:12]}"
-    user_doc = {"user_id": user_id, "email": data.email, "name": data.name, "password_hash": hashed_password.decode('utf-8'), "role": "buyer", "picture": None, "is_demo": False, "created_at": datetime.now(timezone.utc).isoformat()}
+    user_doc = {"user_id": user_id, "email": data.email, "name": data.name, "password_hash": hashed_password.decode('utf-8'), "role": "buyer", "picture": None, "created_at": datetime.now(timezone.utc).isoformat()}
     await db.users.insert_one(user_doc)
-    await db.clients.update_many({"email": data.email, "buyer_id": None, "is_demo": False}, {"$set": {"buyer_id": user_id}})
-    await db.clients.update_many({"email": data.email, "buyer_id": {"$exists": False}, "is_demo": False}, {"$set": {"buyer_id": user_id}})
+    await db.clients.update_many({"email": data.email, "buyer_id": None}, {"$set": {"buyer_id": user_id}})
+    await db.clients.update_many({"email": data.email, "buyer_id": {"$exists": False}}, {"$set": {"buyer_id": user_id}})
     if data.invitation_code:
         client = await db.clients.find_one({"invitation_code": data.invitation_code}, {"_id": 0})
         if client and not client.get('buyer_id'):
             await db.clients.update_one({"client_id": client['client_id']}, {"$set": {"buyer_id": user_id}})
     logger.info(f"Buyer registered: {data.email} (user_id: {user_id})")
-    token = create_jwt_token(user_id, "buyer", False)
+    token = create_jwt_token(user_id, "buyer")
     _set_session_cookie(response, token)
-    return {"user_id": user_id, "email": data.email, "name": data.name, "role": "buyer", "is_demo": False, "token": token}
+    return {"user_id": user_id, "email": data.email, "name": data.name, "role": "buyer", "token": token}
 
 
 @router.post("/auth/buyer/login")
@@ -201,9 +201,9 @@ async def login_buyer(data: BuyerLogin, response: Response, request: Request):
     if not bcrypt.checkpw(data.password.encode('utf-8'), user['password_hash'].encode('utf-8')):
         capture_auth_failure("wrong_password", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_jwt_token(user['user_id'], "buyer", user.get('is_demo', False))
+    token = create_jwt_token(user['user_id'], "buyer")
     _set_session_cookie(response, token)
-    return {"user_id": user['user_id'], "email": user['email'], "name": user['name'], "role": "buyer", "is_demo": user.get('is_demo', False), "token": token}
+    return {"user_id": user['user_id'], "email": user['email'], "name": user['name'], "role": "buyer", "token": token}
 
 
 @router.post("/auth/session")
@@ -232,9 +232,9 @@ async def exchange_session(request: Request, response: Response):
 
     user_id, role = await _resolve_oauth_role(intended_role, email, oauth_data, existing_agent, existing_buyer, client_link)
 
-    token = create_jwt_token(user_id, role, False)
+    token = create_jwt_token(user_id, role)
     _set_session_cookie(response, token)
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0, "is_demo": 0})
     return {**user, "token": token}
 
 
@@ -281,15 +281,15 @@ async def google_oauth_callback(request: Request, response: Response):
 
     user_id, role = await _resolve_google_role(intended_role, email, name, picture, existing_agent, existing_buyer, client_link)
 
-    token = create_jwt_token(user_id, role, False)
+    token = create_jwt_token(user_id, role)
     _set_session_cookie(response, token)
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0, "is_demo": 0})
     return {**user, "token": token}
 
 
 @router.get("/auth/me")
 async def get_me(user: dict = Depends(get_current_user)):
-    return {k: v for k, v in user.items() if k != 'password_hash'}
+    return {k: v for k, v in user.items() if k not in ('password_hash', 'is_demo')}
 
 
 @router.post("/auth/check-email")
@@ -327,7 +327,7 @@ async def set_password_for_oauth_user(request: SetPasswordRequest, response: Res
     password_hash = bcrypt.hashpw(request.password.encode(), bcrypt.gensalt()).decode()
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"password_hash": password_hash}})
     logger.info(f"Password set for OAuth user: {user['user_id']}")
-    token = create_jwt_token(user['user_id'], role, user.get('is_demo', False))
+    token = create_jwt_token(user['user_id'], role)
     _set_session_cookie(response, token)
     return {"message": "Password set successfully. You can now login with email/password.", "user_id": user['user_id'], "email": email, "name": user['name'], "role": role, "token": token}
 
@@ -374,18 +374,19 @@ async def reset_password(request: ResetPasswordRequest):
 
 @router.post("/auth/demo/{role}")
 async def demo_login(role: str, response: Response, buyer_num: int = 1):
+    """Demo login — finds demo users by user_id prefix convention (demo_*), not by is_demo field."""
     if role not in ['buyer', 'agent']:
         raise HTTPException(status_code=400, detail="Invalid role")
     if role == 'buyer':
         buyer_id = f"demo_buyer_00{buyer_num}" if buyer_num in [1, 2] else "demo_buyer_001"
-        demo_user = await db.users.find_one({"user_id": buyer_id, "is_demo": True, "role": "buyer"}, {"_id": 0})
+        demo_user = await db.users.find_one({"user_id": buyer_id, "role": "buyer"}, {"_id": 0, "password_hash": 0, "is_demo": 0})
     else:
-        demo_user = await db.users.find_one({"is_demo": True, "role": role}, {"_id": 0})
+        demo_user = await db.users.find_one({"user_id": {"$regex": "^demo_"}, "role": role}, {"_id": 0, "password_hash": 0, "is_demo": 0})
     if not demo_user:
         raise HTTPException(status_code=404, detail="Demo not initialized. Please seed demo data first.")
-    token = create_jwt_token(demo_user['user_id'], role, True)
+    token = create_jwt_token(demo_user['user_id'], role)
     _set_session_cookie(response, token)
-    return {"user_id": demo_user['user_id'], "email": demo_user['email'], "name": demo_user['name'], "role": role, "is_demo": True, "token": token}
+    return {"user_id": demo_user['user_id'], "email": demo_user['email'], "name": demo_user['name'], "role": role, "token": token}
 
 
 @router.post("/auth/refresh")
@@ -423,7 +424,7 @@ async def check_session(request: Request):
         user = await db.users.find_one({"user_id": payload['user_id']}, {"_id": 0})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
-        return {"authenticated": True, "user": {"user_id": user['user_id'], "email": user['email'], "name": user['name'], "role": user['role'], "is_demo": user.get('is_demo', False)}}
+        return {"authenticated": True, "user": {"user_id": user['user_id'], "email": user['email'], "name": user['name'], "role": user['role']}}
     except HTTPException:
         raise
     except Exception:
@@ -489,7 +490,7 @@ async def _resolve_google_role(intended_role, email, name, picture, existing_age
             raise HTTPException(status_code=403, detail="This account is registered as a buyer. Please use 'Login as Buyer' instead.")
         else:
             user_id = f"agent_{uuid.uuid4().hex[:12]}"
-            await db.users.insert_one({"user_id": user_id, "email": email, "name": name, "picture": picture, "role": "agent", "is_demo": False, "subscription_plan": "free", "subscription_status": "active", "created_at": datetime.now(timezone.utc).isoformat()})
+            await db.users.insert_one({"user_id": user_id, "email": email, "name": name, "picture": picture, "role": "agent", "subscription_plan": "free", "subscription_status": "active", "created_at": datetime.now(timezone.utc).isoformat()})
             logger.info(f"New agent registered via Google OAuth: {email}")
             return user_id, "agent"
     else:
@@ -504,7 +505,7 @@ async def _resolve_google_role(intended_role, email, name, picture, existing_age
 
 async def _create_buyer(email, name, picture, client_link):
     user_id = f"buyer_{uuid.uuid4().hex[:12]}"
-    user_doc = {"user_id": user_id, "email": email, "name": name, "picture": picture, "role": "buyer", "is_demo": False, "created_at": datetime.now(timezone.utc).isoformat()}
+    user_doc = {"user_id": user_id, "email": email, "name": name, "picture": picture, "role": "buyer", "created_at": datetime.now(timezone.utc).isoformat()}
     await db.users.insert_one(user_doc)
     if client_link:
         await db.clients.update_one({"client_id": client_link['client_id']}, {"$set": {"buyer_id": user_id}})

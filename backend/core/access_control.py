@@ -136,8 +136,3 @@ async def can_access_document(user: Dict[str, Any], document_id: str) -> bool:
     return False
 
 
-# ── Deprecated stub (removed after all routes rebuilt) ──
-
-def get_is_demo(user: Dict[str, Any]) -> bool:
-    """DEPRECATED — returns False. is_demo removed from canonical architecture."""
-    return False

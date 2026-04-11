@@ -18,7 +18,6 @@ class UserResponse(BaseModel):
     email: str
     name: str
     role: str
-    is_demo: bool = False
 
 
 class AuthSessionResponse(BaseModel):
@@ -33,7 +32,6 @@ class AuthLoginResponse(BaseModel):
     email: str
     name: str
     role: str
-    is_demo: bool = False
     token: str
 
 
@@ -82,7 +80,6 @@ class DocumentResponse(BaseModel):
     sent_at: Optional[str] = None
     due_date: Optional[str] = None
     paid_date: Optional[str] = None
-    is_demo: Optional[bool] = False
     document_number: Optional[str] = None
     notes: Optional[str] = None
     hero_image_url: Optional[str] = None
@@ -131,7 +128,6 @@ class VaultDocumentResponse(BaseModel):
     shared_with_clients: List[str] = []
     project_id: Optional[str] = None
     doc_type: str = "general"
-    is_demo: bool = False
     created_at: str
     updated_at: Optional[str] = None
 
@@ -153,7 +149,6 @@ class ClientResponse(BaseModel):
     unit_id: Optional[str] = None
     unit_reference: Optional[str] = "General"
     status: Optional[str] = "active"
-    is_demo: bool = False
     created_at: Optional[str] = None
 
 
@@ -168,7 +163,6 @@ class ProjectResponse(BaseModel):
     description: Optional[str] = None
     status: str = "active"
     cover_image: Optional[str] = None
-    is_demo: bool = False
     created_at: str
 
 
@@ -184,7 +178,6 @@ class TimelineStepResponse(BaseModel):
     actual_date: Optional[str] = None
     status: str = "pending"
     order_index: int = 0
-    is_demo: bool = False
 
 
 class ProjectTimelineResponse(BaseModel):
@@ -205,9 +198,8 @@ class NotificationResponse(BaseModel):
     message: str
     type: str = "info"
     link: Optional[str] = None
-    read: bool = False
+    is_read: bool = False
     created_at: str
-    is_demo: bool = False
 
 
 # ==================== ACTIVITY RESPONSES ====================
@@ -251,7 +243,6 @@ class ActivityResponse(BaseModel):
     created_at: str
     updated_at: Optional[str] = None
     sent_at: Optional[str] = None
-    is_demo: bool = False
     
     class Config:
         extra = "allow"  # Allow extra fields during migration

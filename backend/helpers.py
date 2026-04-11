@@ -17,15 +17,10 @@ def secure_filename(filename: str) -> str:
     return safe_chars[:100] if safe_chars else 'unnamed_file'
 
 
-# ==================== DEMO FILTER HELPERS ====================
-
-def get_demo_filter(user: dict) -> dict:
-    """DEPRECATED — returns empty dict. is_demo removed from canonical architecture."""
-    return {}
-
+# ==================== QUERY HELPERS ====================
 
 def build_query(user: dict, **filters) -> dict:
-    """Build a query with proper ownership. No is_demo filtering."""
+    """Build a query with proper ownership."""
     query = {**filters}
     if user.get('role') == 'agent' and 'agent_id' not in query:
         query['agent_id'] = user['user_id']
