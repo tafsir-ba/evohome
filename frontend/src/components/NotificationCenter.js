@@ -62,7 +62,7 @@ export const NotificationCenter = () => {
   const markAsRead = async (notificationId) => {
     try {
       await fetch(`${API}/notifications/${notificationId}/read`, {
-        method: 'PUT',
+        method: 'PATCH',
         credentials: 'include',
       });
       setNotifications(prev =>
@@ -77,7 +77,7 @@ export const NotificationCenter = () => {
   const markAllAsRead = async () => {
     try {
       await fetch(`${API}/notifications/read-all`, {
-        method: 'PUT',
+        method: 'PATCH',
         credentials: 'include',
       });
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));

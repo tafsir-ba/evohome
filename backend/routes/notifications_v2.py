@@ -2,6 +2,7 @@
 Notification Routes — Canonical Implementation.
 
 Thin route layer. No is_demo. Derived data only.
+Returns {"notifications": [...], "unread_count": N} — the frontend contract.
 """
 from fastapi import APIRouter, HTTPException, Depends
 from core.auth import get_current_user
@@ -12,8 +13,8 @@ router = APIRouter()
 
 @router.get("/notifications")
 async def list_notifications(user: dict = Depends(get_current_user)):
-    """Get all notifications for the current user."""
-    return await notification_service.list_notifications(user['user_id'])
+    """Get all notifications for the current user with unread count."""
+    return await notification_service.list_notifications_with_count(user['user_id'])
 
 
 @router.patch("/notifications/{notification_id}/read")

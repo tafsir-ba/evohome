@@ -1,0 +1,82 @@
+{
+  "summary": "Phase 3 Notification Contract Fix - All 19 tests PASSED. Verified notification response shape ({notifications, unread_count}), field names (is_read not read), no is_demo field, unread_count accuracy, mark_read/mark_all_read functionality, and command orchestration. Fixed frontend HTTP method bug (PUT→PATCH). MongoDB verified: 0 docs with 'read' field, 0 docs with 'is_demo' field.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Notification mark as read",
+        "issue": "Frontend was using PUT method but backend only supports PATCH - FIXED",
+        "affected_selectors": ["NotificationCenter.js markAsRead", "NotificationCenter.js markAllAsRead"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_notification_contract.py",
+    "/app/test_reports/pytest/pytest_notification_contract.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "notification_service.py correctly implements canonical notification lifecycle with is_read field",
+    "list_notifications_with_count returns {notifications: [...], unread_count: N} as per frontend contract",
+    "MongoDB projection correctly excludes 'read' and 'is_demo' fields from responses",
+    "Frontend NotificationCenter.js correctly uses data.notifications and data.unread_count",
+    "Frontend correctly uses is_read field for notification state",
+    "FIXED: Frontend HTTP methods changed from PUT to PATCH to match backend routes"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_notification_contract.py",
+    "/app/frontend/src/components/NotificationCenter.js"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "email": "e2e@evohome-test.com",
+    "password": "Test2026!"
+  },
+  "seed_data_creation": "Test data created during tests (quotes, invoices, messages via command/execute). Test agent has project_id=proj_f763e6ef3aaf and client_id=client_0d050a240d04.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 3 Notification Contract Fix verified. All notification endpoints return correct response shape {notifications, unread_count}. All notifications use is_read field (not read). No is_demo field in any notification. MongoDB has 0 documents with stale 'read' or 'is_demo' fields. Frontend HTTP methods fixed from PUT to PATCH.",
+  "tests_executed": {
+    "total": 19,
+    "passed": 19,
+    "failed": 0,
+    "skipped": 0
+  },
+  "endpoints_tested": [
+    "GET /api/notifications - returns {notifications: [...], unread_count: N}",
+    "PATCH /api/notifications/{id}/read - marks single notification as is_read=true",
+    "PATCH /api/notifications/read-all - marks all notifications as is_read=true",
+    "POST /api/command/interpret - quote, invoice, message intents",
+    "POST /api/command/draft - creates draft from plan",
+    "POST /api/command/execute - executes draft, no is_demo in response",
+    "GET /api/command/tools - returns 7 tools, no is_demo"
+  ],
+  "notification_contract_verification": {
+    "response_shape": "PASSED - {notifications: [...], unread_count: N}",
+    "is_read_field": "PASSED - all notifications have is_read field",
+    "no_read_field": "PASSED - no notifications have 'read' field",
+    "no_is_demo_field": "PASSED - no notifications have 'is_demo' field",
+    "unread_count_accuracy": "PASSED - matches actual count of is_read:false",
+    "mark_read": "PASSED - sets is_read=true, decrements unread_count",
+    "mark_all_read": "PASSED - sets all is_read=true, unread_count=0"
+  },
+  "mongodb_verification": {
+    "docs_with_read_field": 0,
+    "docs_with_is_demo_field": 0,
+    "docs_with_is_read_field": 5,
+    "total_notifications": 5
+  },
+  "frontend_fix_applied": {
+    "file": "/app/frontend/src/components/NotificationCenter.js",
+    "change": "Changed HTTP method from PUT to PATCH for markAsRead and markAllAsRead functions",
+    "reason": "Backend routes/notifications_v2.py only supports PATCH, not PUT"
+  }
+}
