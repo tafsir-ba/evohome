@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
+import { formatDocContext } from '../../lib/utils';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { StatusBadge, formatDate } from '../../components/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -209,7 +210,7 @@ export const AgentDashboard = () => {
                             <p className="font-medium text-foreground truncate">{doc.title}</p>
                             <span className="text-xs px-1.5 py-0.5 bg-muted rounded capitalize">{doc.type}</span>
                           </div>
-                          <p className="text-sm text-muted-foreground">{[doc.document_number, doc.client_name, doc.unit_reference].filter(Boolean).join(' · ')}</p>
+                          <p className="text-sm text-muted-foreground">{formatDocContext({ document_number: doc.document_number, client_name: doc.client_name, unit_reference: doc.unit_reference })}</p>
                           {doc.change_request_comment && (
                             <p className="text-sm text-amber-700 dark:text-amber-400 mt-2 line-clamp-2 bg-amber-500/10 p-2 rounded-lg">
                               "{doc.change_request_comment}"

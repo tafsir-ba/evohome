@@ -22,7 +22,12 @@ export const formatClientContextCompact = ({ name, project_name, unit_reference 
   return context ? `${name} (${context})` : name;
 };
 
-/** Inline doc reference: "Client · Project · Unit". For list rows. */
-export const formatDocContext = ({ client_name, project_name, unit_reference }) => {
-  return [client_name, project_name, unit_reference].filter(Boolean).join(' · ');
+/** Context subtitle: "Project / Unit". For display below a selector. */
+export const formatContextSubtitle = ({ project_name, unit_reference }) => {
+  return [project_name, unit_reference].filter(Boolean).join(' / ');
+};
+
+/** Inline doc reference: "Number · Client · Project · Unit". For list rows. */
+export const formatDocContext = ({ document_number, client_name, project_name, unit_reference }) => {
+  return [document_number, client_name, project_name, unit_reference].filter(Boolean).join(' · ');
 };

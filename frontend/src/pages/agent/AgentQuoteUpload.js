@@ -8,7 +8,7 @@ import { Textarea } from '../../components/ui/textarea';
 import { Label } from '../../components/ui/label';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, formatClientContextCompact, formatContextSubtitle } from '../../lib/utils';
 import { SupplierAutocomplete } from '../../components/SupplierAutocomplete';
 import {
   PdfUploadZone,
@@ -310,14 +310,11 @@ export const AgentQuoteUpload = () => {
                 onSelect={setSelectedClient}
                 loading={false}
               />
-              {clients.find(c => c.client_id === selectedClient) && (() => {
-                const c = clients.find(c => c.client_id === selectedClient);
-                const parts = [c?.project_name, c?.unit_reference].filter(Boolean);
-                return parts.length > 0 ? (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {parts.join(' · ')}
-                  </p>
-                ) : null;
+              {(() => {
+                const c = clients.find(cl => cl.client_id === selectedClient);
+                if (!c) return null;
+                const subtitle = formatContextSubtitle(c);
+                return subtitle ? <p className="text-sm text-muted-foreground mt-2">{subtitle}</p> : null;
               })()}
             </CardContent>
           </Card>

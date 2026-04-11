@@ -18,7 +18,7 @@ import {
   Trash2, Download, Eye, Pencil, Loader2, Search, Filter,
   Lock, Unlock, Building2, X
 } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, formatClientContextCompact, formatContextSubtitle } from '../../lib/utils';
 
 const BASE_URL = process.env.REACT_APP_BACKEND_URL;
 const API = BASE_URL + '/api';
@@ -600,7 +600,7 @@ const AccessLevelPicker = ({ accessLevel, clientIds, clients, projectId, onAcces
                 }} className="rounded border-border" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{client.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{[client.project_name, client.unit_reference].filter(Boolean).join(' / ') || client.email}</p>
+                  <p className="text-xs text-muted-foreground truncate">{formatContextSubtitle(client) || client.email}</p>
                 </div>
               </label>
             ))

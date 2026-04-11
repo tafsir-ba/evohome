@@ -4,6 +4,7 @@ import { AgentLayout } from '../../components/AgentLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
+import { formatDocContext } from '../../lib/utils';
 import { 
   ArrowLeft,
   Eye,
@@ -272,7 +273,7 @@ export const ClientPreview = () => {
                           {/* Title and number */}
                           <h3 className="font-semibold text-foreground">{doc.title}</h3>
                           <p className="text-sm text-muted-foreground mt-0.5">
-                            {doc.document_number} · {doc.unit_reference}
+                            {formatDocContext({ document_number: doc.document_number, unit_reference: doc.unit_reference })}
                           </p>
                           
                           {/* Summary */}

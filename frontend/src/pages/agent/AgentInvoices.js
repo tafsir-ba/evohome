@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import { useSettings } from '../../context/SettingsContext';
+import { formatDocContext } from '../../lib/utils';
 import { 
   Search, 
   Receipt,
@@ -203,7 +204,7 @@ export const AgentInvoices = () => {
                           <StatusBadge status={invoice.status} />
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {[number, invoice.client_name, invoice.project_name, invoice.unit_reference].filter(Boolean).join(' · ')}
+                          {formatDocContext({ document_number: number, client_name: invoice.client_name, project_name: invoice.project_name, unit_reference: invoice.unit_reference })}
                         </p>
                         <p className="text-sm text-muted-foreground mt-0.5">
                           Due {formatDate(invoice.due_date)}

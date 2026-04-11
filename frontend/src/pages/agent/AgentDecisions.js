@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from '../../components/ui/dialog';
 import { toast } from 'sonner';
-import { cn } from '../../lib/utils';
+import { cn, formatClientContext } from '../../lib/utils';
 import { ChangeRequestPanel } from '../../components/ChangeRequestPanel';
 import {
   Plus,
@@ -367,7 +367,7 @@ export const AgentDecisions = () => {
                           client_ids: checked ? [...f.client_ids, c.client_id] : f.client_ids.filter(id => id !== c.client_id)
                         }))}
                       />
-                      <label className="text-sm">{[c.name, c.project_name, c.unit_reference].filter(Boolean).join(' — ')}</label>
+                      <label className="text-sm">{formatClientContext(c)}</label>
                     </div>
                   ))}
                 </div>

@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import { useSettings } from '../../context/SettingsContext';
+import { formatDocContext } from '../../lib/utils';
 import { 
   Plus, 
   Search, 
@@ -204,7 +205,7 @@ export const AgentQuotes = () => {
                           <StatusBadge status={quote.status} />
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {[number, quote.client_name, quote.project_name, quote.unit_reference].filter(Boolean).join(' · ')}
+                          {formatDocContext({ document_number: number, client_name: quote.client_name, project_name: quote.project_name, unit_reference: quote.unit_reference })}
                         </p>
                         <p className="text-sm text-muted-foreground mt-0.5">
                           Created {formatDate(quote.created_at)}
