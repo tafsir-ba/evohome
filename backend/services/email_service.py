@@ -130,11 +130,3 @@ async def send_notification_email(template_type: str, to_email: str, data: dict)
     """Send a notification email using a template"""
     subject, html = get_email_template(template_type, data)
     return await send_email_async(to_email, subject, html)
-
-
-async def create_notification(user_id: str, title: str, message: str, notification_type: str,
-                             link: str = None, metadata: dict = None, **kwargs) -> str:
-    """Legacy shim — canonical path is notification_service.create_notification.
-    Accepts **kwargs to absorb is_demo from legacy callers."""
-    from services.notification_service import create_notification as _canonical
-    return await _canonical(user_id, title, message, notification_type, link, metadata)

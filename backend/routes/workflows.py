@@ -20,13 +20,13 @@ from pydantic import BaseModel, Field, EmailStr
 
 from database import db
 from core.auth import get_current_user, get_current_agent, get_current_buyer, verify_token
-from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer, get_is_demo
+from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer
 from core.rate_limit import rate_limit_check, check_rate_limit
 from core.monitoring import capture_exception, capture_auth_failure, capture_payment_error, capture_email_error, capture_ai_error, capture_websocket_error, capture_document_error, ErrorContext
 from core.responses import AuthSessionResponse, AuthLoginResponse, AuthRefreshResponse, AuthLogoutResponse, DocumentResponse, VaultDocumentResponse, NotificationResponse, ActivityResponse, ActivitiesListResponse, SuccessResponse
 
 from helpers import get_demo_filter, build_query, secure_filename, VALID_TRANSITIONS, validate_transition, SUBSCRIPTION_PLANS, VAULT_CATEGORIES, VAULT_DOC_TYPES
-from services.email_service import send_email_async, send_notification_email, create_notification, get_email_template
+from services.email_service import send_email_async, send_notification_email, get_email_template
 from services.realtime_service import ws_manager, notify_realtime, send_milestone_notification
 from services.qr_service import generate_swiss_qr_code, generate_swiss_qr_code_base64, DEFAULT_IBAN, DEFAULT_COMPANY_NAME
 from services.ai_service import extract_document_from_pdf, OPENAI_API_KEY
@@ -130,7 +130,6 @@ async def execute_workflow(
 ):
     """Start executing a workflow"""
     service = get_workflow_service(db)
-    is_demo = user.get('is_demo', False)
     
     # Get agent profile for email sending
     agent_profile = await db.agent_profiles.find_one(
@@ -207,7 +206,6 @@ async def execute_workflow(
             agent_id=user['user_id'],
             context=enriched_context,
             mode=request.mode,
-            is_demo=is_demo
         )
         
         # Track step warnings for non-fatal issues
@@ -244,7 +242,6 @@ async def execute_workflow(
                     "email": params.get("client_email") or context.get("client_email"),
                     "phone": params.get("client_phone") or context.get("client_phone"),
                     "status": "active",
-                    "is_demo": is_demo,
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
                 await db.clients.insert_one(client_data)
@@ -417,7 +414,6 @@ async def execute_workflow(
                     "title": params.get("message_title") or context.get("message_title", "Announcement"),
                     "content": params.get("message_content") or context.get("message_content", ""),
                     "is_draft": False,
-                    "is_demo": is_demo,
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
                 await db.activities.insert_one(activity_data)
@@ -431,7 +427,7 @@ async def execute_workflow(
                 if project_id:
                     # Get all clients in project
                     clients = await db.clients.find(
-                        {"project_id": project_id, "is_demo": is_demo, "email": {"$exists": True, "$ne": None}},
+                        {"project_id": project_id, "email": {"$exists": True, "$ne": None}},
                         {"_id": 0, "email": 1, "name": 1}
                     ).to_list(100)
                     
@@ -539,9 +535,8 @@ async def get_workflow_history(
 ):
     """Get recent workflow executions for the agent"""
     service = get_workflow_service(db)
-    is_demo = user.get('is_demo', False)
     
-    executions = await service.get_agent_executions(user['user_id'], is_demo, limit)
+    executions = await service.get_agent_executions(user['user_id'], limit)
     
     return {
         "executions": [service.get_execution_summary(e) for e in executions]
@@ -554,7 +549,6 @@ async def get_workflow_selectors(
     user: dict = Depends(get_current_agent)
 ):
     """Get items for workflow selectors (documents, timeline steps, etc.)"""
-    is_demo = user.get('is_demo', False)
     
     if selector_type == "document":
         # Get recent documents (invoices and quotes)
@@ -704,8 +698,6 @@ async def retry_workflow_step(
     
     if execution.agent_id != user['user_id']:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
-    is_demo = user.get('is_demo', False)
     
     # Get agent settings for email
     agent_settings = await db.agent_settings.find_one(

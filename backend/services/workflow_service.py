@@ -83,7 +83,6 @@ class WorkflowExecution(BaseModel):
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     error: Optional[str] = None
-    is_demo: bool = False
 
 
 # ==================== WORKFLOW TEMPLATES ====================
@@ -259,7 +258,6 @@ class WorkflowService:
         agent_id: str, 
         context: Dict[str, Any],
         mode: str = "automatic",
-        is_demo: bool = False
     ) -> WorkflowExecution:
         """Create and persist a new workflow execution"""
         template = self.get_template(template_id)
@@ -301,7 +299,6 @@ class WorkflowService:
             context=context,
             steps=steps,
             created_at=now,
-            is_demo=is_demo
         )
         
         # Persist to database - use datetime object for TTL to work
@@ -331,12 +328,11 @@ class WorkflowService:
     async def get_agent_executions(
         self, 
         agent_id: str, 
-        is_demo: bool = False,
         limit: int = 20
     ) -> List[WorkflowExecution]:
         """Get recent executions for an agent"""
         cursor = self.db.workflow_executions.find(
-            {"agent_id": agent_id, "is_demo": is_demo},
+            {"agent_id": agent_id},
             {"_id": 0}
         ).sort("created_at", -1).limit(limit)
         

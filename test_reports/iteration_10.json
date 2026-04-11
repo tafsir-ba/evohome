@@ -1,0 +1,89 @@
+{
+  "summary": "P1 Legacy Cleanup Tests - All 33 tests PASSED. Verified: (1) Team CRUD endpoints (create/get/update/delete/bulk/directory) work without is_demo, (2) Workflow endpoints (templates/execute/history/selectors) sanitized with zero is_demo, (3) Phase 1/2/3 regression passed (projects, timelines, clients, documents, activities, vault, notifications, commands), (4) Notification contract verified ({notifications, unread_count} with is_read field), (5) Dead V1 routes return 404, (6) email_service.create_notification shim removed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p1_legacy_cleanup.py",
+    "/app/test_reports/pytest/pytest_p1_legacy_cleanup.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "team_v2.py correctly implements team CRUD without is_demo field",
+    "team_service.py excludes is_demo from all MongoDB projections",
+    "workflows.py sanitized - zero is_demo references in workflow execution",
+    "workflow_service.py WorkflowExecution model has no is_demo field",
+    "notification_service.py returns {notifications, unread_count} with is_read field",
+    "email_service.create_notification shim successfully removed",
+    "Dead V1 routes (activities.py, clients.py, documents.py, etc.) confirmed deleted - all return 404"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_p1_legacy_cleanup.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A (backend only test)"
+  },
+  "test_credentials": {
+    "email": "e2e@evohome-test.com",
+    "password": "Test2026!"
+  },
+  "seed_data_creation": "Test team members created with TEST_ prefix during tests. Test agent has project_id=proj_f763e6ef3aaf and client_id=client_0d050a240d04.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "P1 Legacy Cleanup verified. All team_v2 endpoints working (CRUD + bulk + directory). Workflow endpoints sanitized (zero is_demo). Phase 1/2/3 regression passed. Notification contract verified. Dead V1 routes return 404. email_service.create_notification shim removed. Previous iterations: Phase 1 (33/33), Phase 2 (32/32), Phase 3 (20/20), Notification Contract (19/19), P1 Legacy Cleanup (33/33).",
+  "tests_executed": {
+    "total": 33,
+    "passed": 33,
+    "failed": 0,
+    "skipped": 0
+  },
+  "endpoints_tested": [
+    "GET /api/health",
+    "POST /api/auth/login",
+    "POST /api/projects/{id}/team - creates team member without is_demo",
+    "GET /api/projects/{id}/team - lists team members without is_demo",
+    "PUT /api/projects/{id}/team/{member_id} - updates team member without is_demo",
+    "DELETE /api/projects/{id}/team/{member_id} - deletes team member",
+    "POST /api/projects/{id}/team/bulk - bulk imports contacts without is_demo",
+    "GET /api/team/directory - returns contacts without is_demo",
+    "GET /api/workflows/templates - returns templates without is_demo",
+    "POST /api/workflows/execute - runs workflow without is_demo",
+    "GET /api/workflows/history - returns executions without is_demo",
+    "GET /api/workflows/selectors?selector_type=document - returns items without is_demo",
+    "GET /api/workflows/selectors?selector_type=client - returns items without is_demo",
+    "GET /api/projects - lists projects",
+    "GET /api/project-timeline?project_id={id} - returns timeline",
+    "GET /api/projects/{id}/steps - returns steps",
+    "GET /api/clients - lists clients",
+    "GET /api/documents - lists documents",
+    "GET /api/activities - lists activities",
+    "GET /api/vault/documents - lists vault documents",
+    "GET /api/notifications - returns {notifications, unread_count} with is_read field",
+    "POST /api/command/interpret - interprets command without is_demo",
+    "GET /api/command/tools - returns tools without is_demo",
+    "GET /api/old-activities - returns 404 (dead route)",
+    "GET /api/v1/activities - returns 404 (dead route)",
+    "GET /api/v1/clients - returns 404 (dead route)",
+    "GET /api/v1/documents - returns 404 (dead route)"
+  ],
+  "is_demo_verification": {
+    "team_endpoints": "PASSED - no is_demo in any team response",
+    "workflow_endpoints": "PASSED - no is_demo in templates, executions, history, selectors",
+    "notification_endpoints": "PASSED - no is_demo in notifications",
+    "command_endpoints": "PASSED - no is_demo in interpret or tools"
+  },
+  "dead_v1_routes_verification": {
+    "old_activities": "404 - confirmed dead",
+    "v1_activities": "404 - confirmed dead",
+    "v1_clients": "404 - confirmed dead",
+    "v1_documents": "404 - confirmed dead"
+  },
+  "email_service_shim_verification": "PASSED - email_service.create_notification does not exist"
+}
