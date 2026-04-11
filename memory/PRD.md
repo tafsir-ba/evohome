@@ -7,66 +7,61 @@
 - **Integrations**: OpenAI GPT-4o, Stripe (webhooks verified), Resend, Google OAuth
 
 ## Canonical Service Layer
-All business logic lives in `/app/backend/services/`. Routes only validate, authorize, and delegate.
 
-### file_service.py (NEW — Organ 1 Rebuild)
-- Single source of truth for all file upload, validation, storage, deletion
-- Frozen validation rules: images (JPEG/PNG/WebP), vault (PDF/images/Office docs), PDFs
-- Max sizes: logo 2MB, hero 5MB, vault 50MB, PDF 20MB
+### file_service.py (Organ 1)
+- Single upload pipeline. Frozen validation rules. No absolute disk paths in DB.
 - Storage: `/app/backend/uploads/` with prefixed stored_filenames
-- Public images served via StaticFiles at `/api/uploads/` (no auth)
-- Private files served via authenticated download endpoints
+- Public images at `/api/uploads/` (no auth). Private files via authenticated download.
 - Parent entities persist: url, stored_filename, original_filename, file_size, content_type
-- NEVER persist absolute disk paths
 
-### vault_service.py (REBUILT)
-- Canonical fields: vault_document_id, title, category, stored_filename, original_filename, file_size, content_type, access_level, client_ids
-- Categories: contracts, plans, permits, reports, other
-- Routes: /api/vault/upload, /api/vault/documents, /api/vault/documents/{id}, /api/vault/documents/{id}/download
+### client_service.py (Organ 2)
+- Batch-enriches clients with project_name AND unit_reference on all UI-facing endpoints
+- Canonical formatters in `lib/utils.js`: formatClientContext, formatClientContextCompact, formatDocContext
+- No N/A. Missing parts omitted, never replaced with placeholder text.
+- Current rule: client → one unit (operational, not eternal domain law)
 
-### client_service.py (FIXED)
-- Batch-enriches clients with project_name AND unit_reference from units collection
-- Canonical display format: Client Name — Project Name — Unit Reference
+### change_request_service.py (Organ 3)
+- One change_requests collection. Embedded messages. No second comment system.
+- Fields: change_request_id, entity_type, entity_id, agent_id, buyer_id, status, messages
+- State: open → under_review → resolved → closed (no reopen; new CR instead)
+- Resolve always returns document to Sent (NEVER Draft)
+- Quote and invoice behavior identical. No entity-specific logic.
+- Notifications: buyer→agent on create, agent→buyer on respond/resolve
 
-### change_request_service.py
-- Unified thread model for quotes, invoices, decisions
-- Buyer-visible thread persists after resolution (not gated on changeComment)
+### vault_service.py (rebuilt with Organ 1)
+- Canonical fields: vault_document_id, title, category, stored_filename, content_type, access_level, client_ids
+- Routes: /api/vault/upload, /api/vault/documents, /api/vault/documents/{id}/download
 
 ## Features Implemented
 - Auth (JWT + Google OAuth), Projects/Units/Clients CRUD
 - Documents: Quotes/Invoices with AI extraction, PDF generation, hero images
 - Timelines/Workflows, Real-time Feed, Notifications
 - Stripe billing (webhook verified), Team management, Vault
-- **Unified Upload System**: One canonical file service for all uploads
-- **Client/Project/Unit Context**: Enriched display across all selectors
-- **Change Request Threads**: Buyer sees full conversation history, including after resolution
-- FEAT-002: Unified Change Request System (canonical, shared across all entity types)
-- FEAT-001: Decisions Module (full lifecycle)
-- Control Tower dashboard, decomposed architecture
+- Control Tower dashboard (CR aggregation across entity types)
+- FEAT-001: Decisions Module, FEAT-002: Unified Change Requests
 
-## Data Model
-- `documents`: Quotes/invoices with hero_image_url, hero_image_stored_filename, pdf_stored_filename
-- `vault_documents`: stored_filename, original_filename, file_size, content_type, access_level, client_ids
-- `users`: company_logo_url, company_logo_stored_filename
-- `change_requests`: Canonical threaded conversations with messages array
-- `decisions` + `decision_recipients`: Formal approval requests
-- `clients`, `projects`, `units`, `activities`, `timelines`, `notifications`, `team_members`
+## Organ Status
+1. **Upload/Media** — provisionally accepted, pending production verification
+2. **Client/Project/Unit Context** — provisionally accepted, pending production verification
+3. **Change Request Thread** — provisionally accepted, pending production verification
+4. **Control Tower Dashboard** — not started (Tier 2)
+5. **Decisions** — existing, not rebuilt yet (Tier 3)
 
 ## Test Accounts
 - Agent: agent@evohome-test.ch / Evohome2026!
 - Buyer: buyer@evohome-test.ch / Evohome2026! (login via /api/auth/buyer/login)
 
-## Completed Organs (Kill-and-Rebuild)
-1. **Upload/Media System** — file_service.py, vault rebuilt, hero image rebuilt, logo rebuilt
-2. **Client/Project/Unit Context** — unit_reference enrichment from units collection
-3. **Change Request Thread** — buyer sees full thread after resolution, no changeComment gate
+## Legacy Backward Compatibility
+- Documents with old `pdf_path` field served via absolute path fallback
+- Documents with old `hero_image_path` field served via absolute path fallback
+- Delete operations clean up both old and new field paths
 
-## Remaining (Tier 2-3)
-- P1: Control Tower Dashboard restructuring (remove command bar, recent activity; add urgency)
-- P1: Decisions feature (build on top of unified change request thread)
-- P2: Hook dependency warnings (74+ instances)
-- P3: Email digest notifications
-- P3: Reporting and export features
+## Remaining
+- P1: Control Tower Dashboard restructuring
+- P1: Decisions rebuild on unified CR thread
+- P2: Production verification of Organs 1-3 on app.evo-home.ch
+- P2: Hook dependency warnings
+- P3: Email digests, reporting/export
 
 ---
 Last Updated: April 11, 2026
