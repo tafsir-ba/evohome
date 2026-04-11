@@ -1,0 +1,83 @@
+{
+  "summary": "Workflow canonicalization testing complete (Iteration 16). All 18 tests PASSED. Verified: (1) workflows.py has ZERO direct DB writes - all mutations delegated to canonical services, (2) client_service.create_client() used for new_client_onboarding, (3) document_service.transition_document_status() used for invoice_paid_processing, (4) step_service.update_step() used for milestone_completion, (5) activity_service.create_and_distribute_activity() used for project_announcement, (6) project creation no longer has entitlement check (removed from projects_v2.py), (7) unit creation still enforces entitlement limits, (8) all billing endpoints work, (9) demo seed and login work.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_workflow_canonicalization.py",
+    "/app/test_reports/pytest/pytest_workflow_canonicalization.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "WORKFLOWS.PY VERIFIED: Zero direct DB writes (no insert_one, update_one, delete_one calls)",
+    "CLIENT_SERVICE DELEGATION: client_service.create_client() called for new_client_onboarding workflow",
+    "DOCUMENT_SERVICE DELEGATION: transition_document_status() called for invoice_paid_processing workflow",
+    "STEP_SERVICE DELEGATION: step_service.update_step() called for milestone_completion workflow",
+    "ACTIVITY_SERVICE DELEGATION: create_and_distribute_activity() called for project_announcement workflow",
+    "PROJECTS_V2.PY VERIFIED: No entitlement check in create_project endpoint - semantically incorrect check removed",
+    "UNIT ENTITLEMENT PRESERVED: Unit creation still enforces entitlement limits (tested via /api/projects/{id}/units)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_workflow_canonicalization.py"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 tests passed)",
+    "frontend": "N/A (backend only test)"
+  },
+  "test_credentials": {
+    "demo_agent": {
+      "email": "demo.agent@upgradeflow.com",
+      "password": "demo123"
+    },
+    "demo_buyers": ["Sophie Müller", "Thomas Weber"]
+  },
+  "seed_data_creation": "Demo seed via POST /api/demo/seed creates agent with demo data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Workflow canonicalization complete. All workflow mutations now flow through canonical services. Key template IDs: new_client_onboarding, invoice_paid_processing, milestone_completion, send_document, project_announcement. Demo documents for testing: demo_doc_005 (invoice, Sent), demo_doc_002 (for send_document). Demo step: demo_step_003 (Foundation, in_progress). Project creation no longer checks entitlements - only unit creation does.",
+  "tests_executed": {
+    "total": 18,
+    "passed": 18,
+    "failed": 0,
+    "skipped": 0
+  },
+  "workflow_canonicalization_verification": {
+    "zero_direct_db_writes": "VERIFIED - grep found no insert_one/update_one/delete_one in workflows.py",
+    "service_delegation": {
+      "client_service_create_client": "VERIFIED - used in new_client_onboarding",
+      "document_service_transition_status": "VERIFIED - used in invoice_paid_processing",
+      "step_service_update_step": "VERIFIED - used in milestone_completion",
+      "activity_service_create_and_distribute": "VERIFIED - used in project_announcement"
+    },
+    "entitlement_check_removal": {
+      "projects_v2_create_project": "VERIFIED - no entitlement check",
+      "unit_creation_still_enforced": "VERIFIED - returns 200/403 based on limits"
+    }
+  },
+  "api_tests_summary": {
+    "GET /api/workflows/templates": "PASSED - returns 5 templates",
+    "GET /api/workflows/templates/new_client_onboarding": "PASSED - returns template with steps",
+    "POST /api/workflows/execute (new_client_onboarding)": "PASSED - creates client via service",
+    "POST /api/workflows/execute (invoice_paid_processing)": "PASSED - transitions document via service",
+    "POST /api/workflows/execute (milestone_completion)": "PASSED - updates step via service",
+    "POST /api/workflows/execute (send_document)": "PASSED - sends document email",
+    "POST /api/workflows/execute (project_announcement)": "PASSED - creates activity via service",
+    "GET /api/workflows/selectors?selector_type=document": "PASSED",
+    "GET /api/workflows/selectors?selector_type=timeline_step": "PASSED",
+    "GET /api/workflows/selectors?selector_type=client": "PASSED",
+    "GET /api/workflows/history": "PASSED",
+    "POST /api/projects": "PASSED - no entitlement check",
+    "POST /api/projects/{id}/units": "PASSED - entitlement enforced",
+    "GET /api/billing/status": "PASSED",
+    "GET /api/billing/plans": "PASSED",
+    "POST /api/demo/seed": "PASSED",
+    "POST /api/auth/demo/agent": "PASSED",
+    "POST /api/auth/demo/buyer?buyer_num=1": "PASSED"
+  }
+}

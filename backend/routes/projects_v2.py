@@ -13,7 +13,6 @@ from core.auth import get_current_user, get_current_agent
 from core.access_control import can_access_project
 from database import db
 from services import project_service
-from services.billing_service import can_create_unit, get_subscription_status
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -54,14 +53,7 @@ async def list_projects(user=Depends(get_current_user)):
 
 @router.post("/projects")
 async def create_project(data: CreateProjectRequest, user=Depends(get_current_agent)):
-    """Create a project. Agent only. Enforces subscription unit limits."""
-    sub = await get_subscription_status(user['user_id'])
-    if not sub['can_create_unit']:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Unit limit reached. {sub['plan_name']} allows {sub['unit_limit']} units ({sub['unit_usage']} used). Upgrade to add more."
-        )
-
+    """Create a project. Agent only."""
     project = await project_service.create_project(
         agent_id=user['user_id'],
         name=data.name,

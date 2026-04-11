@@ -302,6 +302,40 @@ async def send_document(document_id: str, agent_id: str, agent_user: dict) -> Di
     }
 
 
+
+async def transition_document_status(document_id: str, agent_id: str, new_status: str) -> Optional[Dict[str, Any]]:
+    """
+    Workflow-initiated status transition. Used by workflow actions.
+    Validates transition against state machine, sets timestamps.
+    """
+    doc = await db.documents.find_one(
+        {"document_id": document_id, "agent_id": agent_id},
+        {"_id": 0},
+    )
+    if not doc:
+        return None
+
+    if not validate_transition(doc['type'], doc['status'], new_status):
+        raise ValueError(f"Cannot transition {doc['type']} from '{doc['status']}' to '{new_status}'")
+
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {"status": new_status, "updated_at": now}
+
+    if new_status == "Paid":
+        update_data["paid_date"] = now
+    elif new_status == "Sent":
+        update_data["sent_at"] = now
+
+    await db.documents.update_one(
+        {"document_id": document_id},
+        {"$set": update_data},
+    )
+
+    updated = await db.documents.find_one({"document_id": document_id}, {"_id": 0})
+    return updated
+
+
+
 async def document_action(
     document_id: str, action: str, user_id: str, user_role: str,
     user_name: str = "", comment: Optional[str] = None,
