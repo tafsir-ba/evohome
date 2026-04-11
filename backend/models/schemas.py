@@ -15,7 +15,6 @@ class UserBase(BaseModel):
     name: str
     role: str
     picture: Optional[str] = None
-    is_demo: bool = False
     created_at: datetime
 
 class AgentRegister(BaseModel):
@@ -83,7 +82,6 @@ class Client(BaseModel):
     unit_id: Optional[str] = None
     unit_reference: Optional[str] = "General"
     status: Optional[str] = "active"
-    is_demo: bool = False
     created_at: Optional[datetime] = None
 
 
@@ -153,7 +151,6 @@ class TeamMember(BaseModel):
     website: Optional[str] = None
     address: Optional[str] = None
     notes: Optional[str] = None
-    is_demo: bool = False
     created_at: str
 
 class ExtractedContact(BaseModel):
@@ -225,7 +222,6 @@ class Document(BaseModel):
     ai_extraction_confidence: Optional[str] = None
     due_date: Optional[str] = None
     paid_date: Optional[str] = None
-    is_demo: bool = False
 
 
 # ==================== PROJECT STAGE / STEP MODELS ====================
@@ -271,7 +267,6 @@ class ProjectStage(BaseModel):
     progress_percent: int = 0
     notes: Optional[str] = None
     dependencies: List[str] = []
-    is_demo: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -306,7 +301,6 @@ class Activity(BaseModel):
     project_name: Optional[str] = None
     unit_id: Optional[str] = None
     unit_reference: Optional[str] = None
-    is_demo: bool = False
     created_at: str
     updated_at: Optional[str] = None
     recipients: Optional[List[dict]] = None
@@ -416,7 +410,6 @@ class Notification(BaseModel):
     link: Optional[str] = None
     metadata: Optional[dict] = None
     is_read: bool = False
-    is_demo: bool = False
     created_at: datetime
 
 

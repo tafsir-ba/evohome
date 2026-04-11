@@ -1,0 +1,106 @@
+{
+  "summary": "is_demo Field Purge Verification - All 24 tests PASSED. Verified complete removal of is_demo field from all system ingress points: invitations.py, demo.py, schemas.py, auth.py. Demo seeding now uses deterministic demo_* ID namespace with zero is_demo field writes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_is_demo_purge.py",
+    "/app/test_reports/pytest/pytest_is_demo_purge.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DEMO.PY VERIFIED: No is_demo field written anywhere - uses demo_* ID prefix namespace for cleanup",
+    "INVITATIONS.PY VERIFIED: No is_demo field - ownership scoped via invited_by (agent_id)",
+    "AUTH.PY VERIFIED: No is_demo field in any auth response (login, register, /me, /session)",
+    "CORE/AUTH.PY VERIFIED: No is_demo references",
+    "SCHEMAS.PY VERIFIED: is_demo removed from all 7 Pydantic models (UserBase, Client, TeamMember, Document, ProjectStage, Activity, Notification)",
+    "DEMO ID NAMESPACE: All demo entities use demo_* prefix (demo_agent_001, demo_buyer_001, demo_proj_001, demo_client_001, demo_doc_001, etc.)",
+    "IDEMPOTENT SEED: Calling /api/demo/seed twice does not duplicate data - cleanup uses ID prefix regex",
+    "NO DEAD IMPORTS: No get_is_demo or get_demo_filter imports found in any route file"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_is_demo_purge.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A (backend only test)"
+  },
+  "test_credentials": {
+    "demo_agent": {
+      "email": "demo.agent@upgradeflow.com",
+      "password": "demo123"
+    },
+    "e2e_agent": {
+      "email": "e2e@evohome-test.com",
+      "password": "Test2026!"
+    },
+    "demo_buyer_1": "sophie.mueller@example.com (use /api/auth/demo/buyer?buyer_num=1)",
+    "demo_buyer_2": "thomas.weber@example.com (use /api/auth/demo/buyer?buyer_num=2)"
+  },
+  "seed_data_creation": "Demo seed creates: 3 users (1 agent + 2 buyers), 1 project, 2 clients, 2 units, 6 documents, 6 activities, 8 recipients, 1 reply, 4 team members, 1 timeline template + 5 steps, 1 timeline + 5 steps, 1 step document link, 1 internal note. All with demo_* prefixed IDs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "is_demo purge complete. All 24 tests passed verifying: (1) POST /api/demo/seed returns credentials without is_demo, (2) Seed is idempotent, (3) Demo agent/buyer logins work without is_demo, (4) /auth/me and /auth/session return no is_demo, (5) Team invitations work without is_demo, (6) Demo data relationships correct (project->clients->documents->activities), (7) Agent registration creates users without is_demo, (8) E2E agent can access projects/clients/documents without is_demo. Previous iterations: Phase 1-3, Notification Contract, P1 Legacy Cleanup, P1 Corrective Pass, Auth Surgery all passed.",
+  "tests_executed": {
+    "total": 24,
+    "passed": 24,
+    "failed": 0,
+    "skipped": 0
+  },
+  "is_demo_purge_verification": {
+    "demo_seed_endpoint": {
+      "returns_credentials": "PASSED - Returns demo_credentials without is_demo",
+      "idempotency": "PASSED - Second seed does not duplicate data"
+    },
+    "demo_login_endpoints": {
+      "demo_agent_login": "PASSED - POST /api/auth/demo/agent returns user without is_demo",
+      "demo_buyer_1_login": "PASSED - POST /api/auth/demo/buyer?buyer_num=1 works",
+      "demo_buyer_2_login": "PASSED - POST /api/auth/demo/buyer?buyer_num=2 works",
+      "credential_login": "PASSED - POST /api/auth/login with demo credentials works"
+    },
+    "auth_endpoints": {
+      "auth_me": "PASSED - GET /api/auth/me returns user without is_demo",
+      "auth_session": "PASSED - GET /api/auth/session returns session without is_demo"
+    },
+    "team_invitations": {
+      "create_invitation": "PASSED - POST /api/team/invitations works without is_demo",
+      "list_invitations": "PASSED - GET /api/team/invitations returns list without is_demo",
+      "list_members": "PASSED - GET /api/team/members returns list without is_demo"
+    },
+    "demo_data_relationships": {
+      "project_exists": "PASSED - Demo project demo_proj_001 exists",
+      "clients_linked": "PASSED - 2 demo clients linked to demo project",
+      "documents_linked": "PASSED - 6+ demo documents linked to clients/project",
+      "activities_exist": "PASSED - 6+ demo activities exist"
+    },
+    "agent_registration": {
+      "no_is_demo": "PASSED - New agent registration creates user without is_demo"
+    },
+    "e2e_agent_access": {
+      "login": "PASSED - E2E agent can login",
+      "projects": "PASSED - E2E agent can access projects without is_demo",
+      "clients": "PASSED - E2E agent can access clients without is_demo",
+      "documents": "PASSED - E2E agent can access documents without is_demo"
+    },
+    "demo_id_namespace": {
+      "user_ids": "PASSED - Demo users use demo_* prefix (demo_agent_001, demo_buyer_001, demo_buyer_002)",
+      "project_id": "PASSED - Demo project uses demo_proj_001",
+      "client_ids": "PASSED - Demo clients use demo_client_001, demo_client_002",
+      "document_ids": "PASSED - Demo documents use demo_doc_* prefix"
+    }
+  },
+  "code_review_verification": {
+    "demo_py": "CLEAN - No is_demo field assignments, only comments explaining is_demo is NOT used",
+    "invitations_py": "CLEAN - No is_demo field, ownership via invited_by",
+    "auth_py": "CLEAN - No is_demo references",
+    "core_auth_py": "CLEAN - No is_demo references",
+    "schemas_py": "CLEAN - is_demo removed from all Pydantic models",
+    "dead_imports": "CLEAN - No get_is_demo or get_demo_filter imports in any route file"
+  }
+}

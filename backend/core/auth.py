@@ -4,7 +4,7 @@ Extracted from server.py to provide:
 - JWT token creation/verification
 - Session management with refresh tokens
 - Proper logout with token invalidation
-- User retrieval with is_demo lookup from DB (not JWT)
+- User retrieval scoped by ownership (agent_id / buyer_id)
 """
 
 import os
@@ -32,6 +32,7 @@ if not JWT_SECRET:
 
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRY_HOURS = 24  # Shorter expiry, use refresh tokens for longer sessions
+JWT_EXPIRY_DAYS = 7    # Cookie max-age for session persistence
 REFRESH_TOKEN_EXPIRY_DAYS = 30
 
 # Database reference - set by main app
@@ -53,11 +54,7 @@ def get_db() -> AsyncIOMotorDatabase:
 # ==================== TOKEN MANAGEMENT ====================
 
 def create_access_token(user_id: str, role: str) -> str:
-    """
-    Create a short-lived access token.
-    NOTE: is_demo is NOT stored in token - it's looked up from DB on each request.
-    This prevents is_demo state from getting stale.
-    """
+    """Create a short-lived access token."""
     payload = {
         'user_id': user_id,
         'role': role,
@@ -135,12 +132,7 @@ def extract_token(request: Request) -> Optional[str]:
 # ==================== USER RETRIEVAL ====================
 
 async def get_current_user(request: Request) -> Dict[str, Any]:
-    """
-    Get current authenticated user.
-    
-    IMPORTANT: is_demo is fetched from database, NOT from token.
-    This ensures is_demo state is always current.
-    """
+    """Get current authenticated user from DB by token."""
     token = extract_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated. Please login.")
@@ -160,8 +152,6 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     if not user:
         raise HTTPException(status_code=401, detail="User not found. Please login again.")
     
-    # is_demo comes from database, not token
-    # This prevents stale is_demo state
     return user
 
 
@@ -206,15 +196,3 @@ def is_token_invalidated(token: str) -> bool:
         return jti in _invalidated_tokens
     except Exception:
         return True  # Invalid token is effectively invalidated
-
-
-# ==================== LEGACY COMPATIBILITY ====================
-
-def create_jwt_token(user_id: str, role: str, is_demo: bool = False) -> str:
-    """
-    Legacy function for backward compatibility.
-    DEPRECATED: Use create_access_token instead.
-    
-    NOTE: is_demo parameter is IGNORED. is_demo is now looked up from DB.
-    """
-    return create_access_token(user_id, role)

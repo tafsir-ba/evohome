@@ -35,9 +35,6 @@ GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 
 # ---- helpers kept local (thin wrappers) ----
 
-def create_jwt_token(user_id: str, role: str) -> str:
-    return create_access_token(user_id, role)
-
 def verify_jwt_token(token: str) -> dict:
     try:
         return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -114,7 +111,7 @@ async def register_agent(data: AgentRegister, response: Response, request: Reque
                     "name": data.name if data.name else existing['name']
                 }}
             )
-            token = create_jwt_token(existing['user_id'], "agent")
+            token = create_access_token(existing['user_id'], "agent")
             _set_session_cookie(response, token)
             return {
                 "user_id": existing['user_id'], "email": data.email,
@@ -136,7 +133,7 @@ async def register_agent(data: AgentRegister, response: Response, request: Reque
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
-    token = create_jwt_token(user_id, "agent")
+    token = create_access_token(user_id, "agent")
     _set_session_cookie(response, token)
     return {"user_id": user_id, "email": data.email, "name": data.name, "role": "agent", "token": token}
 
@@ -154,7 +151,7 @@ async def login_agent(data: AgentLogin, response: Response, request: Request):
     if not bcrypt.checkpw(data.password.encode('utf-8'), user['password_hash'].encode('utf-8')):
         capture_auth_failure("wrong_password", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_jwt_token(user['user_id'], "agent")
+    token = create_access_token(user['user_id'], "agent")
     _set_session_cookie(response, token)
     return {"user_id": user['user_id'], "email": user['email'], "name": user['name'], "role": "agent", "token": token}
 
@@ -166,7 +163,7 @@ async def register_buyer(data: BuyerRegister, response: Response):
         if not existing.get('password_hash'):
             hashed_password = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt())
             await db.users.update_one({"user_id": existing['user_id']}, {"$set": {"password_hash": hashed_password.decode('utf-8'), "name": data.name if data.name else existing['name']}})
-            token = create_jwt_token(existing['user_id'], "buyer")
+            token = create_access_token(existing['user_id'], "buyer")
             _set_session_cookie(response, token)
             return {"user_id": existing['user_id'], "email": data.email, "name": data.name if data.name else existing['name'], "role": "buyer", "token": token, "account_linked": True, "message": "Password successfully added to your Google account. You can now login with email/password."}
         else:
@@ -183,7 +180,7 @@ async def register_buyer(data: BuyerRegister, response: Response):
         if client and not client.get('buyer_id'):
             await db.clients.update_one({"client_id": client['client_id']}, {"$set": {"buyer_id": user_id}})
     logger.info(f"Buyer registered: {data.email} (user_id: {user_id})")
-    token = create_jwt_token(user_id, "buyer")
+    token = create_access_token(user_id, "buyer")
     _set_session_cookie(response, token)
     return {"user_id": user_id, "email": data.email, "name": data.name, "role": "buyer", "token": token}
 
@@ -201,7 +198,7 @@ async def login_buyer(data: BuyerLogin, response: Response, request: Request):
     if not bcrypt.checkpw(data.password.encode('utf-8'), user['password_hash'].encode('utf-8')):
         capture_auth_failure("wrong_password", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_jwt_token(user['user_id'], "buyer")
+    token = create_access_token(user['user_id'], "buyer")
     _set_session_cookie(response, token)
     return {"user_id": user['user_id'], "email": user['email'], "name": user['name'], "role": "buyer", "token": token}
 
@@ -232,9 +229,9 @@ async def exchange_session(request: Request, response: Response):
 
     user_id, role = await _resolve_oauth_role(intended_role, email, oauth_data, existing_agent, existing_buyer, client_link)
 
-    token = create_jwt_token(user_id, role)
+    token = create_access_token(user_id, role)
     _set_session_cookie(response, token)
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0, "is_demo": 0})
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
     return {**user, "token": token}
 
 
@@ -281,15 +278,15 @@ async def google_oauth_callback(request: Request, response: Response):
 
     user_id, role = await _resolve_google_role(intended_role, email, name, picture, existing_agent, existing_buyer, client_link)
 
-    token = create_jwt_token(user_id, role)
+    token = create_access_token(user_id, role)
     _set_session_cookie(response, token)
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0, "is_demo": 0})
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
     return {**user, "token": token}
 
 
 @router.get("/auth/me")
 async def get_me(user: dict = Depends(get_current_user)):
-    return {k: v for k, v in user.items() if k not in ('password_hash', 'is_demo')}
+    return {k: v for k, v in user.items() if k != 'password_hash'}
 
 
 @router.post("/auth/check-email")
@@ -327,7 +324,7 @@ async def set_password_for_oauth_user(request: SetPasswordRequest, response: Res
     password_hash = bcrypt.hashpw(request.password.encode(), bcrypt.gensalt()).decode()
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"password_hash": password_hash}})
     logger.info(f"Password set for OAuth user: {user['user_id']}")
-    token = create_jwt_token(user['user_id'], role)
+    token = create_access_token(user['user_id'], role)
     _set_session_cookie(response, token)
     return {"message": "Password set successfully. You can now login with email/password.", "user_id": user['user_id'], "email": email, "name": user['name'], "role": role, "token": token}
 
@@ -374,17 +371,17 @@ async def reset_password(request: ResetPasswordRequest):
 
 @router.post("/auth/demo/{role}")
 async def demo_login(role: str, response: Response, buyer_num: int = 1):
-    """Demo login — finds demo users by user_id prefix convention (demo_*), not by is_demo field."""
+    """Demo login — finds demo users by user_id prefix convention (demo_*)."""
     if role not in ['buyer', 'agent']:
         raise HTTPException(status_code=400, detail="Invalid role")
     if role == 'buyer':
         buyer_id = f"demo_buyer_00{buyer_num}" if buyer_num in [1, 2] else "demo_buyer_001"
-        demo_user = await db.users.find_one({"user_id": buyer_id, "role": "buyer"}, {"_id": 0, "password_hash": 0, "is_demo": 0})
+        demo_user = await db.users.find_one({"user_id": buyer_id, "role": "buyer"}, {"_id": 0, "password_hash": 0})
     else:
-        demo_user = await db.users.find_one({"user_id": {"$regex": "^demo_"}, "role": role}, {"_id": 0, "password_hash": 0, "is_demo": 0})
+        demo_user = await db.users.find_one({"user_id": {"$regex": "^demo_"}, "role": role}, {"_id": 0, "password_hash": 0})
     if not demo_user:
         raise HTTPException(status_code=404, detail="Demo not initialized. Please seed demo data first.")
-    token = create_jwt_token(demo_user['user_id'], role)
+    token = create_access_token(demo_user['user_id'], role)
     _set_session_cookie(response, token)
     return {"user_id": demo_user['user_id'], "email": demo_user['email'], "name": demo_user['name'], "role": role, "token": token}
 

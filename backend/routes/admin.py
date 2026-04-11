@@ -49,7 +49,6 @@ async def diagnose_buyer_account(email: str, user: dict = Depends(get_current_ag
     Diagnose buyer account linkage issues.
     Returns detailed information about buyer account, client records, and their linkage.
     """
-    is_demo = user.get('is_demo', False)
     
     # Find buyer user
     buyer_user = await db.users.find_one(
@@ -135,7 +134,6 @@ async def fix_buyer_client_linkage(email: str, user: dict = Depends(get_current_
     Fix buyer-client linkage for a specific email.
     Links all client records with this email to the corresponding buyer account.
     """
-    is_demo = user.get('is_demo', False)
     
     # Find buyer user
     buyer_user = await db.users.find_one(

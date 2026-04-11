@@ -49,7 +49,6 @@ async def get_analytics(period: str = "month", user: dict = Depends(get_current_
     Get comprehensive analytics for the agent dashboard.
     Period can be: week, month, quarter, year, all
     """
-    is_demo = user.get('is_demo', False)
     agent_id = user['user_id']
     
     # Calculate date filter based on period

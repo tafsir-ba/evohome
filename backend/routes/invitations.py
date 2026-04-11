@@ -111,7 +111,7 @@ async def list_team_invitations(user: dict = Depends(get_current_agent)):
     """List all team invitations sent by this agent"""
     invitations = await db.team_invitations.find(
         {"invited_by": user['user_id']},
-        {"_id": 0, "invitation_token": 0, "is_demo": 0},
+        {"_id": 0, "invitation_token": 0},
     ).sort("created_at", -1).to_list(100)
     return invitations
 
@@ -144,7 +144,7 @@ async def list_team_members(user: dict = Depends(get_current_agent)):
             ],
             "role": "agent",
         },
-        {"_id": 0, "password_hash": 0, "password_reset_token": 0, "password_reset_expires": 0, "is_demo": 0},
+        {"_id": 0, "password_hash": 0, "password_reset_token": 0, "password_reset_expires": 0},
     ).to_list(100)
 
     for member in team_members:
