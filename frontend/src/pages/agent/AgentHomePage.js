@@ -46,7 +46,12 @@ import {
   Flag,
   Workflow,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ArrowRight,
+  Users,
+  DollarSign,
+  BarChart3,
+  MessageSquareWarning
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
@@ -73,6 +78,10 @@ export const AgentHomePage = () => {
   const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef(null);
   const commandInputRef = useRef(null);
+  
+  // Control Tower stats
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   
   // Local state for context-dependent data (clients, units)
   const [selectedClient, setSelectedClient] = useState('');
@@ -128,9 +137,31 @@ export const AgentHomePage = () => {
   useEffect(() => {
     // Projects are fetched by DataContext - only fetch secondary data here
     fetchRecentWork();
+    fetchStats();
     initSpeechRecognition();
     fetchWorkflowTemplates();
   }, []);
+
+  // Fetch Control Tower stats
+  const fetchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch(`${API}/stats/agent`, { 
+        credentials: 'include',
+        headers
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
 
   // Track last fetched project and fetching state
   const lastContextProjectRef = useRef(null);
@@ -1114,16 +1145,172 @@ export const AgentHomePage = () => {
   return (
     <AgentLayout>
       <div className="space-y-6" data-testid="agent-home-page">
-        {/* Simplified Header */}
-        <div>
-          <h1 className="text-2xl font-outfit font-semibold text-foreground tracking-tight flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-primary" />
-            Command Center
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Type, speak, or upload to get things done.
-          </p>
+        {/* Control Tower Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-outfit font-semibold text-foreground tracking-tight">
+              Control Tower
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              What needs your attention today.
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { fetchStats(); fetchRecentWork(); refreshProjects(); }}
+            className="text-muted-foreground hover:text-foreground"
+            data-testid="refresh-dashboard-btn"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </Button>
         </div>
+
+        {/* Action Cards — Urgent Items */}
+        {!statsLoading && stats && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="action-cards">
+            {/* Change Requests */}
+            <Card
+              className={cn(
+                "border-border cursor-pointer transition-all hover:shadow-md group",
+                (stats.change_requests?.length || 0) > 0 && "border-amber-500/40 bg-amber-500/5"
+              )}
+              onClick={() => navigate('/agent/quotes')}
+              data-testid="action-card-change-requests"
+            >
+              <CardContent className="py-4 px-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-lg flex items-center justify-center",
+                      (stats.change_requests?.length || 0) > 0 ? "bg-amber-500/15" : "bg-muted"
+                    )}>
+                      <MessageSquareWarning className={cn(
+                        "w-5 h-5",
+                        (stats.change_requests?.length || 0) > 0 ? "text-amber-600" : "text-muted-foreground"
+                      )} />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-semibold font-outfit">{stats.change_requests?.length || 0}</p>
+                      <p className="text-xs text-muted-foreground">Change Requests</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pending Invoices */}
+            <Card
+              className={cn(
+                "border-border cursor-pointer transition-all hover:shadow-md group",
+                (stats.pending_invoices || 0) > 0 && "border-red-500/30 bg-red-500/5"
+              )}
+              onClick={() => navigate('/agent/invoices')}
+              data-testid="action-card-pending-invoices"
+            >
+              <CardContent className="py-4 px-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-lg flex items-center justify-center",
+                      (stats.pending_invoices || 0) > 0 ? "bg-red-500/15" : "bg-muted"
+                    )}>
+                      <CreditCard className={cn(
+                        "w-5 h-5",
+                        (stats.pending_invoices || 0) > 0 ? "text-red-600" : "text-muted-foreground"
+                      )} />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-semibold font-outfit">{stats.pending_invoices || 0}</p>
+                      <p className="text-xs text-muted-foreground">Pending Invoices</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pending Quotes */}
+            <Card
+              className={cn(
+                "border-border cursor-pointer transition-all hover:shadow-md group",
+                (stats.pending_quotes || 0) > 0 && "border-blue-500/30 bg-blue-500/5"
+              )}
+              onClick={() => navigate('/agent/quotes')}
+              data-testid="action-card-pending-quotes"
+            >
+              <CardContent className="py-4 px-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-lg flex items-center justify-center",
+                      (stats.pending_quotes || 0) > 0 ? "bg-blue-500/15" : "bg-muted"
+                    )}>
+                      <FileText className={cn(
+                        "w-5 h-5",
+                        (stats.pending_quotes || 0) > 0 ? "text-blue-600" : "text-muted-foreground"
+                      )} />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-semibold font-outfit">{stats.pending_quotes || 0}</p>
+                      <p className="text-xs text-muted-foreground">Pending Quotes</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* KPI Strip */}
+        {!statsLoading && stats && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="kpi-strip">
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
+              <Users className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-lg font-semibold font-outfit">{stats.total_clients || 0}</p>
+                <p className="text-[11px] text-muted-foreground">Total Clients</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
+              <Building2 className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-lg font-semibold font-outfit">{projects.length}</p>
+                <p className="text-[11px] text-muted-foreground">Active Projects</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
+              <DollarSign className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-lg font-semibold font-outfit">
+                  {new Intl.NumberFormat('de-CH', { notation: 'compact', maximumFractionDigits: 1 }).format(stats.total_revenue || 0)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">Revenue (CHF)</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
+              <BarChart3 className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-lg font-semibold font-outfit">{stats.approved_quotes?.length || 0}</p>
+                <p className="text-[11px] text-muted-foreground">Approved Quotes</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loading placeholder for stats */}
+        {statsLoading && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              {[1,2,3].map(i => <div key={i} className="h-20 bg-muted rounded-lg animate-pulse" />)}
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              {[1,2,3,4].map(i => <div key={i} className="h-16 bg-muted rounded-lg animate-pulse" />)}
+            </div>
+          </div>
+        )}
 
         {/* Context Selector */}
         <Card className="border-border">
@@ -1186,9 +1373,14 @@ export const AgentHomePage = () => {
           </CardContent>
         </Card>
 
-        {/* Command Workspace - THE DOMINANT BLOCK */}
-        <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent shadow-sm">
-          <CardContent className="pt-6 space-y-4">
+        {/* Command Bar */}
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent shadow-sm">
+          <CardContent className="pt-5 pb-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span>Command Bar</span>
+              <span className="text-xs text-muted-foreground/60 ml-auto">Type, speak, or drop a file</span>
+            </div>
             {/* Hidden file input - OUTSIDE drop zone to prevent event interference */}
             <input
               ref={fileInputRef}
@@ -1323,7 +1515,7 @@ export const AgentHomePage = () => {
           </CardContent>
         </Card>
 
-        {/* Supporting Block - Deterministic: Has activity → Recent Activity | No activity → CTA */}
+        {/* Supporting Block - Recent Activity (deduplicated) */}
         {recentWork.length > 0 ? (
           <Card>
             <CardHeader className="pb-3">
@@ -1334,7 +1526,13 @@ export const AgentHomePage = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {recentWork.slice(0, 6).map(item => (
+                {recentWork
+                  .filter((item, index, self) => 
+                    // Deduplicate by title
+                    self.findIndex(i => i.title === item.title) === index
+                  )
+                  .slice(0, 6)
+                  .map(item => (
                   <div
                     key={item.id}
                     className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"

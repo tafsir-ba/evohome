@@ -46,6 +46,7 @@ export const AgentLayout = ({ children }) => {
     { name: t('nav.clients'), href: '/agent/clients', icon: Users },
     { name: t('nav.timeline'), href: '/agent/workflow', icon: GitBranch },
     { name: t('nav.team'), href: '/agent/team', icon: UserCircle },
+    { name: t('nav.feed'), href: '/agent/feed', icon: MessageSquare },
     { name: t('nav.quotes'), href: '/agent/quotes', icon: FileText },
     { name: t('nav.invoices'), href: '/agent/invoices', icon: Receipt },
     { name: t('nav.settings'), href: '/agent/settings', icon: Settings },
@@ -55,7 +56,6 @@ export const AgentLayout = ({ children }) => {
   const moreNavigation = [
     { name: 'Vault', href: '/agent/vault', icon: FolderArchive },
     { name: t('nav.analytics'), href: '/agent/analytics', icon: BarChart3 },
-    { name: t('nav.feed'), href: '/agent/feed', icon: MessageSquare },
   ];
 
   // Check if any "more" item is currently active

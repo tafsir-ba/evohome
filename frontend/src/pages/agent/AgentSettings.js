@@ -829,139 +829,41 @@ export const AgentSettings = () => {
             )}
           </TabsContent>
 
-          {/* Billing Tab */}
+          {/* Billing Tab - Redirect to dedicated page */}
           <TabsContent value="billing" className="space-y-6">
-            {/* Current Plan */}
+            {/* Current Plan Summary */}
             <Card className="border-border rounded-lg bg-gradient-to-br from-primary/5 to-transparent">
               <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", getPlanColor(subscriptionStatus?.plan_id))}>
-                        {getPlanIcon(subscriptionStatus?.plan_id)}
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Current Plan</p>
-                        <h3 className="text-2xl font-outfit font-semibold">{subscriptionStatus?.plan_name}</h3>
-                      </div>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="flex items-center gap-3">
+                    <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", getPlanColor(subscriptionStatus?.plan_id))}>
+                      {getPlanIcon(subscriptionStatus?.plan_id)}
                     </div>
-                    {subscriptionStatus?.current_period_end && (
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        Renews {new Date(subscriptionStatus.current_period_end * 1000).toLocaleDateString()}
-                      </p>
-                    )}
+                    <div>
+                      <p className="text-sm text-muted-foreground">Current Plan</p>
+                      <h3 className="text-2xl font-outfit font-semibold">{subscriptionStatus?.plan_name || 'Free'}</h3>
+                    </div>
                   </div>
-                  
                   <div className="flex-1 max-w-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-muted-foreground">Project Usage</span>
+                      <span className="text-sm text-muted-foreground">Property Usage</span>
                       <span className="text-sm font-medium">
-                        {subscriptionStatus?.unit_usage} / {subscriptionStatus?.property_limit ?? '∞'}
+                        {subscriptionStatus?.unit_usage || 0} / {subscriptionStatus?.property_limit ?? '∞'}
                       </span>
                     </div>
                     <Progress value={usagePercent} className="h-2" />
                   </div>
-                  
-                  {subscriptionStatus?.stripe_customer_id && (
-                    <Button
-                      variant="outline"
-                      onClick={handleManageSubscription}
-                      disabled={openingPortal}
-                      className="rounded-lg"
-                    >
-                      {openingPortal ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ExternalLink className="w-4 h-4 mr-2" />}
-                      Manage Subscription
-                    </Button>
-                  )}
+                  <Button
+                    onClick={() => navigate('/agent/billing')}
+                    className="rounded-lg"
+                    data-testid="go-to-billing-btn"
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Manage Billing
+                  </Button>
                 </div>
               </CardContent>
             </Card>
-
-            {/* Plans */}
-            <div>
-              <h3 className="text-lg font-outfit font-semibold mb-4">Available Plans</h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {plans.map(plan => {
-                  const isCurrent = subscriptionStatus?.plan_id === plan.plan_id;
-                  return (
-                    <Card 
-                      key={plan.plan_id}
-                      className={cn(
-                        "border-border rounded-lg relative overflow-hidden",
-                        isCurrent && "border-primary ring-1 ring-primary/20"
-                      )}
-                    >
-                      {isCurrent && (
-                        <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-semibold px-2 py-0.5 rounded-bl-lg">
-                          CURRENT
-                        </div>
-                      )}
-                      <CardHeader className="pb-3">
-                        <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center mb-2", getPlanColor(plan.plan_id))}>
-                          {getPlanIcon(plan.plan_id)}
-                        </div>
-                        <CardTitle className="text-base font-outfit">{plan.name}</CardTitle>
-                        <CardDescription>
-                          {plan.is_enterprise ? (
-                            <span className="font-semibold text-foreground">Custom</span>
-                          ) : plan.price === 0 ? (
-                            <span className="font-semibold text-foreground">Free</span>
-                          ) : (
-                            <>
-                              <span className="text-xl font-semibold text-foreground">CHF {plan.price}</span>
-                              <span className="text-muted-foreground">/mo</span>
-                            </>
-                          )}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <ul className="space-y-1.5 mb-4 text-sm">
-                          {plan.features.slice(0, 3).map((f, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                              <span className="text-muted-foreground">{f}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        {plan.is_enterprise ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full rounded-lg"
-                            onClick={() => window.location.href = 'mailto:hello@evo-home.ch?subject=Enterprise Plan'}
-                          >
-                            <Mail className="w-4 h-4 mr-2" />
-                            Contact Sales
-                          </Button>
-                        ) : isCurrent ? (
-                          <Button variant="outline" size="sm" className="w-full rounded-lg" disabled>
-                            Current
-                          </Button>
-                        ) : plan.plan_id === 'free' ? (
-                          <Button variant="outline" size="sm" className="w-full rounded-lg" disabled>
-                            Free
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            className="w-full rounded-lg"
-                            onClick={() => handleSubscribe(plan.plan_id)}
-                            disabled={processingPlan === plan.plan_id}
-                          >
-                            {processingPlan === plan.plan_id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              'Upgrade'
-                            )}
-                          </Button>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
 
             {/* Payment Settings (IBAN for QR codes) */}
             <Card className="border-border rounded-lg">

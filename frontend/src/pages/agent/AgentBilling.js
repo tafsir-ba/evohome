@@ -379,20 +379,6 @@ export const AgentBilling = () => {
                     Manage Subscription
                   </Button>
                 )}
-                
-                {/* Sync Subscription Button - for fixing sync issues */}
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  className="rounded-lg text-muted-foreground hover:text-foreground"
-                  onClick={handleSyncSubscription}
-                  disabled={syncingSubscription}
-                  title="Sync subscription status from Stripe"
-                  data-testid="sync-subscription-btn"
-                >
-                  <RefreshCw className={cn("w-4 h-4", syncingSubscription && "animate-spin")} />
-                  <span className="ml-1 hidden sm:inline">Sync</span>
-                </Button>
               </div>
             </div>
           </CardContent>
@@ -499,59 +485,6 @@ export const AgentBilling = () => {
           </div>
         </div>
 
-        {/* Subscription Details (for paid subscribers) */}
-        {subscriptionStatus?.stripe_subscription_id && (
-          <Card className="border-border rounded-lg">
-            <CardHeader>
-              <CardTitle className="text-lg font-outfit flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-muted-foreground" />
-                Subscription Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between items-center py-2 border-b border-border">
-                <span className="text-muted-foreground">Plan</span>
-                <span className="font-medium">{subscriptionStatus.plan_name}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-border">
-                <span className="text-muted-foreground">Status</span>
-                <Badge className={cn("rounded-full", getStatusColor(subscriptionStatus.subscription_status))}>
-                  {subscriptionStatus.subscription_status}
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-border">
-                <span className="text-muted-foreground">Property Usage</span>
-                <span className="font-medium">
-                  {subscriptionStatus.unit_usage} / {subscriptionStatus.property_limit ?? '∞'}
-                </span>
-              </div>
-              {subscriptionStatus.current_period_end && (
-                <div className="flex justify-between items-center py-2 border-b border-border">
-                  <span className="text-muted-foreground">Next Billing Date</span>
-                  <span className="font-medium">
-                    {new Date(subscriptionStatus.current_period_end * 1000).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-              <div className="pt-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="w-full rounded-lg"
-                  onClick={handleManageSubscription}
-                  disabled={openingPortal}
-                >
-                  {openingPortal ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : (
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                  )}
-                  Manage in Stripe
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </AgentLayout>
   );

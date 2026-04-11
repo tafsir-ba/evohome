@@ -75,6 +75,12 @@ const isImageFile = (filename) => {
   return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
 };
 
+// Helper: get auth headers for fetch calls
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canReply = true, isAgent = false }) => {
   const [expanded, setExpanded] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
@@ -83,6 +89,8 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
   const [sending, setSending] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [replies, setReplies] = useState(activity.replies || []);
+  const [loadingReplies, setLoadingReplies] = useState(false);
   
   const config = TYPE_CONFIG[activity.type] || TYPE_CONFIG.message;
   const Icon = config.icon;
@@ -94,6 +102,34 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
     ? `${API.replace('/api', '')}${activity.file_url}` 
     : null;
   
+  // Lazy-load replies when expanding
+  const fetchReplies = async () => {
+    if (replies.length > 0 || !activity.reply_count) return;
+    setLoadingReplies(true);
+    try {
+      const res = await fetch(`${API}/activities/${activity.activity_id}`, {
+        credentials: 'include',
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReplies(data.replies || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch replies:', e);
+    } finally {
+      setLoadingReplies(false);
+    }
+  };
+
+  const handleExpand = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && activity.reply_count > 0 && replies.length === 0) {
+      fetchReplies();
+    }
+  };
+
   const handleReply = async () => {
     if (!replyText.trim()) return;
     setReplying(true);
@@ -101,6 +137,17 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
       await onReply(activity.activity_id, replyText);
       setReplyText('');
       setShowReplyInput(false);
+      // Refresh replies after sending
+      setLoadingReplies(true);
+      const res = await fetch(`${API}/activities/${activity.activity_id}`, {
+        credentials: 'include',
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReplies(data.replies || []);
+      }
+      setLoadingReplies(false);
     } finally {
       setReplying(false);
     }
@@ -324,12 +371,18 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
         )}
         
         {/* Replies section */}
-        {expanded && activity.replies && activity.replies.length > 0 && (
+        {expanded && (replies.length > 0 || loadingReplies) && (
           <div className="mt-4 pt-4 border-t border-border space-y-3">
             <p className="text-xs font-medium text-muted-foreground">
-              {activity.replies.length} REPL{activity.replies.length === 1 ? 'Y' : 'IES'}
+              {loadingReplies ? 'LOADING REPLIES...' : `${replies.length} REPL${replies.length === 1 ? 'Y' : 'IES'}`}
             </p>
-            {activity.replies.map(reply => (
+            {loadingReplies && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading replies...
+              </div>
+            )}
+            {replies.map(reply => (
               <div key={reply.reply_id} className="pl-4 border-l-2 border-primary/30">
                 <p className="text-sm">{reply.content}</p>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -368,7 +421,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
             variant="ghost"
             size="sm"
             className="h-8 text-xs text-muted-foreground"
-            onClick={() => setExpanded(!expanded)}
+            onClick={handleExpand}
           >
             {expanded ? (
               <>
@@ -466,20 +519,18 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
       if (isAgent && clientFilter) url += `&client_id=${clientFilter}`;
       if (isAgent && projectFilter) url += `&project_id=${projectFilter}`;
       
-      const res = await fetch(url, { credentials: 'include' });
+      const res = await fetch(url, { 
+        credentials: 'include',
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
-        
-        // Fetch full details for each activity (including replies)
-        const enriched = await Promise.all(
-          data.activities.map(async (act) => {
-            const detailRes = await fetch(`${API}/activities/${act.activity_id}`, { credentials: 'include' });
-            return detailRes.ok ? await detailRes.json() : act;
-          })
-        );
-        
-        setActivities(enriched);
+        // Activities come pre-enriched from the backend (author, project, recipients)
+        // Replies are lazy-loaded on expand to avoid N+1 performance issues
+        setActivities(data.activities || []);
         setTotal(data.total);
+      } else {
+        console.error('Activities fetch failed:', res.status);
       }
     } catch (error) {
       console.error('Failed to fetch activities:', error);
@@ -493,7 +544,10 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
     if (!isAgent) return; // Buyers don't need this metadata
     
     try {
-      const clientsRes = await fetch(`${API}/clients`, { credentials: 'include' });
+      const clientsRes = await fetch(`${API}/clients`, { 
+        credentials: 'include',
+        headers: getAuthHeaders()
+      });
       
       if (clientsRes.ok) {
         const clientsData = await clientsRes.json();
@@ -590,7 +644,7 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
     try {
       const res = await fetch(`${API}/activities/${activityId}/reply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ content })
       });
