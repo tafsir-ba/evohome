@@ -220,6 +220,7 @@ export const AgentProjects = () => {
         setUnits(prev => [...prev, unit]);
         setNewUnit('');
         toast.success('Unit added');
+        refreshProjects(); // Update unit_count on project cards
       } else {
         const error = await res.json();
         throw new Error(error.detail || 'Failed to add unit');
@@ -239,6 +240,7 @@ export const AgentProjects = () => {
       if (res.ok) {
         setUnits(prev => prev.filter(u => u.unit_id !== unitId));
         toast.success('Unit removed');
+        refreshProjects(); // Update unit_count on project cards
       } else {
         const error = await res.json();
         throw new Error(error.detail || 'Failed to remove unit');

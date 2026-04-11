@@ -126,6 +126,7 @@ export const AgentClients = () => {
         setClientForm({ name: '', email: '', phone: '', project_id: '', unit_id: '' });
         setProjectUnits([]);
         fetchClients();
+        refreshProjects(); // Update client_count on project cards
       } else {
         const error = await response.json();
         toast.error(error.detail);
@@ -178,6 +179,7 @@ export const AgentClients = () => {
       if (response.ok) {
         toast.success('Client deleted');
         fetchClients();
+        refreshProjects(); // Update client_count on project cards
       } else {
         toast.error('Failed to delete client');
       }
