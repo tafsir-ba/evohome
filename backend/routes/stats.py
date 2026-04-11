@@ -90,6 +90,19 @@ async def get_agent_stats(user: dict = Depends(get_current_agent)):
         {"_id": 0}
     ).to_list(10)
     
+    # Decision stats
+    pending_decisions = await db.decisions.count_documents(
+        {"agent_id": agent_id, "status": "pending"}
+    )
+    overdue_decisions = 0
+    now_str = datetime.now(timezone.utc).isoformat()
+    overdue_decisions = await db.decisions.count_documents(
+        {"agent_id": agent_id, "status": "pending", "deadline": {"$lt": now_str, "$ne": None}}
+    )
+    challenged_decisions = await db.decisions.count_documents(
+        {"agent_id": agent_id, "status": "Change Requested"}
+    )
+
     return {
         "total_clients": total_clients,
         "pending_quotes": pending_quotes,
@@ -98,7 +111,10 @@ async def get_agent_stats(user: dict = Depends(get_current_agent)):
         "recent_documents": recent_docs,
         "change_requests": change_requests,
         "open_change_requests": open_change_requests,
-        "approved_quotes": approved_quotes
+        "approved_quotes": approved_quotes,
+        "pending_decisions": pending_decisions,
+        "overdue_decisions": overdue_decisions,
+        "challenged_decisions": challenged_decisions,
     }
 
 @router.get("/stats/buyer")

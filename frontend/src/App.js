@@ -27,6 +27,7 @@ import { AgentInvoiceDetail } from "./pages/agent/AgentInvoiceDetail";
 import { AgentInvoiceUpload } from "./pages/agent/AgentInvoiceUpload";
 import { AgentTimeline } from "./pages/agent/AgentTimeline";
 import { AgentFeed } from "./pages/agent/AgentFeed";
+import { AgentDecisions } from "./pages/agent/AgentDecisions";
 import { AgentTeam } from "./pages/agent/AgentTeam";
 import { ClientPreview } from "./pages/agent/ClientPreview";
 import { AgentWorkflow } from "./pages/agent/AgentWorkflow";
@@ -190,6 +191,11 @@ const AppRouter = () => {
       <Route path="/agent/feed" element={
         <ProtectedRoute allowedRoles={['agent']}>
           <AgentFeed />
+        </ProtectedRoute>
+      } />
+      <Route path="/agent/decisions" element={
+        <ProtectedRoute allowedRoles={['agent']}>
+          <AgentDecisions />
         </ProtectedRoute>
       } />
       <Route path="/agent/team" element={

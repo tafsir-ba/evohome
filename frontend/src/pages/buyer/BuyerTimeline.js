@@ -44,7 +44,9 @@ import {
   FileCheck,
   AlertTriangle,
   File,
-  FileSpreadsheet
+  FileSpreadsheet,
+  CheckSquare,
+  Paperclip
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Feed } from '../../components/Feed';
@@ -150,6 +152,131 @@ const formatDate = (dateStr) => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+// Buyer Decisions View — shows decisions requiring buyer action
+const BuyerDecisionsView = ({ decisions, onRespond }) => {
+  const [expandedId, setExpandedId] = useState(null);
+  const [comment, setComment] = useState('');
+  const [responding, setResponding] = useState(false);
+
+  const handleRespond = async (decisionId, action) => {
+    setResponding(true);
+    await onRespond(decisionId, action, action === 'request_change' ? comment : null);
+    setComment('');
+    setResponding(false);
+  };
+
+  if (decisions.length === 0) {
+    return (
+      <Card className="text-center py-12">
+        <CardContent>
+          <CheckSquare className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+          <p className="text-muted-foreground">No decisions yet</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3" data-testid="buyer-decisions-view">
+      {decisions.map(d => {
+        const isExpanded = expandedId === d.decision_id;
+        const isPending = d.buyer_status === 'pending';
+        const isOverdue = d.deadline && d.status === 'pending' && new Date(d.deadline) < new Date();
+        return (
+          <Card
+            key={d.decision_id}
+            className={cn('transition-all', isPending && 'border-amber-500/30', isOverdue && 'border-red-500/30')}
+            data-testid={`buyer-decision-${d.decision_id}`}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : d.decision_id)}>
+                {d.buyer_status === 'approved' ? (
+                  <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                ) : d.buyer_status === 'rejected' ? (
+                  <XCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <Clock className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                )}
+                <div className="flex-1">
+                  <p className="font-medium">{d.title}</p>
+                  <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                    {d.deadline && (
+                      <span className={cn("flex items-center gap-1", isOverdue && "text-red-600 font-medium")}>
+                        <Calendar className="w-3 h-3" />
+                        {isOverdue ? 'Overdue: ' : 'Due: '}{new Date(d.deadline).toLocaleDateString('de-CH')}
+                      </span>
+                    )}
+                    <span className="capitalize">{d.buyer_status}</span>
+                  </div>
+                </div>
+                {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              </div>
+
+              {isExpanded && (
+                <div className="mt-4 space-y-4 pt-4 border-t">
+                  {d.description && <p className="text-sm whitespace-pre-wrap">{d.description}</p>}
+
+                  {d.external_link && (
+                    <a href={d.external_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline">
+                      <ExternalLink className="w-4 h-4" />Open external document
+                    </a>
+                  )}
+
+                  {d.attachments?.length > 0 && (
+                    <div className="space-y-1">
+                      {d.attachments.map((att, i) => (
+                        <a key={att.filename || `att-${i}`} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted text-sm">
+                          <Paperclip className="w-4 h-4" />
+                          {att.filename || 'Attachment'}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  {isPending && (
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleRespond(d.decision_id, 'approved')} disabled={responding} data-testid={`approve-decision-${d.decision_id}`}>
+                          <CheckCircle className="w-4 h-4 mr-1" />Approve
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-red-600 border-red-500/30 hover:bg-red-500/10" onClick={() => handleRespond(d.decision_id, 'rejected')} disabled={responding} data-testid={`reject-decision-${d.decision_id}`}>
+                          <XCircle className="w-4 h-4 mr-1" />Decline
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <Textarea
+                          value={comment}
+                          onChange={e => setComment(e.target.value)}
+                          placeholder="Ask a question or request changes..."
+                          rows={2}
+                          className="text-sm"
+                          data-testid={`decision-comment-${d.decision_id}`}
+                        />
+                        {comment.trim() && (
+                          <Button size="sm" variant="outline" onClick={() => handleRespond(d.decision_id, 'request_change')} disabled={responding}>
+                            <Send className="w-4 h-4 mr-1" />Send Question
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {d.buyer_status === 'approved' && (
+                    <div className="p-3 rounded-lg bg-emerald-500/10 text-sm text-emerald-700">You approved this decision.</div>
+                  )}
+                  {d.buyer_status === 'rejected' && (
+                    <div className="p-3 rounded-lg bg-red-500/10 text-sm text-red-700">You declined this decision.</div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
 };
 
 const formatRelativeTime = (dateStr) => {
@@ -940,12 +1067,13 @@ export const BuyerTimeline = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [activeView, setActiveView] = useState('documents'); // 'documents', 'updates', 'team', or 'vault'
+  const [activeView, setActiveView] = useState('documents'); // 'documents', 'updates', 'team', 'vault', 'decisions'
   const [unreadCount, setUnreadCount] = useState(0);
   const [teamMembers, setTeamMembers] = useState([]);
   const [constructionTimeline, setConstructionTimeline] = useState(null);
   const [vaultDocuments, setVaultDocuments] = useState([]);
   const [vaultLoading, setVaultLoading] = useState(false);
+  const [buyerDecisions, setBuyerDecisions] = useState([]);
   
   // PDF Viewer state
   const [pdfViewer, setPdfViewer] = useState({ open: false, url: '', filename: '' });
@@ -1012,6 +1140,15 @@ export const BuyerTimeline = () => {
         const unreadData = await unreadRes.json();
         setUnreadCount(unreadData.unread_count);
       }
+      
+      // Fetch buyer decisions
+      try {
+        const decRes = await fetch(`${API}/buyer/decisions`, { credentials: 'include', headers: getAuthHeaders() });
+        if (decRes.ok) {
+          const decData = await decRes.json();
+          setBuyerDecisions(decData.decisions || []);
+        }
+      } catch { /* Decisions not available yet */ }
     } catch (error) {
       console.error('Failed to fetch data:', error);
       toast.error('Failed to load timeline');
@@ -1446,6 +1583,24 @@ export const BuyerTimeline = () => {
             <Users className="w-4 h-4" />
             <span className="hidden sm:inline">Team</span>
           </button>
+          <button
+            onClick={() => setActiveView('decisions')}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
+              activeView === 'decisions'
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            data-testid="tab-decisions"
+          >
+            <CheckSquare className="w-4 h-4" />
+            <span className="hidden sm:inline">Decisions</span>
+            {buyerDecisions.filter(d => d.buyer_status === 'pending').length > 0 && (
+              <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center font-medium">
+                {buyerDecisions.filter(d => d.buyer_status === 'pending').length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Documents View */}
@@ -1617,6 +1772,29 @@ export const BuyerTimeline = () => {
               ))
             )}
           </div>
+        )}
+
+        {/* Decisions View */}
+        {activeView === 'decisions' && (
+          <BuyerDecisionsView decisions={buyerDecisions} onRespond={async (decisionId, action, comment) => {
+            try {
+              const res = await fetch(`${API}/decisions/${decisionId}/respond`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                credentials: 'include',
+                body: JSON.stringify({ action, comment }),
+              });
+              if (res.ok) {
+                toast.success(action === 'approved' ? 'Decision approved' : action === 'rejected' ? 'Decision declined' : 'Change request sent');
+                fetchData();
+              } else {
+                const err = await res.json();
+                toast.error(err.detail || 'Failed to respond');
+              }
+            } catch {
+              toast.error('Failed to respond');
+            }
+          }} />
         )}
       </main>
 

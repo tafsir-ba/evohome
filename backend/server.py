@@ -113,6 +113,12 @@ async def lifespan(app: FastAPI):
         # Change requests: entity lookup and agent listing
         await db.change_requests.create_index([("entity_type", 1), ("entity_id", 1)])
         await db.change_requests.create_index([("agent_id", 1), ("status", 1)])
+        # Decisions: agent listing, buyer lookup
+        await db.decisions.create_index("decision_id", unique=True)
+        await db.decisions.create_index([("agent_id", 1), ("status", 1)])
+        await db.decisions.create_index("project_id")
+        await db.decision_recipients.create_index("decision_id")
+        await db.decision_recipients.create_index("client_id")
         # Notifications: user + read status (unread count query)
         await db.notifications.create_index([("user_id", 1), ("is_read", 1)])
         # Vault: agent vault list
@@ -231,6 +237,7 @@ from routes.doc_extraction import router as doc_extraction_router
 from routes.workflows import router as workflows_router
 from routes.team_v2 import router as team_router
 from routes.change_requests import router as change_requests_router
+from routes.decisions import router as decisions_router
 
 for r in [
     auth_router, projects_router, clients_router, documents_router,
@@ -239,7 +246,7 @@ for r in [
     stats_router, vault_router, analytics_router, test_endpoints_router,
     demo_router, billing_router, invitations_router, settings_router,
     admin_router, commands_router, doc_extraction_router, workflows_router,
-    units_router, team_router, change_requests_router,
+    units_router, team_router, change_requests_router, decisions_router,
 ]:
     api_router.include_router(r)
 

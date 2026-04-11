@@ -19,7 +19,8 @@ import {
   FolderArchive,
   MoreHorizontal,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  CheckSquare
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from './ui/button';
@@ -47,6 +48,7 @@ export const AgentLayout = ({ children }) => {
     { name: t('nav.timeline'), href: '/agent/workflow', icon: GitBranch },
     { name: t('nav.team'), href: '/agent/team', icon: UserCircle },
     { name: t('nav.feed'), href: '/agent/feed', icon: MessageSquare },
+    { name: 'Decisions', href: '/agent/decisions', icon: CheckSquare },
     { name: t('nav.quotes'), href: '/agent/quotes', icon: FileText },
     { name: t('nav.invoices'), href: '/agent/invoices', icon: Receipt },
     { name: t('nav.settings'), href: '/agent/settings', icon: Settings },
