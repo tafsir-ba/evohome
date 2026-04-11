@@ -63,7 +63,7 @@ async def get_step(step_id: str) -> Optional[Dict[str, Any]]:
 async def list_steps_by_project(project_id: str) -> List[Dict[str, Any]]:
     """List all steps for a project, ordered by order_index."""
     return await db.timeline_steps.find(
-        {"project_id": project_id}, {"_id": 0, "is_demo": 0}
+        {"project_id": project_id}, {"_id": 0}
     ).sort("order_index", 1).to_list(200)
 
 

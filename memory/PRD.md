@@ -134,7 +134,12 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - [x] Removed semantically wrong entitlement check from projects_v2.py
 - [x] 18/18 regression tests passed (iteration_16)
 
-### P4 — Phase 5: Optimization
+### P3.5 — Optimization Pass — COMPLETE
+- [x] Removed 44 defensive projections, 2 pops, 6 dead import blocks, 2 redundant billing fields
+- [x] Fixed billing contract field name (subscription_period_end → current_period_end)
+- [x] Backend is_demo refs: 73 → 26 (all comments/config/migration — zero active code)
+
+### P4 — Phase 5: Product Refinement
 - [ ] AI enhancements
 - [ ] Dashboard improvements
 - [ ] Email digest notifications

@@ -40,12 +40,12 @@ async def create_timeline(
 
 
 async def get_timeline(timeline_id: str) -> Optional[Dict[str, Any]]:
-    return await db.timelines.find_one({"timeline_id": timeline_id}, {"_id": 0, "is_demo": 0})
+    return await db.timelines.find_one({"timeline_id": timeline_id}, {"_id": 0})
 
 
 async def get_timeline_by_project(project_id: str) -> Optional[Dict[str, Any]]:
     """Get the main timeline for a project."""
-    return await db.timelines.find_one({"project_id": project_id}, {"_id": 0, "is_demo": 0})
+    return await db.timelines.find_one({"project_id": project_id}, {"_id": 0})
 
 
 async def get_or_create_timeline(project_id: str, agent_id: str) -> Dict[str, Any]:
@@ -118,7 +118,7 @@ async def get_enriched_timeline(project_id: str, user_role: str) -> Optional[Dic
 
     # Get steps
     steps = await db.timeline_steps.find(
-        {"timeline_id": tl_id}, {"_id": 0, "is_demo": 0}
+        {"timeline_id": tl_id}, {"_id": 0}
     ).sort("order_index", 1).to_list(100)
 
     # Enrich steps

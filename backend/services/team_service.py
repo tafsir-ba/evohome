@@ -39,7 +39,7 @@ async def list_team_members(project_id: str, user: dict) -> List[Dict[str, Any]]
     if not project:
         return None  # caller raises 404/403
     return await db.team_members.find(
-        {"project_id": project_id}, {"_id": 0, "is_demo": 0}
+        {"project_id": project_id}, {"_id": 0}
     ).sort("name", 1).to_list(100)
 
 
@@ -72,7 +72,7 @@ async def create_team_member(
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.team_members.insert_one(doc)
-    return await db.team_members.find_one({"member_id": member_id}, {"_id": 0, "is_demo": 0})
+    return await db.team_members.find_one({"member_id": member_id}, {"_id": 0})
 
 
 async def update_team_member(
@@ -88,7 +88,7 @@ async def update_team_member(
     clean = {k: v for k, v in update_data.items() if v is not None}
     if clean:
         await db.team_members.update_one({"member_id": member_id}, {"$set": clean})
-    return await db.team_members.find_one({"member_id": member_id}, {"_id": 0, "is_demo": 0})
+    return await db.team_members.find_one({"member_id": member_id}, {"_id": 0})
 
 
 async def delete_team_member(
@@ -116,7 +116,7 @@ async def get_directory(
     if project_id:
         query["project_id"] = project_id
 
-    members = await db.team_members.find(query, {"_id": 0, "is_demo": 0}).to_list(500)
+    members = await db.team_members.find(query, {"_id": 0}).to_list(500)
 
     # Deduplicate by company_name + contact_name
     seen: set = set()

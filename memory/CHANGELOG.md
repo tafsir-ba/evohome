@@ -1,3 +1,21 @@
+# P3 Optimization Pass — COMPLETE (2026-04-11)
+
+### Removed
+- 44 defensive projections (`"is_demo": 0`) across 9 service files
+- 2 defensive pops (`activity.pop('is_demo')`, `doc.pop('is_demo')`)
+- 6 dead mega-import blocks (`from helpers import ...` in stats, doc_extraction, test_endpoints, commands, admin, analytics)
+- 2 redundant billing response fields (`current_unit_count`, `unit_limit`)
+- Fixed billing contract: `subscription_period_end` → `current_period_end` (matches frontend + Stripe naming)
+
+### Result
+- Backend `is_demo` refs: 73 → 26 (22 comments, 3 config, 1 migration file)
+- Zero defensive ballast remaining
+- Billing API contract: 9 fields, zero duplicates
+- All endpoints verified working
+
+---
+
+
 # Workflow Canonicalization + Entitlement Fix — COMPLETE (2026-04-11)
 
 ### Objective

@@ -92,7 +92,7 @@ async def list_notifications_with_count(user_id: str) -> Dict[str, Any]:
     """List notifications for a user with unread count.
     Returns {"notifications": [...], "unread_count": N} — the frontend contract."""
     notifications = await db.notifications.find(
-        {"user_id": user_id}, {"_id": 0, "is_demo": 0, "read": 0}
+        {"user_id": user_id}, {"_id": 0, "read": 0}
     ).sort("created_at", -1).to_list(50)
 
     unread_count = await db.notifications.count_documents(

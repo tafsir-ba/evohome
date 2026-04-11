@@ -57,18 +57,18 @@ async def create_client(
 
 
 async def get_client(client_id: str) -> Optional[Dict[str, Any]]:
-    return await db.clients.find_one({"client_id": client_id}, {"_id": 0, "is_demo": 0})
+    return await db.clients.find_one({"client_id": client_id}, {"_id": 0})
 
 
 async def list_clients_by_agent(agent_id: str) -> List[Dict[str, Any]]:
     return await db.clients.find(
-        {"agent_id": agent_id}, {"_id": 0, "is_demo": 0}
+        {"agent_id": agent_id}, {"_id": 0}
     ).sort("created_at", -1).to_list(1000)
 
 
 async def list_clients_by_project(project_id: str) -> List[Dict[str, Any]]:
     return await db.clients.find(
-        {"project_id": project_id}, {"_id": 0, "is_demo": 0}
+        {"project_id": project_id}, {"_id": 0}
     ).to_list(500)
 
 

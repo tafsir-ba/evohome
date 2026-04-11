@@ -49,13 +49,13 @@ async def create_unit(
 
 async def get_unit(unit_id: str) -> Optional[Dict[str, Any]]:
     """Get a single unit by ID."""
-    doc = await db.units.find_one({"unit_id": unit_id}, {"_id": 0, "is_demo": 0})
+    doc = await db.units.find_one({"unit_id": unit_id}, {"_id": 0})
     return doc
 
 
 async def list_units_by_project(project_id: str) -> List[Dict[str, Any]]:
     """List all units for a project, enriched with client assignment info."""
-    cursor = db.units.find({"project_id": project_id}, {"_id": 0, "is_demo": 0})
+    cursor = db.units.find({"project_id": project_id}, {"_id": 0})
     units = await cursor.to_list(500)
 
     # Enrich with assigned client name
@@ -74,7 +74,7 @@ async def list_units_by_project(project_id: str) -> List[Dict[str, Any]]:
 
 async def list_units_by_agent(agent_id: str) -> List[Dict[str, Any]]:
     """List all units owned by an agent."""
-    cursor = db.units.find({"agent_id": agent_id}, {"_id": 0, "is_demo": 0})
+    cursor = db.units.find({"agent_id": agent_id}, {"_id": 0})
     return await cursor.to_list(5000)
 
 

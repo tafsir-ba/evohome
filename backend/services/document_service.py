@@ -88,7 +88,7 @@ async def create_document(
         "updated_at": now,
     }
     await db.documents.insert_one(doc)
-    result = await db.documents.find_one({"document_id": doc_id}, {"_id": 0, "is_demo": 0})
+    result = await db.documents.find_one({"document_id": doc_id}, {"_id": 0})
     return result
 
 
@@ -101,12 +101,12 @@ async def get_document(document_id: str, user_id: str, role: str) -> Optional[Di
         client_ids = await _get_buyer_client_ids(user_id)
         query["client_id"] = {"$in": client_ids}
 
-    doc = await db.documents.find_one(query, {"_id": 0, "is_demo": 0})
+    doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
         return None
 
-    client = await db.clients.find_one({"client_id": doc['client_id']}, {"_id": 0, "is_demo": 0})
-    project = await db.projects.find_one({"project_id": doc['project_id']}, {"_id": 0, "is_demo": 0})
+    client = await db.clients.find_one({"client_id": doc['client_id']}, {"_id": 0})
+    project = await db.projects.find_one({"project_id": doc['project_id']}, {"_id": 0})
     return {**doc, "client": client, "project": project}
 
 
@@ -127,7 +127,7 @@ async def list_documents(
     if status:
         query["status"] = status
 
-    return await db.documents.find(query, {"_id": 0, "is_demo": 0}).sort("created_at", -1).to_list(100)
+    return await db.documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
 
 
 async def update_document(document_id: str, agent_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -177,7 +177,7 @@ async def update_document(document_id: str, agent_id: str, updates: Dict[str, An
 
     update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
     await db.documents.update_one(query, {"$set": update_data})
-    return await db.documents.find_one(query, {"_id": 0, "is_demo": 0})
+    return await db.documents.find_one(query, {"_id": 0})
 
 
 async def delete_document(document_id: str, agent_id: str, force: bool = False) -> bool:
@@ -227,7 +227,7 @@ async def send_document(document_id: str, agent_id: str, agent_user: dict) -> Di
     if not doc:
         raise ValueError("Document not found")
 
-    client = await db.clients.find_one({"client_id": doc.get('client_id')}, {"_id": 0, "is_demo": 0})
+    client = await db.clients.find_one({"client_id": doc.get('client_id')}, {"_id": 0})
     if not client:
         raise ValueError("Client not found")
     if not client.get('email'):
@@ -240,7 +240,7 @@ async def send_document(document_id: str, agent_id: str, agent_user: dict) -> Di
         "$set": {"status": "Sent", "sent_at": now, "change_request_comment": None, "updated_at": now}
     })
 
-    project = await db.projects.find_one({"project_id": doc.get('project_id')}, {"_id": 0, "is_demo": 0})
+    project = await db.projects.find_one({"project_id": doc.get('project_id')}, {"_id": 0})
     delivery = {"notification_created": False, "websocket_sent": False, "email_sent": False, "email_error": None}
 
     buyer_id = doc.get('buyer_id') or client.get('buyer_id')
@@ -432,7 +432,7 @@ async def reupload_document(
     }
 
     await db.documents.update_one(query, {"$set": update_data})
-    result = await db.documents.find_one(query, {"_id": 0, "is_demo": 0})
+    result = await db.documents.find_one(query, {"_id": 0})
     result['extraction_warning'] = extraction.get('extraction_failed', False) or extraction.get('amount') is None
     return result
 
@@ -449,11 +449,11 @@ async def get_document_timeline(user_id: str, role: str) -> Dict[str, Any]:
 
         docs = await db.documents.find(
             {"client_id": {"$in": client_ids}, "status": {"$ne": "Draft"}},
-            {"_id": 0, "is_demo": 0}
+            {"_id": 0}
         ).sort("created_at", -1).to_list(100)
 
         project_id = clients[0]['project_id'] if clients else None
-        project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "is_demo": 0}) if project_id else None
+        project = await db.projects.find_one({"project_id": project_id}, {"_id": 0}) if project_id else None
         if project and clients:
             project['unit_reference'] = clients[0].get('unit_reference', '')
 
@@ -475,7 +475,7 @@ async def get_document_timeline(user_id: str, role: str) -> Dict[str, Any]:
         return {"documents": events, "project_info": project}
     else:
         docs = await db.documents.find(
-            {"agent_id": user_id}, {"_id": 0, "is_demo": 0}
+            {"agent_id": user_id}, {"_id": 0}
         ).sort("created_at", -1).to_list(100)
         return {"documents": docs}
 

@@ -79,20 +79,20 @@ async def list_vault_documents(agent_id: str, project_id: Optional[str] = None) 
     query = {"agent_id": agent_id}
     if project_id:
         query["project_id"] = project_id
-    return await db.vault_documents.find(query, {"_id": 0, "is_demo": 0}).sort("created_at", -1).to_list(200)
+    return await db.vault_documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
 
 
 async def list_buyer_vault(buyer_id: str) -> List[Dict[str, Any]]:
     """List vault documents shared with a buyer."""
     return await db.vault_documents.find(
-        {"buyer_ids": buyer_id}, {"_id": 0, "is_demo": 0}
+        {"buyer_ids": buyer_id}, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
 
 
 async def get_vault_document(vault_document_id: str) -> Optional[Dict[str, Any]]:
     """Get a single vault document."""
     return await db.vault_documents.find_one(
-        {"vault_document_id": vault_document_id}, {"_id": 0, "is_demo": 0}
+        {"vault_document_id": vault_document_id}, {"_id": 0}
     )
 
 
@@ -110,7 +110,7 @@ async def update_vault_document(
     filtered["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     await db.vault_documents.update_one(query, {"$set": filtered})
-    return await db.vault_documents.find_one(query, {"_id": 0, "is_demo": 0})
+    return await db.vault_documents.find_one(query, {"_id": 0})
 
 
 async def delete_vault_document(vault_document_id: str, agent_id: str) -> bool:

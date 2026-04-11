@@ -43,7 +43,6 @@ async def get_buyer_context(buyer_id: str) -> Optional[Dict[str, Any]]:
 
 async def enrich_activity(activity: dict, include_replies: bool = False) -> dict:
     """Enrich activity with author name, project name, recipients, replies."""
-    activity.pop('is_demo', None)
 
     author = await db.users.find_one({"user_id": activity['author_id']}, {"_id": 0, "name": 1})
     activity['author_name'] = author['name'] if author else 'Unknown'
@@ -56,7 +55,7 @@ async def enrich_activity(activity: dict, include_replies: bool = False) -> dict
         activity['unit_reference'] = unit['unit_reference'] if unit else None
 
     recipients = await db.activity_recipients.find(
-        {"activity_id": activity['activity_id']}, {"_id": 0, "is_demo": 0}
+        {"activity_id": activity['activity_id']}, {"_id": 0}
     ).to_list(100)
     for r in recipients:
         c = await db.clients.find_one({"client_id": r['client_id']}, {"_id": 0, "name": 1})
@@ -69,7 +68,7 @@ async def enrich_activity(activity: dict, include_replies: bool = False) -> dict
 
     if include_replies:
         replies = await db.activity_replies.find(
-            {"activity_id": activity['activity_id']}, {"_id": 0, "is_demo": 0}
+            {"activity_id": activity['activity_id']}, {"_id": 0}
         ).sort("created_at", 1).to_list(100)
         for reply in replies:
             a = await db.users.find_one({"user_id": reply['author_id']}, {"_id": 0, "name": 1})
@@ -126,7 +125,7 @@ async def create_and_distribute_activity(
         })
         await _notify_recipient(client_id, activity_id, activity_type, content, project, agent_user)
 
-    result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0, "is_demo": 0})
+    result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
     return await enrich_activity(result)
 
 
@@ -211,7 +210,7 @@ async def _list_agent_activities(
 
     total = await db.activities.count_documents(query)
     activities = await db.activities.find(
-        query, {"_id": 0, "is_demo": 0}
+        query, {"_id": 0}
     ).sort("created_at", -1).skip(offset).limit(limit).to_list(limit)
     enriched = [await enrich_activity(a) for a in activities]
     return {"activities": enriched, "total": total, "limit": limit, "offset": offset}
@@ -235,7 +234,7 @@ async def _list_buyer_activities(buyer_id, activity_type, limit, offset):
 
     total = await db.activities.count_documents(query)
     activities = await db.activities.find(
-        query, {"_id": 0, "is_demo": 0}
+        query, {"_id": 0}
     ).sort("created_at", -1).skip(offset).limit(limit).to_list(limit)
     enriched = [await enrich_activity(a) for a in activities]
     return {"activities": enriched, "total": total, "limit": limit, "offset": offset}
@@ -244,7 +243,7 @@ async def _list_buyer_activities(buyer_id, activity_type, limit, offset):
 async def get_activity_detail(activity_id: str) -> Optional[Dict[str, Any]]:
     """Get a single activity with full enrichment and replies."""
     activity = await db.activities.find_one(
-        {"activity_id": activity_id}, {"_id": 0, "is_demo": 0}
+        {"activity_id": activity_id}, {"_id": 0}
     )
     if not activity:
         return None
@@ -278,7 +277,7 @@ async def update_activity(
         updates['content'] = content
 
     await db.activities.update_one({"activity_id": activity_id}, {"$set": updates})
-    result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0, "is_demo": 0})
+    result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
     return result
 
 
@@ -355,7 +354,7 @@ async def create_draft_activity(
         "updated_at": now,
     }
     await db.activities.insert_one(doc)
-    result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0, "is_demo": 0})
+    result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
     return result
 
 
@@ -393,7 +392,7 @@ async def send_draft_activity(activity_id: str, author_id: str, agent_user: dict
             activity.get('content'), project, agent_user
         )
 
-    updated = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0, "is_demo": 0})
+    updated = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
     return await enrich_activity(updated)
 
 
