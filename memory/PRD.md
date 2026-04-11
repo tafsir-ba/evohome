@@ -14,93 +14,77 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 ## Architecture (Post-Canonical Rebuild — April 2026)
 ```
 /app/backend/
-├── server.py              # Slim orchestrator
+├── server.py              # Slim orchestrator + index management
 ├── database.py            # Shared MongoDB connection
-├── helpers.py             # Utility functions
 ├── models/
 │   └── schemas.py         # All Pydantic models (explicit exports in __init__.py)
-├── services/              # Strict canonical domain logic
-│   ├── activity_service, document_service, vault_service
-│   ├── notification_service, project_service, client_service
-│   ├── timeline_service, step_service, team_service, unit_service
-│   ├── command_service, workflow_service, billing_service
-│   ├── email_service, realtime_service, qr_service, ai_service
+├── services/              # Canonical domain logic
+│   ├── activity_service   # batch_enrich_activities() for O(1) list enrichment
+│   ├── billing_service, client_service, document_service
+│   ├── notification_service, project_service, team_service
+│   ├── workflow_service, command_service, email_service
+│   ├── realtime_service (lazy imports to avoid circular deps)
 ├── routes/                # Thin route layer (explicit imports only)
-├── core/                  # config, auth, access_control, rate_limit, monitoring, responses
+├── core/                  # config, auth, access_control, rate_limit, monitoring
 ├── tests/
-│   └── conftest.py        # Centralized test credentials fixtures
+│   └── conftest.py        # Centralized test credentials
 └── uploads/
 /app/frontend/
 └── src/
     ├── pages/agent/       # AgentHomePage (Control Tower), AgentFeed, AgentBilling, AgentSettings
-    ├── pages/buyer/       # BuyerDashboard, BuyerTimeline
-    ├── components/        # Feed.js, CreateActivityDialog.js, AgentLayout, NotificationCenter
+    ├── components/        # Feed.js, CreateActivityDialog.js (extracted), AgentLayout
     └── context/           # AuthContext (env-var OAuth), SettingsContext, DataContext
 ```
 
 ## What's Been Implemented
 
 ### Core Platform
-- JWT + Google OAuth authentication
+- JWT + Google OAuth authentication (client ID in env var)
 - Password reset flow via Resend
-- Agent dashboard with WebSocket real-time updates
+- Control Tower dashboard with action cards + KPI strip
 - Projects, units, clients CRUD
-- Analytics dashboard
-- Team member invitation system
+- Analytics dashboard, Team member invitation system
 
 ### Document Management
 - Quotes/invoices with AI extraction (OpenAI GPT-4o)
-- PDF generation with QR codes
-- Document status workflow, In-app PDF viewer
+- PDF generation with QR codes, Document status workflow
 
 ### Communication
-- Real-time activity feed (Feed.js — lazy-load replies, extracted CreateActivityDialog)
-- Email notifications via Resend
-- In-app notifications with WebSocket
-
-### Agent Command Workspace
-- Command bar with text/voice/file input
-- Rule-based intent classification
-- Draft-first system, Multi-step workflow automation (5 templates)
+- Real-time activity feed with batch enrichment (6 queries per page, was 56)
+- Email notifications via Resend, In-app notifications with WebSocket
+- CreateActivityDialog extracted component
 
 ### Billing
 - Stripe subscription integration (canonical billing_service.py)
 - Plan-based feature access (centralized entitlements)
 
-### Canonical Rebuild (Complete)
-- Phase 1-4: Core, Content, Orchestration, Billing — all canonical
-- is_demo fully purged, SSOT architecture
+### Performance Optimizations (April 11, 2026)
+- Activities endpoint: 6.3s → 1.0s (6.3x faster) via batch_enrich_activities()
+- MongoDB indexes on activity_recipients, activity_replies, activities compound
+- Frontend N+1 removal: replies lazy-loaded on expand
 
-### Phase 5: UX Refinement (Sprint 1 — April 11, 2026)
-- P0 Feed Bug: N+1 query removal, lazy-load replies
-- P1 Feed in primary nav, Control Tower Dashboard
-- P2 Billing/Settings cleanup
-
-### Code Quality Pass (April 11, 2026)
-- Wildcard imports → explicit imports (admin.py, analytics.py, models/__init__.py)
-- Circular import chain fixed (realtime_service ↔ notification_service → lazy import)
-- Google OAuth client ID moved to REACT_APP_GOOGLE_CLIENT_ID env var
-- Feed.js renderCreateDialog → extracted CreateActivityDialog.js component
-- Centralized test credentials in tests/conftest.py
-- Undefined variables fixed in admin.py (RESEND_API_KEY, SENDER_EMAIL, FRONTEND_URL)
+### Code Quality (April 11, 2026)
+- Wildcard imports → explicit (admin.py, analytics.py, models/__init__.py)
+- Circular import fixed (realtime_service ↔ notification_service)
+- Google OAuth client ID → REACT_APP_GOOGLE_CLIENT_ID env var
+- Feed.js renderCreateDialog → extracted CreateActivityDialog.js
+- Test fixtures centralized in conftest.py
 
 ## Tech Stack
 - **Frontend**: React 18, TailwindCSS, Shadcn/UI
 - **Backend**: FastAPI, Motor (MongoDB async)
-- **Database**: MongoDB
+- **Database**: MongoDB (indexed for hot query paths)
 - **Integrations**: OpenAI GPT-4o, Stripe, Resend, Google OAuth
 
 ## Pending/Backlog
 
 ### P1 — Production Hardening
-- [ ] Stripe Webhook smoke test (requires user's STRIPE_WEBHOOK_SECRET)
-- [ ] Backend activities endpoint optimization (6.3s → <1s)
+- [ ] Stripe Webhook smoke test (requires STRIPE_WEBHOOK_SECRET)
 
-### P2 — Code Quality (Lower Priority)
-- [ ] Fix React hook dependency warnings (74 instances — high regression risk, needs careful per-component review)
-- [ ] Replace array index keys with stable keys in list renders
-- [ ] Decompose AgentHomePage.js (2,375 lines) into smaller components
-- [ ] Reduce complexity in BuyerTimeline.js useCallback (18+ missing deps)
+### P2 — Code Quality
+- [ ] React hook dependency warnings (74 instances)
+- [ ] Array index keys → stable keys
+- [ ] Decompose AgentHomePage.js (2,375 lines)
 
 ### P3 — Product Compounding
 - [ ] Email digest notifications
