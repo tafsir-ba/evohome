@@ -116,7 +116,6 @@ class Project(BaseModel):
     estimated_completion: Optional[str] = None
     client_count: Optional[int] = 0
     unit_count: Optional[int] = 0
-    is_demo: bool = False
     created_at: datetime
 
 
@@ -345,7 +344,6 @@ class TimelineTemplate(BaseModel):
     template_id: str
     agent_id: str
     name: str
-    is_demo: bool = False
     created_at: str
 
 class TimelineTemplateStep(BaseModel):
@@ -398,7 +396,6 @@ class ProjectTimeline(BaseModel):
     project_id: str
     template_id: Optional[str] = None
     template_name: Optional[str] = None
-    is_demo: bool = False
     created_at: str
     steps: Optional[List[TimelineStep]] = None
 

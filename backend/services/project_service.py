@@ -21,6 +21,7 @@ def _make_project_id() -> str:
 
 def _clean(doc: dict) -> dict:
     doc.pop('_id', None)
+    doc.pop('is_demo', None)
     return doc
 
 
@@ -54,13 +55,13 @@ async def create_project(
 
 
 async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
-    return await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    return await db.projects.find_one({"project_id": project_id}, {"_id": 0, "is_demo": 0})
 
 
 async def list_projects_by_agent(agent_id: str) -> List[Dict[str, Any]]:
     """List all projects for an agent, enriched with counts."""
     projects = await db.projects.find(
-        {"agent_id": agent_id}, {"_id": 0}
+        {"agent_id": agent_id}, {"_id": 0, "is_demo": 0}
     ).sort("created_at", -1).to_list(500)
 
     for p in projects:
@@ -95,9 +96,22 @@ async def count_projects_by_agent(agent_id: str) -> int:
     return await db.projects.count_documents({"agent_id": agent_id})
 
 
+async def list_projects_for_buyer(buyer_id: str) -> List[Dict[str, Any]]:
+    """List projects accessible by a buyer via client linkage."""
+    clients = await db.clients.find(
+        {"buyer_id": buyer_id}, {"_id": 0, "project_id": 1}
+    ).to_list(100)
+    project_ids = list(set(c['project_id'] for c in clients if c.get('project_id')))
+    if not project_ids:
+        return []
+    return await db.projects.find(
+        {"project_id": {"$in": project_ids}}, {"_id": 0, "is_demo": 0}
+    ).to_list(100)
+
+
 async def get_project_context(project_id: str) -> Dict[str, Any]:
     """Get project context for the command center (units + clients)."""
-    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "is_demo": 0})
     if not project:
         return {"project_id": project_id, "units": [], "clients": []}
 

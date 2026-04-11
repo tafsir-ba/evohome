@@ -1,0 +1,77 @@
+{
+  "summary": "Phase 1 Canonical Rebuild - Backend API Regression Tests PASSED. All 33 tests passed covering 5 Phase 1 modules (Unit, Project, Timeline, TimelineStep, Client) with V2 routes and canonical services. Verified is_demo field is NOT present in any response.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase1_canonical.py",
+    "/app/test_reports/pytest/pytest_phase1_canonical.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "All Phase 1 services correctly exclude is_demo via MongoDB projection {'is_demo': 0}",
+    "project_service._clean() also pops is_demo as a safety net",
+    "Timeline AI extraction endpoints correctly removed (return 404/405)",
+    "Team endpoints correctly remain in legacy projects.py (not Phase 1 scope)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase1_canonical.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A (backend only test)"
+  },
+  "test_credentials": {
+    "email": "e2e@evohome-test.com",
+    "password": "Test2026!"
+  },
+  "seed_data_creation": "Test data created and cleaned up during tests (TEST_ prefixed resources)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 1 Canonical Rebuild complete. All 5 modules (Unit, Project, Timeline, TimelineStep, Client) have V2 routes working correctly. is_demo field is properly excluded from all responses. Timeline AI extraction endpoints are removed. Team endpoints remain in legacy routes (not Phase 1 scope).",
+  "tests_executed": {
+    "total": 33,
+    "passed": 33,
+    "failed": 0,
+    "skipped": 0
+  },
+  "endpoints_tested": [
+    "GET /api/health",
+    "GET /api/ready",
+    "GET /api/projects",
+    "POST /api/projects",
+    "PUT /api/projects/{id}",
+    "DELETE /api/projects/{id}",
+    "GET /api/clients",
+    "POST /api/clients",
+    "GET /api/clients/{id}",
+    "PUT /api/clients/{id}",
+    "DELETE /api/clients/{id}",
+    "GET /api/projects/{id}/units",
+    "POST /api/projects/{id}/units",
+    "GET /api/units/{id}",
+    "PUT /api/units/{id}",
+    "DELETE /api/units/{id}",
+    "POST /api/timeline/create",
+    "GET /api/project-timeline",
+    "DELETE /api/timeline/{id}",
+    "PATCH /api/timeline/steps/{id}",
+    "POST /api/timeline/{id}/steps",
+    "DELETE /api/timeline/steps/{id}",
+    "GET /api/projects/{id}/steps",
+    "GET /api/timeline/templates",
+    "POST /api/timeline/templates",
+    "DELETE /api/timeline/templates/{id}",
+    "POST /api/timeline/templates/{id}/apply",
+    "GET /api/agent/dashboard",
+    "GET /api/projects/{id}/context",
+    "GET /api/projects/{id}/team"
+  ],
+  "is_demo_verification": "PASSED - is_demo field NOT found in any Phase 1 module response"
+}

@@ -1,41 +1,21 @@
-"""Auto-extracted route module from server.py — Phase 3 modularization."""
-import os
-import re
-import json
-import uuid
-import base64
+"""Dashboard and composite endpoints — Canonical Implementation."""
 import logging
-import secrets
-import tempfile
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from typing import List, Optional, Literal, Dict, Any
-from io import BytesIO
+from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse, FileResponse
-from pydantic import BaseModel, Field, EmailStr
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
 
 from database import db
-from core.auth import get_current_user, get_current_agent, get_current_buyer, verify_token
-from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer, get_is_demo
-from core.rate_limit import rate_limit_check, check_rate_limit
-from core.monitoring import capture_exception, capture_auth_failure, capture_payment_error, capture_email_error, capture_ai_error, capture_websocket_error, capture_document_error, ErrorContext
-from core.responses import AuthSessionResponse, AuthLoginResponse, AuthRefreshResponse, AuthLogoutResponse, DocumentResponse, VaultDocumentResponse, NotificationResponse, ActivityResponse, ActivitiesListResponse, SuccessResponse
+from core.auth import get_current_user, get_current_agent
+from core.access_control import can_access_project
 
-from helpers import get_demo_filter, build_query, secure_filename, VALID_TRANSITIONS, validate_transition, SUBSCRIPTION_PLANS, VAULT_CATEGORIES, VAULT_DOC_TYPES
-from services.email_service import send_email_async, send_notification_email, create_notification, get_email_template
-from services.realtime_service import ws_manager, notify_realtime, send_milestone_notification
-from services.qr_service import generate_swiss_qr_code, generate_swiss_qr_code_base64, DEFAULT_IBAN, DEFAULT_COMPANY_NAME
-from services.ai_service import extract_document_from_pdf, OPENAI_API_KEY
-
-from models.schemas import *
+from models.schemas import (
+    ProjectSummary, ClientSummary, UnitSummary, TimelineStepSummary,
+    RecentWorkItem, DashboardResponse, ProjectContextResponse,
+    ProjectTimelineResponse, ProjectWorkflowResponse,
+)
 
 logger = logging.getLogger(__name__)
-
-ROOT_DIR = Path(__file__).parent.parent
-UPLOAD_DIR = ROOT_DIR / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
 
 router = APIRouter()
 

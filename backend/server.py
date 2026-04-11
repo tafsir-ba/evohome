@@ -199,7 +199,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ==================== IMPORT AND REGISTER ROUTERS ====================
 
 from routes.auth import router as auth_router
-from routes.projects import router as projects_router
+from routes.projects_v2 import router as projects_router
 from routes.clients_v2 import router as clients_router
 from routes.documents import router as documents_router
 from routes.timeline_view import router as timeline_view_router
@@ -207,7 +207,7 @@ from routes.notifications import router as notifications_router
 from routes.steps_v2 import router as steps_router
 from routes.dashboard import router as dashboard_router
 from routes.activities import router as activities_router
-from routes.timelines import router as timelines_router
+from routes.timelines_v2 import router as timelines_router
 from routes.stats import router as stats_router
 from routes.vault import router as vault_router
 from routes.analytics import router as analytics_router
@@ -221,6 +221,7 @@ from routes.commands import router as commands_router
 from routes.units import router as units_router
 from routes.doc_extraction import router as doc_extraction_router
 from routes.workflows import router as workflows_router
+from routes.projects import router as projects_team_router  # Team endpoints only
 
 for r in [
     auth_router, projects_router, clients_router, documents_router,
@@ -229,7 +230,7 @@ for r in [
     stats_router, vault_router, analytics_router, test_endpoints_router,
     demo_router, billing_router, invitations_router, settings_router,
     admin_router, commands_router, doc_extraction_router, workflows_router,
-    units_router,
+    units_router, projects_team_router,
 ]:
     api_router.include_router(r)
 
