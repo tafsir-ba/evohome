@@ -8,7 +8,6 @@ from fastapi import WebSocket
 
 from database import db
 from services.email_service import send_notification_email
-from services.notification_service import create_notification
 
 logger = logging.getLogger("evohome.realtime")
 
@@ -117,6 +116,8 @@ async def send_milestone_notification(step: dict, project: dict, timeline: dict,
 
             unit_ref = unit_refs.get(client.get('unit_id'), 'Your Unit')
 
+            # Lazy import to avoid circular dependency with notification_service
+            from services.notification_service import create_notification
             await create_notification(
                 user_id=buyer_id,
                 title=f"Milestone Reached: {step.get('title', 'Construction Update')}",

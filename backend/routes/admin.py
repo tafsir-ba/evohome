@@ -24,12 +24,10 @@ from core.monitoring import capture_exception, capture_auth_failure, capture_pay
 from core.responses import AuthSessionResponse, AuthLoginResponse, AuthRefreshResponse, AuthLogoutResponse, DocumentResponse, VaultDocumentResponse, NotificationResponse, ActivityResponse, ActivitiesListResponse, SuccessResponse
 
 # helpers: no longer needed
-from services.email_service import send_email_async, send_notification_email, get_email_template
+from services.email_service import send_email_async, send_notification_email, get_email_template, RESEND_API_KEY, SENDER_EMAIL, FRONTEND_URL
 from services.realtime_service import ws_manager, notify_realtime, send_milestone_notification
 from services.qr_service import generate_swiss_qr_code, generate_swiss_qr_code_base64, DEFAULT_IBAN, DEFAULT_COMPANY_NAME
 from services.ai_service import extract_document_from_pdf, OPENAI_API_KEY
-
-from models.schemas import *
 
 logger = logging.getLogger(__name__)
 

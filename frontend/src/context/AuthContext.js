@@ -122,8 +122,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const loginWithGoogle = (role = 'buyer') => {
-    // Google OAuth with custom credentials
-    const clientId = '1053944720664-ulkunc0n9qhvfq4cdntro2ks0lsru0p6.apps.googleusercontent.com';
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      console.error('Google OAuth client ID not configured');
+      return;
+    }
     const redirectUri = `${window.location.origin}/auth/google/callback`;
     const scope = 'email profile';
     const state = encodeURIComponent(JSON.stringify({ role }));
