@@ -24,6 +24,17 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - [x] DB migration: is_demo removed from 127 docs across 9 collections
 - [x] 24/24 corrective regression tests passed
 
+### Auth Surgery — COMPLETE (April 11, 2026)
+- [x] is_demo removed from user creation in ALL auth paths (agent register, buyer register, Google OAuth)
+- [x] is_demo removed from JWT/session payloads and all auth responses
+- [x] Demo login rebuilt: uses demo_* user_id prefix convention (not is_demo:true query)
+- [x] get_is_demo deleted from core/access_control.py
+- [x] get_demo_filter deleted from helpers.py
+- [x] Dead get_demo_filter imports removed from 11 route files
+- [x] is_demo removed from all 9 Pydantic response models in core/responses.py
+- [x] Users collection migrated: 20 docs cleaned of is_demo
+- [x] 20/20 auth surgery regression tests passed
+
 ### Phase 3 Orchestration Rebuild — COMPLETE (April 11, 2026)
 - [x] Command Service rebuilt as pure routing brain (no direct DB writes for documents/activities)
 - [x] notification_bridge.py eliminated entirely
