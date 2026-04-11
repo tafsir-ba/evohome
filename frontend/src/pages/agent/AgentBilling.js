@@ -432,8 +432,8 @@ export const AgentBilling = () => {
                   
                   <CardContent className="space-y-4">
                     <ul className="space-y-2">
-                      {plan.features.map((feature, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm">
+                      {plan.features.map((feature) => (
+                        <li key={feature} className="flex items-start gap-2 text-sm">
                           <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                           <span className="text-muted-foreground">{feature}</span>
                         </li>

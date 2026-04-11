@@ -1038,7 +1038,7 @@ export const AgentTimeline = () => {
               
               <div className="space-y-3">
                 {extractedStages.map((stage, index) => (
-                  <div key={index} className="p-3 border rounded-lg bg-card">
+                  <div key={stage.title || `stage-${index}`} className="p-3 border rounded-lg bg-card">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 space-y-2">
                         <Input

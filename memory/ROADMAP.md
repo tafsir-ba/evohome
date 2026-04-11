@@ -2,27 +2,43 @@
 
 ## COMPLETE — Canonical Rebuild (Phases 1-4)
 - Core, Content, Orchestration, Billing — all canonical
-- is_demo fully purged
-- SSOT architecture with thin routes
+- is_demo fully purged, SSOT architecture
 
 ## COMPLETE — Phase 5 Sprint 1: UX Refinement (2026-04-11)
-- Feed skeleton bug fixed (N+1 query removal)
-- Feed promoted to primary navigation
-- Dashboard transformed to Control Tower (action cards + KPI strip)
-- Billing UX cleanup (removed Sync, removed duplicate section)
-- Settings cleanup (removed duplicate plan grid, added redirect)
-- 9/9 tests passed (iteration_17)
+- Feed skeleton bug fixed, Feed promoted to primary nav
+- Dashboard → Control Tower (action cards + KPI strip)
+- Billing/Settings cleanup
+
+## COMPLETE — Code Quality Pass (2026-04-11)
+- Wildcard → explicit imports, circular import fixed
+- Google OAuth client ID → env var
+- Feed.js CreateActivityDialog extracted
+- Test fixtures centralized
+
+## COMPLETE — Performance Optimization (2026-04-11)
+- Activities endpoint: 6.3s → 1.0s via batch_enrich_activities()
+- MongoDB indexes for hot query paths
+
+## COMPLETE — AgentHomePage Decomposition (2026-04-11)
+- 2,436 → 229 lines (90.6% reduction)
+- 5 components: ControlTower, CommandBar, ActionPreviewDrawer, WorkflowDialog, RecentActivity
+- Zero regressions (10/10 tests passed)
+
+## COMPLETE — Stable React Keys (2026-04-11)
+- Replaced array-index keys with stable identifiers in:
+  - InvoiceDetail, QuoteDetail (line items → description+index composite)
+  - Billing (plan features → feature string)
+  - Workflow (manual steps → step.id, editing phases → phase.name)
+  - Timeline (extracted stages → stage.title)
 
 ## NEXT — P1: Production Hardening
-- [ ] Stripe Webhook smoke test (needs user STRIPE_WEBHOOK_SECRET)
-- [ ] Backend activities endpoint optimization (6.3s → target <1s via batch queries)
+- [ ] Stripe Webhook smoke test (needs STRIPE_WEBHOOK_SECRET)
 
-## P2 — Product Compounding
+## P2 — Code Quality
+- [ ] Hook dependency warnings (74 instances — per-component audit)
+
+## P3 — Product Compounding
 - [ ] Email digest notifications
 - [ ] Reporting/export features
 - [ ] AI-powered command enhancements
-
-## Backlog
-- [ ] Backend: Optimize activity_service.enrich_activity (N+1 DB queries per activity)
-- [ ] Frontend: Buyer dashboard UX review
-- [ ] Test coverage expansion
+- [ ] Buyer feed optimization (only if measured slowness)

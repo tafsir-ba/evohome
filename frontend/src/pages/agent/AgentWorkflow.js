@@ -1059,7 +1059,7 @@ export const AgentWorkflow = () => {
           </DialogHeader>
           <div className="space-y-4 py-4">
             {manualSteps.map((step, index) => (
-              <div key={index} className="p-4 border border-border rounded-lg space-y-3">
+              <div key={step.id || `step-${index}`} className="p-4 border border-border rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Step {index + 1}</span>
                   {manualSteps.length > 1 && (
@@ -1264,7 +1264,7 @@ export const AgentWorkflow = () => {
                 </div>
                 
                 {editingPhases.map((phase, idx) => (
-                  <Card key={idx} className="border-border">
+                  <Card key={phase.name || `phase-${idx}`} className="border-border">
                     <CardContent className="p-3 space-y-2">
                       <div className="flex items-start gap-2">
                         <div className="flex-1 space-y-2">

@@ -239,7 +239,7 @@ export const AgentInvoiceDetail = () => {
                   </thead>
                   <tbody>
                     {(invoice.line_items || invoice.items || []).map((item, index) => (
-                      <tr key={index}>
+                      <tr key={`item-${item.description}-${index}`}>
                         <td>{item.description}</td>
                         <td className="text-right">{item.quantity}</td>
                         <td className="text-right">{formatCurrency(item.unit_price)}</td>
