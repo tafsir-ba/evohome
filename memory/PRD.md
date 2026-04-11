@@ -18,27 +18,24 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 ├── database.py            # Shared MongoDB connection
 ├── helpers.py             # Utility functions
 ├── models/
-│   └── schemas.py         # All Pydantic models
+│   └── schemas.py         # All Pydantic models (explicit exports in __init__.py)
 ├── services/              # Strict canonical domain logic
 │   ├── activity_service, document_service, vault_service
 │   ├── notification_service, project_service, client_service
 │   ├── timeline_service, step_service, team_service, unit_service
 │   ├── command_service, workflow_service, billing_service
 │   ├── email_service, realtime_service, qr_service, ai_service
-├── routes/ (22 files)     # Thin route layer
-│   ├── auth.py, projects.py, clients.py, documents.py, timelines.py
-│   ├── activities.py, notifications.py, vault.py, billing.py, settings.py
-│   ├── invitations.py, dashboard.py, stats.py, analytics.py
-│   ├── commands.py, workflows.py, steps.py, timeline_view.py
-│   ├── demo.py, admin.py, doc_extraction.py, test_endpoints.py
+├── routes/                # Thin route layer (explicit imports only)
 ├── core/                  # config, auth, access_control, rate_limit, monitoring, responses
+├── tests/
+│   └── conftest.py        # Centralized test credentials fixtures
 └── uploads/
 /app/frontend/
 └── src/
-    ├── pages/agent/       # AgentHomePage (Control Tower), AgentFeed, AgentBilling, AgentSettings, etc.
+    ├── pages/agent/       # AgentHomePage (Control Tower), AgentFeed, AgentBilling, AgentSettings
     ├── pages/buyer/       # BuyerDashboard, BuyerTimeline
-    ├── components/        # Feed.js, AgentLayout, NotificationCenter, etc.
-    └── context/           # AuthContext, SettingsContext, DataContext
+    ├── components/        # Feed.js, CreateActivityDialog.js, AgentLayout, NotificationCenter
+    └── context/           # AuthContext (env-var OAuth), SettingsContext, DataContext
 ```
 
 ## What's Been Implemented
@@ -54,37 +51,38 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 ### Document Management
 - Quotes/invoices with AI extraction (OpenAI GPT-4o)
 - PDF generation with QR codes
-- Document status workflow
-- In-app PDF viewer
+- Document status workflow, In-app PDF viewer
 
 ### Communication
-- Real-time activity feed (Feed.js — lazy-load replies)
+- Real-time activity feed (Feed.js — lazy-load replies, extracted CreateActivityDialog)
 - Email notifications via Resend
 - In-app notifications with WebSocket
 
 ### Agent Command Workspace
 - Command bar with text/voice/file input
 - Rule-based intent classification
-- Draft-first system for all document operations
-- Multi-step workflow automation (5 templates)
+- Draft-first system, Multi-step workflow automation (5 templates)
 
 ### Billing
 - Stripe subscription integration (canonical billing_service.py)
 - Plan-based feature access (centralized entitlements)
-- Webhook signature verification
 
 ### Canonical Rebuild (Complete)
 - Phase 1-4: Core, Content, Orchestration, Billing — all canonical
-- is_demo fully purged from all active code
-- SSOT architecture with thin routes + canonical services
-- P3.5 optimization: 44 projections, 7 dead imports removed
+- is_demo fully purged, SSOT architecture
 
 ### Phase 5: UX Refinement (Sprint 1 — April 11, 2026)
-- **P0 Feed Bug Fixed**: Removed N+1 query pattern (was causing 56s load times). Activities now load with single API call. Replies lazy-loaded on expand.
-- **P1 Feed Promoted**: Moved from "More" dropdown to primary sidebar navigation.
-- **P1 Control Tower Dashboard**: Replaced command-input-only homepage with actionable Control Tower: Action Cards (Change Requests, Pending Invoices, Pending Quotes) + KPI Strip (Clients, Projects, Revenue, Approved Quotes) + Command Bar (repositioned) + Deduplicated Recent Activity.
-- **P2 Billing Cleanup**: Removed Sync button (debug affordance) and duplicate Subscription Details section.
-- **P2 Settings Cleanup**: Replaced duplicate plan grid in Settings > Billing tab with plan summary + "Manage Billing" redirect to dedicated page.
+- P0 Feed Bug: N+1 query removal, lazy-load replies
+- P1 Feed in primary nav, Control Tower Dashboard
+- P2 Billing/Settings cleanup
+
+### Code Quality Pass (April 11, 2026)
+- Wildcard imports → explicit imports (admin.py, analytics.py, models/__init__.py)
+- Circular import chain fixed (realtime_service ↔ notification_service → lazy import)
+- Google OAuth client ID moved to REACT_APP_GOOGLE_CLIENT_ID env var
+- Feed.js renderCreateDialog → extracted CreateActivityDialog.js component
+- Centralized test credentials in tests/conftest.py
+- Undefined variables fixed in admin.py (RESEND_API_KEY, SENDER_EMAIL, FRONTEND_URL)
 
 ## Tech Stack
 - **Frontend**: React 18, TailwindCSS, Shadcn/UI
@@ -96,9 +94,15 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 
 ### P1 — Production Hardening
 - [ ] Stripe Webhook smoke test (requires user's STRIPE_WEBHOOK_SECRET)
-- [ ] Backend activities endpoint optimization (6.3s per request due to N+1 enrichment)
+- [ ] Backend activities endpoint optimization (6.3s → <1s)
 
-### P2 — Product Compounding
+### P2 — Code Quality (Lower Priority)
+- [ ] Fix React hook dependency warnings (74 instances — high regression risk, needs careful per-component review)
+- [ ] Replace array index keys with stable keys in list renders
+- [ ] Decompose AgentHomePage.js (2,375 lines) into smaller components
+- [ ] Reduce complexity in BuyerTimeline.js useCallback (18+ missing deps)
+
+### P3 — Product Compounding
 - [ ] Email digest notifications
 - [ ] Reporting/export features
 - [ ] AI-powered command enhancements
