@@ -129,8 +129,10 @@ Build a SaaS platform for real estate agents to manage client upgrades, track co
 - [x] Zero stale field references remaining
 - [x] 12/12 frontend tests passed
 
-### P3 — Architecture Cleanup
-- [ ] Canonicalize routes/workflows.py (direct DB writes → delegate to services)
+### P3 — Architecture Cleanup — COMPLETE
+- [x] Canonicalized routes/workflows.py (zero direct DB writes, all delegated to services)
+- [x] Removed semantically wrong entitlement check from projects_v2.py
+- [x] 18/18 regression tests passed (iteration_16)
 
 ### P4 — Phase 5: Optimization
 - [ ] AI enhancements

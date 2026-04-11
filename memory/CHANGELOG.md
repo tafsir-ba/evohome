@@ -1,3 +1,34 @@
+# Workflow Canonicalization + Entitlement Fix — COMPLETE (2026-04-11)
+
+### Objective
+Eliminate all direct DB writes from workflows.py. Remove semantically wrong entitlement check from project creation.
+
+### Completed Work
+
+#### `workflows.py` — Fully Rewritten (zero direct DB writes)
+- `create_client` action → `client_service.create_client()`
+- `update_document_status` action → `document_service.transition_document_status()`
+- `complete_timeline_step` action → `step_service.update_step()`
+- `create_announcement` action → `activity_service.create_and_distribute_activity()`
+- Email actions remain as orchestration (Resend API, no DB mutation)
+- 19 read-only DB queries for context enrichment and selectors (allowed)
+- Reduced from 1027 lines to ~640 lines
+
+#### `document_service.py` — Added `transition_document_status()`
+- Workflow-initiated status transitions with state machine validation
+- Sets appropriate timestamps (paid_date, sent_at)
+
+#### `projects_v2.py` — Entitlement Check Removed
+- Project creation no longer checks unit limits (semantically wrong)
+- Unit limits enforced only at unit creation (units.py)
+
+### Regression
+- 18/18 tests passed (iteration_16)
+- All 5 workflow templates verified: new_client_onboarding, invoice_paid_processing, milestone_completion, send_document, project_announcement
+
+---
+
+
 # Frontend Canonical Alignment — COMPLETE (2026-04-11)
 
 ### Objective
