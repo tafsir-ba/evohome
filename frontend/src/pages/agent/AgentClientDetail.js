@@ -40,6 +40,11 @@ import { cn } from '../../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentClientDetail = () => {
   const { clientId } = useParams();
   const navigate = useNavigate();
@@ -68,7 +73,7 @@ export const AgentClientDetail = () => {
 
   const fetchClient = async () => {
     try {
-      const response = await fetch(`${API}/clients/${clientId}`, { credentials: 'include' });
+      const response = await fetch(`${API}/clients/${clientId}`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const data = await response.json();
         setClient(data);
@@ -99,8 +104,8 @@ export const AgentClientDetail = () => {
   const fetchProjectAndUnits = async (projectId) => {
     try {
       const [projectRes, unitsRes] = await Promise.all([
-        fetch(`${API}/projects/${projectId}`, { credentials: 'include' }),
-        fetch(`${API}/projects/${projectId}/units`, { credentials: 'include' })
+        fetch(`${API}/projects/${projectId}`, { credentials: 'include', headers: getAuthHeaders() }),
+        fetch(`${API}/projects/${projectId}/units`, { credentials: 'include', headers: getAuthHeaders() })
       ]);
       
       if (projectRes.ok) {
@@ -149,7 +154,7 @@ export const AgentClientDetail = () => {
     try {
       const response = await fetch(`${API}/clients/${clientId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({
           name: formData.name,

@@ -38,6 +38,11 @@ import { cn } from '../../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 const STATUS_CONFIG = {
   pending: { icon: Circle, color: 'text-muted-foreground', bg: 'bg-muted', label: 'Pending' },
   in_progress: { icon: Clock, color: 'text-blue-500', bg: 'bg-blue-500/10', label: 'In Progress' },
@@ -265,7 +270,7 @@ export const AgentWorkflow = () => {
     try {
       const res = await fetch(`${API}/timeline/steps/${stepId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ status: newStatus })
       });
@@ -297,13 +302,13 @@ export const AgentWorkflow = () => {
       await Promise.all([
         fetch(`${API}/timeline/steps/${currentStep.step_id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           credentials: 'include',
           body: JSON.stringify({ order_index: targetStep.order_index })
         }),
         fetch(`${API}/timeline/steps/${targetStep.step_id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           credentials: 'include',
           body: JSON.stringify({ order_index: currentStep.order_index })
         })
@@ -319,7 +324,7 @@ export const AgentWorkflow = () => {
     try {
       const res = await fetch(`${API}/timeline/steps/${stepId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify(updates)
       });
@@ -356,7 +361,7 @@ export const AgentWorkflow = () => {
     try {
       const res = await fetch(`${API}/timeline/${timelineId}/steps`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({
           title: newStep.title,
@@ -419,7 +424,7 @@ export const AgentWorkflow = () => {
     try {
       const res = await fetch(`${API}/timeline/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({
           project_id: selectedProjectId,
@@ -471,7 +476,7 @@ export const AgentWorkflow = () => {
     try {
       const res = await fetch(`${API}/timeline/steps/${stepId}/documents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ activity_id: activityId })
       });
@@ -514,7 +519,7 @@ export const AgentWorkflow = () => {
     try {
       const res = await fetch(`${API}/timeline/steps/${stepId}/notes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ content })
       });
@@ -549,6 +554,7 @@ export const AgentWorkflow = () => {
       const res = await fetch(`${API}/timeline/extract`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeaders(),
         body: formData
       });
       
@@ -583,6 +589,7 @@ export const AgentWorkflow = () => {
       const res = await fetch(`${API}/timeline/extractions/${extractedTimeline.extraction_id}/approve`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeaders(),
         body: formData
       });
       

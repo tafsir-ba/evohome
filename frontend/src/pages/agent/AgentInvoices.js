@@ -19,6 +19,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentInvoices = () => {
   const { t } = useSettings();
   const [invoices, setInvoices] = useState([]);
@@ -33,7 +38,7 @@ export const AgentInvoices = () => {
 
   const fetchInvoices = async () => {
     try {
-      const response = await fetch(`${API}/documents?doc_type=invoice`, { credentials: 'include' });
+      const response = await fetch(`${API}/documents?doc_type=invoice`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         setInvoices(await response.json());
       }
@@ -84,7 +89,7 @@ export const AgentInvoices = () => {
     e.stopPropagation();
     
     try {
-      const response = await fetch(`${API}/documents/${invoiceId}/source-pdf`, { credentials: 'include' });
+      const response = await fetch(`${API}/documents/${invoiceId}/source-pdf`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);

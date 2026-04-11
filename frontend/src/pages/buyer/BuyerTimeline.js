@@ -51,6 +51,11 @@ import { Feed } from '../../components/Feed';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 const formatCurrency = (amount, currency = 'CHF') => {
   return `${currency} ${new Intl.NumberFormat('de-CH', { 
     style: 'decimal', 
@@ -881,7 +886,7 @@ export const BuyerTimeline = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      const timelineRes = await fetch(`${API}/timeline`, { credentials: 'include' });
+      const timelineRes = await fetch(`${API}/timeline`, { credentials: 'include', headers: getAuthHeaders() });
       
       if (timelineRes.ok) {
         const data = await timelineRes.json();
@@ -890,7 +895,7 @@ export const BuyerTimeline = () => {
         
         if (data.project_info?.project_id) {
           // Fetch construction timeline (new workflow system)
-          const ctRes = await fetch(`${API}/project-timeline`, { credentials: 'include' });
+          const ctRes = await fetch(`${API}/project-timeline`, { credentials: 'include', headers: getAuthHeaders() });
           if (ctRes.ok) {
             const ctData = await ctRes.json();
             setConstructionTimeline(ctData);
@@ -910,7 +915,7 @@ export const BuyerTimeline = () => {
           }
           
           // Fetch team members
-          const teamRes = await fetch(`${API}/projects/${data.project_info.project_id}/team`, { credentials: 'include' });
+          const teamRes = await fetch(`${API}/projects/${data.project_info.project_id}/team`, { credentials: 'include', headers: getAuthHeaders() });
           if (teamRes.ok) {
             const teamData = await teamRes.json();
             setTeamMembers(teamData);
@@ -919,7 +924,7 @@ export const BuyerTimeline = () => {
       }
       
       // Fetch unread count
-      const unreadRes = await fetch(`${API}/activities/unread-count`, { credentials: 'include' });
+      const unreadRes = await fetch(`${API}/activities/unread-count`, { credentials: 'include', headers: getAuthHeaders() });
       if (unreadRes.ok) {
         const unreadData = await unreadRes.json();
         setUnreadCount(unreadData.unread_count);
@@ -960,7 +965,7 @@ export const BuyerTimeline = () => {
       const fetchVaultDocuments = async () => {
         setVaultLoading(true);
         try {
-          const res = await fetch(`${API}/vault/buyer`, { credentials: 'include' });
+          const res = await fetch(`${API}/vault/buyer`, { credentials: 'include', headers: getAuthHeaders() });
           if (res.ok) {
             const data = await res.json();
             setVaultDocuments(data);
@@ -991,7 +996,7 @@ export const BuyerTimeline = () => {
       try {
         const res = await fetch(`${API}/documents/${eventId}/action`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           credentials: 'include',
           body: JSON.stringify({ action: 'request_change', comment })
         });
@@ -1018,7 +1023,7 @@ export const BuyerTimeline = () => {
     try {
       const res = await fetch(`${API}/documents/${eventId}/action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ action: type === 'payment' ? 'confirm_payment' : type })
       });
@@ -1046,7 +1051,7 @@ export const BuyerTimeline = () => {
   const handleDownloadPdf = async (documentId) => {
     try {
       // Use source-pdf endpoint to download the original uploaded PDF
-      const res = await fetch(`${API}/documents/${documentId}/source-pdf`, { credentials: 'include' });
+      const res = await fetch(`${API}/documents/${documentId}/source-pdf`, { credentials: 'include', headers: getAuthHeaders() });
       
       if (res.ok) {
         const blob = await res.blob();
@@ -1084,7 +1089,7 @@ export const BuyerTimeline = () => {
     setQrModal({ open: true, invoice, qrData: null, loading: true });
     
     try {
-      const res = await fetch(`${API}/documents/${invoice.id}/qr-code`, { credentials: 'include' });
+      const res = await fetch(`${API}/documents/${invoice.id}/qr-code`, { credentials: 'include', headers: getAuthHeaders() });
       
       if (res.ok) {
         const qrData = await res.json();
@@ -1110,7 +1115,7 @@ export const BuyerTimeline = () => {
 
   const handleVaultDownload = async (document) => {
     try {
-      const res = await fetch(`${API}/vault/${document.vault_id}/download`, { credentials: 'include' });
+      const res = await fetch(`${API}/vault/${document.vault_id}/download`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);

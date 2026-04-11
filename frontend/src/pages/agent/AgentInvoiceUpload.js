@@ -22,6 +22,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentInvoiceUpload = () => {
   const navigate = useNavigate();
   const { invoiceId } = useParams(); // For edit mode
@@ -62,7 +67,7 @@ export const AgentInvoiceUpload = () => {
 
   const fetchExistingInvoice = async () => {
     try {
-      const res = await fetch(`${API}/documents/${invoiceId}`, { credentials: 'include' });
+      const res = await fetch(`${API}/documents/${invoiceId}`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setInvoiceData(data);
@@ -89,7 +94,7 @@ export const AgentInvoiceUpload = () => {
 
   const fetchClients = async () => {
     try {
-      const res = await fetch(`${API}/clients`, { credentials: 'include' });
+      const res = await fetch(`${API}/clients`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setClients(data);
@@ -118,6 +123,7 @@ export const AgentInvoiceUpload = () => {
       const res = await fetch(`${API}/documents/upload?doc_type=invoice`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeaders(),
         body: formData
       });
 
@@ -182,7 +188,7 @@ export const AgentInvoiceUpload = () => {
       if (invoiceData.is_preview) {
         const createRes = await fetch(`${API}/documents/create`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           credentials: 'include',
           body: JSON.stringify({
             preview_id: invoiceData.preview_id,
@@ -220,7 +226,7 @@ export const AgentInvoiceUpload = () => {
         // Existing document - just update it
         const updateRes = await fetch(`${API}/documents/${documentId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           credentials: 'include',
           body: JSON.stringify({
             title: editedData.title,

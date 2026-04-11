@@ -26,6 +26,11 @@ import { cn } from '../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 // Format currency helper
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('de-CH', { 

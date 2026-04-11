@@ -23,6 +23,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentDashboard = () => {
   const { t, formatCurrency } = useSettings();
   const { user } = useAuth();
@@ -32,7 +37,7 @@ export const AgentDashboard = () => {
   // Fetch stats function (memoized for WebSocket callback)
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch(`${API}/stats/agent`, { credentials: 'include' });
+      const response = await fetch(`${API}/stats/agent`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         setStats(await response.json());
       }

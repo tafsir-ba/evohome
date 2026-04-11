@@ -26,6 +26,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentClients = () => {
   const { t } = useSettings();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -94,7 +99,7 @@ export const AgentClients = () => {
       return;
     }
     try {
-      const res = await fetch(`${API}/projects/${projectId}/units`, { credentials: 'include' });
+      const res = await fetch(`${API}/projects/${projectId}/units`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         setProjectUnits(await res.json());
       }
@@ -115,7 +120,7 @@ export const AgentClients = () => {
     try {
       const response = await fetch(`${API}/clients`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify(clientForm)
       });
@@ -145,7 +150,7 @@ export const AgentClients = () => {
     try {
       const response = await fetch(`${API}/projects`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify(projectForm)
       });

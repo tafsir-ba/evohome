@@ -31,6 +31,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentQuoteDetail = () => {
   const { t } = useSettings();
   const { quoteId } = useParams();
@@ -48,7 +53,7 @@ export const AgentQuoteDetail = () => {
   const fetchQuote = async () => {
     try {
       // Use unified documents endpoint
-      const response = await fetch(`${API}/documents/${quoteId}`, { credentials: 'include' });
+      const response = await fetch(`${API}/documents/${quoteId}`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         setQuote(await response.json());
       } else {
@@ -95,7 +100,7 @@ export const AgentQuoteDetail = () => {
 
   const handleDownloadPDF = async () => {
     try {
-      const response = await fetch(`${API}/documents/${quoteId}/pdf`, { credentials: 'include' });
+      const response = await fetch(`${API}/documents/${quoteId}/pdf`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);

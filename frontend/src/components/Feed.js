@@ -616,7 +616,7 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
     try {
       const res = await fetch(`${API}/activities/${editingActivity.activity_id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify(editFormData)
       });

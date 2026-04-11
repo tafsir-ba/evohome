@@ -36,6 +36,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentProjects = () => {
   const { t } = useSettings();
   const navigate = useNavigate();
@@ -71,7 +76,7 @@ export const AgentProjects = () => {
 
   const fetchSubscriptionStatus = async () => {
     try {
-      const res = await fetch(`${API}/billing/status`, { credentials: 'include' });
+      const res = await fetch(`${API}/billing/status`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         setSubscriptionStatus(await res.json());
       }
@@ -126,7 +131,7 @@ export const AgentProjects = () => {
       
       const res = await fetch(url, {
         method: editingProject ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({
           ...formData,
@@ -193,7 +198,7 @@ export const AgentProjects = () => {
     setLoadingUnits(true);
     
     try {
-      const res = await fetch(`${API}/projects/${project.project_id}/units`, { credentials: 'include' });
+      const res = await fetch(`${API}/projects/${project.project_id}/units`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         setUnits(await res.json());
       }
@@ -210,7 +215,7 @@ export const AgentProjects = () => {
     try {
       const res = await fetch(`${API}/projects/${unitsProject.project_id}/units`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ unit_reference: newUnit.trim() })
       });

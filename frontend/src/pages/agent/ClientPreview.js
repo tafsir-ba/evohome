@@ -27,6 +27,11 @@ import { cn } from '../../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 /**
  * Client Preview Page - "View as Client"
  * 
@@ -43,9 +48,7 @@ export const ClientPreview = () => {
   useEffect(() => {
     const fetchPreviewData = async () => {
       try {
-        const res = await fetch(`${API}/clients/${clientId}/preview`, {
-          credentials: 'include'
-        });
+        const res = await fetch(`${API}/clients/${clientId}/preview`, { credentials: 'include', headers: getAuthHeaders() });
         
         if (res.ok) {
           const data = await res.json();

@@ -34,6 +34,11 @@ import { cn } from '../../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentBilling = () => {
   const { t } = useSettings();
   const [searchParams] = useSearchParams();
@@ -62,8 +67,8 @@ export const AgentBilling = () => {
   const fetchBillingData = async () => {
     try {
       const [statusRes, plansRes] = await Promise.all([
-        fetch(`${API}/billing/status`, { credentials: 'include' }),
-        fetch(`${API}/billing/plans`, { credentials: 'include' })
+        fetch(`${API}/billing/status`, { credentials: 'include', headers: getAuthHeaders() }),
+        fetch(`${API}/billing/plans`, { credentials: 'include', headers: getAuthHeaders() })
       ]);
       
       if (statusRes.ok && plansRes.ok) {
@@ -82,7 +87,7 @@ export const AgentBilling = () => {
     try {
       const res = await fetch(`${API}/billing/verify-session`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ session_id: sessionId })
       });
@@ -135,7 +140,7 @@ export const AgentBilling = () => {
     try {
       const res = await fetch(`${API}/billing/create-checkout-session`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ 
           plan_id: planId,
@@ -168,7 +173,7 @@ export const AgentBilling = () => {
     try {
       const res = await fetch(`${API}/billing/portal`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ 
           return_url: window.location.href

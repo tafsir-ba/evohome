@@ -31,9 +31,20 @@ from services.realtime_service import ws_manager, notify_realtime, send_mileston
 from services.qr_service import generate_swiss_qr_code, generate_swiss_qr_code_base64, DEFAULT_IBAN, DEFAULT_COMPANY_NAME
 from services.ai_service import extract_document_from_pdf, OPENAI_API_KEY
 
-from models.schemas import *
+from models.schemas import Project, Document
 
 logger = logging.getLogger(__name__)
+
+
+async def _extract_timeline_stages(file_path: str) -> dict:
+    """Stub: Timeline stage extraction from document."""
+    return {"stages": [], "confidence": 0.3}
+
+
+async def _extract_contacts_list(file_path: str) -> dict:
+    """Stub: Contact list extraction from document."""
+    return {"contacts": [], "confidence": 0.3}
+
 
 ROOT_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = ROOT_DIR / "uploads"

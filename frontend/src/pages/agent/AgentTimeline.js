@@ -31,6 +31,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 // Predefined stage templates (max 6-8)
 const STAGE_TEMPLATES = [
   { name: 'Permits & Approvals', description: 'Building permits and regulatory approvals' },
@@ -336,7 +341,7 @@ export const AgentTimeline = () => {
           `${API}/projects/${selectedProjectId}/steps/${editingStage.step_id}`,
           {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             credentials: 'include',
             body: JSON.stringify(formData),
           }
@@ -353,7 +358,7 @@ export const AgentTimeline = () => {
           `${API}/projects/${selectedProjectId}/steps`,
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             credentials: 'include',
             body: JSON.stringify({
               ...formData,
@@ -410,13 +415,13 @@ export const AgentTimeline = () => {
       await Promise.all([
         fetch(`${API}/projects/${selectedProjectId}/steps/${stage.step_id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           credentials: 'include',
           body: JSON.stringify({ order_index: otherStage.order_index }),
         }),
         fetch(`${API}/projects/${selectedProjectId}/steps/${otherStage.step_id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           credentials: 'include',
           body: JSON.stringify({ order_index: stage.order_index }),
         }),
@@ -460,6 +465,7 @@ export const AgentTimeline = () => {
       const classifyRes = await fetch(`${API}/command/classify-document`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeaders(),
         body: classifyFormData
       });
       
@@ -480,6 +486,7 @@ export const AgentTimeline = () => {
       const extractRes = await fetch(`${API}/command/extract-document`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeaders(),
         body: extractFormData
       });
       
@@ -551,7 +558,7 @@ export const AgentTimeline = () => {
         
         const res = await fetch(`${API}/projects/${selectedProjectId}/steps`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           credentials: 'include',
           body: JSON.stringify({
             title: stage.title,

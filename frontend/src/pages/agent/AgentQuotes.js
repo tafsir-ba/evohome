@@ -20,6 +20,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentQuotes = () => {
   const { t } = useSettings();
   const [quotes, setQuotes] = useState([]);
@@ -34,7 +39,7 @@ export const AgentQuotes = () => {
 
   const fetchQuotes = async () => {
     try {
-      const response = await fetch(`${API}/documents?doc_type=quote`, { credentials: 'include' });
+      const response = await fetch(`${API}/documents?doc_type=quote`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         setQuotes(await response.json());
       }
@@ -85,7 +90,7 @@ export const AgentQuotes = () => {
     e.stopPropagation();
     
     try {
-      const response = await fetch(`${API}/documents/${quoteId}/source-pdf`, { credentials: 'include' });
+      const response = await fetch(`${API}/documents/${quoteId}/source-pdf`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);

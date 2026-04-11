@@ -3,6 +3,11 @@ import { useAuth } from './AuthContext';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 // Storage key prefix for persisting selection (user-specific)
 const STORAGE_KEY_PREFIX = 'evohome_selected_project_';
 
@@ -78,7 +83,7 @@ export const DataProvider = ({ children }) => {
     setError(null);
     
     try {
-      const res = await fetch(`${API}/projects`, { credentials: 'include' });
+      const res = await fetch(`${API}/projects`, { credentials: 'include', headers: getAuthHeaders() });
       
       // Check if still mounted
       if (!mountedRef.current) return;

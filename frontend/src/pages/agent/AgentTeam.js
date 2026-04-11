@@ -30,6 +30,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 const ROLE_SUGGESTIONS = [
   'Plumber',
   'Electrician',
@@ -213,7 +218,7 @@ export const AgentTeam = () => {
       
       const res = await fetch(url, {
         method: editingMember ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify(form)
       });

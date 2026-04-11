@@ -24,6 +24,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('de-CH', {
     style: 'currency',
@@ -126,9 +131,7 @@ export const AgentAnalytics = () => {
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/analytics?period=${period}`, {
-        credentials: 'include'
-      });
+      const res = await fetch(`${API}/analytics?period=${period}`, { credentials: 'include', headers: getAuthHeaders() });
       
       if (res.ok) {
         const data = await res.json();

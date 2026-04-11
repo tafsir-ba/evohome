@@ -31,6 +31,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentQuoteEdit = () => {
   const { quoteId } = useParams();
   const navigate = useNavigate();
@@ -62,7 +67,7 @@ export const AgentQuoteEdit = () => {
 
   const fetchQuote = async () => {
     try {
-      const response = await fetch(`${API}/documents/${quoteId}`, { credentials: 'include' });
+      const response = await fetch(`${API}/documents/${quoteId}`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const data = await response.json();
         setQuote(data);
@@ -92,7 +97,7 @@ export const AgentQuoteEdit = () => {
     try {
       const res = await fetch(`${API}/documents/${quoteId}/action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ action: 'convert_to_invoice' })
       });
@@ -123,6 +128,7 @@ export const AgentQuoteEdit = () => {
       const res = await fetch(`${API}/documents/${quoteId}/reupload`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeaders(),
         body: formDataUpload
       });
 
@@ -184,7 +190,7 @@ export const AgentQuoteEdit = () => {
 
       const saveRes = await fetch(`${API}/documents/${quoteId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify(updateData)
       });

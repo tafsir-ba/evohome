@@ -42,6 +42,11 @@ import { cn } from '../../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 const CURRENCIES = [
   { code: 'CHF', name: 'Swiss Franc (CHF)', symbol: 'CHF' },
   { code: 'EUR', name: 'Euro (EUR)', symbol: '€' },
@@ -106,9 +111,9 @@ export const AgentSettings = () => {
   const fetchData = async () => {
     try {
       const [settingsRes, statusRes, plansRes] = await Promise.all([
-        fetch(`${API}/settings`, { credentials: 'include' }),
-        fetch(`${API}/billing/status`, { credentials: 'include' }),
-        fetch(`${API}/billing/plans`, { credentials: 'include' })
+        fetch(`${API}/settings`, { credentials: 'include', headers: getAuthHeaders() }),
+        fetch(`${API}/billing/status`, { credentials: 'include', headers: getAuthHeaders() }),
+        fetch(`${API}/billing/plans`, { credentials: 'include', headers: getAuthHeaders() })
       ]);
       
       if (settingsRes.ok) {
@@ -128,8 +133,8 @@ export const AgentSettings = () => {
     setLoadingTeam(true);
     try {
       const [membersRes, invitesRes] = await Promise.all([
-        fetch(`${API}/team/members`, { credentials: 'include' }),
-        fetch(`${API}/team/invitations`, { credentials: 'include' })
+        fetch(`${API}/team/members`, { credentials: 'include', headers: getAuthHeaders() }),
+        fetch(`${API}/team/invitations`, { credentials: 'include', headers: getAuthHeaders() })
       ]);
       
       if (membersRes.ok) setTeamMembers(await membersRes.json());
@@ -151,7 +156,7 @@ export const AgentSettings = () => {
     try {
       const res = await fetch(`${API}/team/invitations`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify(inviteForm)
       });
@@ -218,7 +223,7 @@ export const AgentSettings = () => {
     try {
       const res = await fetch(`${API}/settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({
           language: settings.language,
@@ -321,7 +326,7 @@ export const AgentSettings = () => {
     try {
       const res = await fetch(`${API}/billing/create-checkout-session`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ plan_id: planId, origin_url: window.location.origin })
       });
@@ -344,7 +349,7 @@ export const AgentSettings = () => {
     try {
       const res = await fetch(`${API}/billing/portal`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ return_url: window.location.href })
       });

@@ -35,6 +35,11 @@ import { Textarea } from '../../components/ui/textarea';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 export const AgentInvoiceDetail = () => {
   const { t } = useSettings();
   const { invoiceId } = useParams();
@@ -51,7 +56,7 @@ export const AgentInvoiceDetail = () => {
 
   const fetchInvoice = async () => {
     try {
-      const response = await fetch(`${API}/documents/${invoiceId}`, { credentials: 'include' });
+      const response = await fetch(`${API}/documents/${invoiceId}`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         setInvoice(await response.json());
       } else {
@@ -72,7 +77,7 @@ export const AgentInvoiceDetail = () => {
       // Use document action endpoint with confirm_payment action
       const response = await fetch(`${API}/documents/${invoiceId}/action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({ action: 'confirm_payment' })
       });
@@ -93,7 +98,7 @@ export const AgentInvoiceDetail = () => {
 
   const handleDownloadPDF = async () => {
     try {
-      const response = await fetch(`${API}/documents/${invoiceId}/pdf`, { credentials: 'include' });
+      const response = await fetch(`${API}/documents/${invoiceId}/pdf`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
