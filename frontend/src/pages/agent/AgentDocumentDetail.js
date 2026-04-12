@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
 import { StatusBadge, formatCurrency, formatDate } from '../../components/StatusBadge';
 import { ChangeRequestPanel } from '../../components/ChangeRequestPanel';
@@ -27,6 +27,15 @@ export const AgentDocumentDetail = () => {
   const { documentId, quoteId, invoiceId } = useParams();
   const id = documentId || quoteId || invoiceId;
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const highlightChangeRequestId = searchParams.get('change_request_id');
+  const clearChangeRequestHighlight = useCallback(() => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev);
+      n.delete('change_request_id');
+      return n;
+    }, { replace: true });
+  }, [setSearchParams]);
   const [doc, setDoc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sendLoading, setSendLoading] = useState(false);
@@ -267,7 +276,13 @@ export const AgentDocumentDetail = () => {
                 {doc.paid_date && <div><p className="text-xs text-muted-foreground">Paid Date</p><p className="text-sm font-medium text-green-600">{formatDate(doc.paid_date)}</p></div>}
               </CardContent>
             </Card>
-            <ChangeRequestPanel entityType={doc.type?.toLowerCase() || 'quote'} entityId={id} isAgent={true} />
+            <ChangeRequestPanel
+              entityType={doc.type?.toLowerCase() || 'quote'}
+              entityId={id}
+              isAgent={true}
+              highlightChangeRequestId={highlightChangeRequestId}
+              onHighlightConsumed={clearChangeRequestHighlight}
+            />
           </div>
         </div>
       </div>

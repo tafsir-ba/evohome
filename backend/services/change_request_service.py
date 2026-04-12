@@ -349,12 +349,17 @@ async def _notify(user_id: str, title: str, message_text: str, notification_type
     """Create a notification. Failure is non-blocking."""
     try:
         from services.notification_service import create_notification
+        from core.notification_routing import compute_notification_link
+
+        u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "role": 1})
+        role = (u or {}).get("role") or "buyer"
+        link = compute_notification_link(notification_type, data, role, None)
         await create_notification(
             user_id=user_id,
             title=title,
             message=message_text,
             notification_type=notification_type,
-            link="/buyer?tab=documents",
+            link=link,
             metadata=data,
         )
     except Exception as e:

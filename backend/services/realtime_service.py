@@ -118,12 +118,17 @@ async def send_milestone_notification(step: dict, project: dict, timeline: dict,
 
             # Lazy import to avoid circular dependency with notification_service
             from services.notification_service import create_notification
+            from core.notification_routing import buyer_query
             await create_notification(
                 user_id=buyer_id,
                 title=f"Milestone Reached: {step.get('title', 'Construction Update')}",
                 message=f"The '{step.get('title')}' phase has been completed for {unit_ref}. Overall progress: {progress_percent}%",
                 notification_type="milestone_completed",
-                link="/buyer/dashboard",
+                link=buyer_query(
+                    "documents",
+                    milestone_step_id=step.get('step_id') or '',
+                    project_id=project.get('project_id') or '',
+                ),
                 metadata={
                     "step_id": step.get('step_id'),
                     "project_id": project.get('project_id'),

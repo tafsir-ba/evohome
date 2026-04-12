@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
@@ -36,13 +36,20 @@ const STATUS_CONFIG = {
  * ChangeRequestPanel — displays change requests for any entity.
  * Used on invoice detail, quote detail, and future decision detail pages.
  */
-export const ChangeRequestPanel = ({ entityType, entityId, isAgent = true }) => {
+export const ChangeRequestPanel = ({
+  entityType,
+  entityId,
+  isAgent = true,
+  highlightChangeRequestId = null,
+  onHighlightConsumed = null,
+}) => {
   const [changeRequests, setChangeRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [sending, setSending] = useState(false);
   const [expanded, setExpanded] = useState({});
+  const highlightDone = useRef(null);
 
   const fetchChangeRequests = async () => {
     try {
@@ -72,6 +79,43 @@ export const ChangeRequestPanel = ({ entityType, entityId, isAgent = true }) => 
   useEffect(() => {
     if (entityType && entityId) fetchChangeRequests();
   }, [entityType, entityId]);
+
+  useEffect(() => {
+    highlightDone.current = null;
+  }, [highlightChangeRequestId, entityId]);
+
+  useEffect(() => {
+    if (!highlightChangeRequestId || loading) return;
+    if (changeRequests.length === 0) {
+      if (highlightDone.current !== `empty-${highlightChangeRequestId}`) {
+        highlightDone.current = `empty-${highlightChangeRequestId}`;
+        toast.error('This change request thread is no longer available');
+        onHighlightConsumed?.();
+      }
+      return;
+    }
+    const match = changeRequests.find((cr) => cr.change_request_id === highlightChangeRequestId);
+    if (!match) {
+      if (highlightDone.current !== `missing-${highlightChangeRequestId}`) {
+        highlightDone.current = `missing-${highlightChangeRequestId}`;
+        toast.error('This change request thread is no longer available');
+        onHighlightConsumed?.();
+      }
+      return;
+    }
+    if (highlightDone.current === highlightChangeRequestId) return;
+    highlightDone.current = highlightChangeRequestId;
+    setExpanded((prev) => ({ ...prev, [highlightChangeRequestId]: true }));
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-testid="change-request-${highlightChangeRequestId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+      }
+      onHighlightConsumed?.();
+    });
+  }, [highlightChangeRequestId, loading, changeRequests, onHighlightConsumed]);
 
   const handleRespond = async (crId) => {
     if (!replyText.trim()) return;

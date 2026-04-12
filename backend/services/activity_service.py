@@ -211,13 +211,16 @@ async def _notify_recipient(client_id, activity_id, activity_type, content, proj
     if not buyer:
         return
 
+    from core.notification_routing import buyer_query
+
+    pid = project.get('project_id') if project else None
     await emit_notification(
         user_id=client['buyer_id'],
         title="New Update from Your Agent",
         message=content[:100] if content else f"New {activity_type} posted",
         notification_type="feed_update",
-        link="/buyer/dashboard",
-        metadata={"activity_id": activity_id, "project_id": project.get('project_id') if project else None},
+        link=buyer_query("updates", activity_id=activity_id, project_id=pid or ""),
+        metadata={"activity_id": activity_id, "project_id": pid},
     )
 
     await emit_realtime(

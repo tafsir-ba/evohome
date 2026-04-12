@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -59,7 +60,13 @@ const getAuthHeaders = () => {
 };
 
 // Change Request Thread — shows the full buyer-agent exchange
-const ChangeRequestThread = ({ entityType, entityId, buyerComment }) => {
+const ChangeRequestThread = ({
+  entityType,
+  entityId,
+  buyerComment,
+  preferredChangeRequestId = null,
+  onPreferredMiss = null,
+}) => {
   const [thread, setThread] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -72,9 +79,20 @@ const ChangeRequestThread = ({ entityType, entityId, buyerComment }) => {
         );
         if (res.ok) {
           const data = await res.json();
-          // Get the most recent thread (any status — buyer should see full history)
-          const mostRecent = (data.change_requests || [])[0];
-          setThread(mostRecent || null);
+          const list = data.change_requests || [];
+          let chosen = null;
+          if (preferredChangeRequestId) {
+            const match = list.find((cr) => cr.change_request_id === preferredChangeRequestId);
+            if (match) {
+              chosen = match;
+            } else {
+              toast.error('This change request is no longer available');
+              onPreferredMiss?.();
+            }
+          } else {
+            chosen = list[0] || null;
+          }
+          setThread(chosen);
         }
       } catch {
         // Fallback to just showing the buyer comment
@@ -83,7 +101,22 @@ const ChangeRequestThread = ({ entityType, entityId, buyerComment }) => {
       }
     };
     fetchThread();
-  }, [entityType, entityId]);
+  }, [entityType, entityId, preferredChangeRequestId]);
+
+  useEffect(() => {
+    if (!thread?.change_request_id || !preferredChangeRequestId) return;
+    if (thread.change_request_id !== preferredChangeRequestId) return;
+    requestAnimationFrame(() => {
+      const el = document.querySelector(
+        `[data-testid="change-request-thread-${thread.change_request_id}"]`
+      );
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+      }
+    });
+  }, [thread, preferredChangeRequestId]);
 
   // If no canonical thread exists and no legacy comment, hide
   if (loading) return null;
@@ -99,7 +132,10 @@ const ChangeRequestThread = ({ entityType, entityId, buyerComment }) => {
   }
 
   return (
-    <div className="rounded-lg border border-blue-500/20 overflow-hidden" data-testid="change-request-thread">
+    <div
+      className="rounded-lg border border-blue-500/20 overflow-hidden"
+      data-testid={thread.change_request_id ? `change-request-thread-${thread.change_request_id}` : 'change-request-thread'}
+    >
       <div className="px-3 py-2 bg-blue-500/10 border-b border-blue-500/20">
         <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">
           Change Request
@@ -157,10 +193,25 @@ const formatDate = (dateStr) => {
 };
 
 // Buyer Decisions View — shows decisions requiring buyer action
-const BuyerDecisionsView = ({ decisions, onRespond }) => {
+const BuyerDecisionsView = ({ decisions, onRespond, highlightDecisionId }) => {
   const [expandedId, setExpandedId] = useState(null);
   const [comment, setComment] = useState('');
   const [responding, setResponding] = useState(false);
+
+  useEffect(() => {
+    if (!highlightDecisionId || decisions.length === 0) return;
+    const found = decisions.find(d => d.decision_id === highlightDecisionId);
+    if (!found) return;
+    setExpandedId(highlightDecisionId);
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-testid="buyer-decision-${highlightDecisionId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+      }
+    });
+  }, [highlightDecisionId, decisions]);
 
   const handleRespond = async (decisionId, action) => {
     setResponding(true);
@@ -328,8 +379,21 @@ const statusConfig = {
 };
 
 // E-Commerce Style Timeline Card
-const TimelineCard = ({ event, onAction, onDownloadPdf, onPreviewPdf, onShowQrPayment }) => {
-  const [expanded, setExpanded] = useState(event.actionRequired);
+const TimelineCard = ({
+  event,
+  onAction,
+  onDownloadPdf,
+  onPreviewPdf,
+  onShowQrPayment,
+  initialExpanded = false,
+  highlightChangeRequestId = null,
+  onClearChangeRequestParam = null,
+}) => {
+  const [expanded, setExpanded] = useState(() => event.actionRequired || initialExpanded);
+
+  useEffect(() => {
+    if (initialExpanded) setExpanded(true);
+  }, [initialExpanded]);
   const [showQuestionInput, setShowQuestionInput] = useState(false);
   const [question, setQuestion] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -498,6 +562,8 @@ const TimelineCard = ({ event, onAction, onDownloadPdf, onPreviewPdf, onShowQrPa
                   entityType={event.type?.toLowerCase() || 'document'}
                   entityId={event.id}
                   buyerComment={event.changeComment}
+                  preferredChangeRequestId={highlightChangeRequestId}
+                  onPreferredMiss={highlightChangeRequestId ? onClearChangeRequestParam : undefined}
                 />
               )}
 
@@ -1061,6 +1127,29 @@ const QrPaymentModal = ({ isOpen, onClose, invoice, qrData, loading }) => {
 export const BuyerTimeline = () => {
   const { user, logout } = useAuth();
   const { getLogo, getCompanyName, t, formatCurrency: settingsFormatCurrency } = useSettings();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeView = searchParams.get('tab') || 'documents';
+  const deepLinkHandled = useRef(new Set());
+  const setActiveView = useCallback((view) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', view);
+      ['document_id', 'vault_document_id', 'activity_id', 'decision_id', 'milestone_step_id', 'change_request_id'].forEach((k) => next.delete(k));
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const clearChangeRequestParam = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('change_request_id');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const documentId = searchParams.get('document_id');
+  const vaultDocumentId = searchParams.get('vault_document_id');
+  const milestoneStepId = searchParams.get('milestone_step_id');
+  const decisionIdFromUrl = searchParams.get('decision_id');
+  const changeRequestIdFromUrl = searchParams.get('change_request_id');
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState([]);
   const [projectInfo, setProjectInfo] = useState(null);
@@ -1069,10 +1158,6 @@ export const BuyerTimeline = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [activeView, setActiveView] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('tab') || 'documents';
-  });
   const [unreadCount, setUnreadCount] = useState(0);
   const [teamMembers, setTeamMembers] = useState([]);
   const [constructionTimeline, setConstructionTimeline] = useState(null);
@@ -1189,6 +1274,123 @@ export const BuyerTimeline = () => {
       fetchData();
     }
   }, [activeView, fetchData]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const d = e.detail || {};
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        Object.entries(d).forEach(([k, v]) => {
+          if (v != null && v !== '') next.set(k, String(v));
+        });
+        return next;
+      }, { replace: true });
+    };
+    window.addEventListener('navigate-tab', handler);
+    return () => window.removeEventListener('navigate-tab', handler);
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    if (loading || !decisionIdFromUrl) return;
+    if (activeView !== 'decisions' || buyerDecisions.length === 0) return;
+    const ok = buyerDecisions.some((d) => d.decision_id === decisionIdFromUrl);
+    if (!ok) {
+      const k = `nodec-${decisionIdFromUrl}`;
+      if (!deepLinkHandled.current.has(k)) {
+        deepLinkHandled.current.add(k);
+        toast.error('This decision is no longer available');
+        setSearchParams((prev) => {
+          const n = new URLSearchParams(prev);
+          n.delete('decision_id');
+          return n;
+        }, { replace: true });
+      }
+    }
+  }, [loading, decisionIdFromUrl, activeView, buyerDecisions, setSearchParams]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const run = () => {
+      if (documentId && activeView === 'documents') {
+        const exists = events.some((e) => e.id === documentId);
+        const el = document.querySelector(`[data-testid="timeline-event-${documentId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+        } else if (events.length > 0 && !exists) {
+          const k = `nodoc-${documentId}`;
+          if (!deepLinkHandled.current.has(k)) {
+            deepLinkHandled.current.add(k);
+            toast.error('This document is no longer available');
+            setSearchParams((prev) => {
+              const n = new URLSearchParams(prev);
+              n.delete('document_id');
+              return n;
+            }, { replace: true });
+          }
+        }
+      }
+      if (vaultDocumentId && activeView === 'vault' && vaultDocuments.length > 0) {
+        const match = vaultDocuments.find(
+          (d) => d.vault_id === vaultDocumentId || d.vault_document_id === vaultDocumentId
+        );
+        if (match) {
+          const el = document.querySelector(`[data-testid="vault-doc-${match.vault_id}"]`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+            setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+          }
+        } else {
+          const k = `novault-${vaultDocumentId}`;
+          if (!deepLinkHandled.current.has(k)) {
+            deepLinkHandled.current.add(k);
+            toast.error('This file is no longer shared with you');
+            setSearchParams((prev) => {
+              const n = new URLSearchParams(prev);
+              n.delete('vault_document_id');
+              return n;
+            }, { replace: true });
+          }
+        }
+      }
+      if (milestoneStepId && stages.length > 0) {
+        const exists = stages.some((s) => s.step_id === milestoneStepId);
+        const el = document.querySelector(`[data-testid="construction-stage-${milestoneStepId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+        } else if (!exists) {
+          const k = `nomile-${milestoneStepId}`;
+          if (!deepLinkHandled.current.has(k)) {
+            deepLinkHandled.current.add(k);
+            toast.error('This milestone is no longer on your timeline');
+            setSearchParams((prev) => {
+              const n = new URLSearchParams(prev);
+              n.delete('milestone_step_id');
+              return n;
+            }, { replace: true });
+          }
+        }
+      }
+    };
+
+    const id = requestAnimationFrame(run);
+    return () => cancelAnimationFrame(id);
+  }, [
+    loading,
+    activeView,
+    documentId,
+    vaultDocumentId,
+    milestoneStepId,
+    events,
+    vaultDocuments,
+    stages,
+    setSearchParams,
+  ]);
 
   const handleAction = async (eventId, action, comment = null) => {
     if (action === 'approve' || action === 'reject') {
@@ -1615,6 +1817,9 @@ export const BuyerTimeline = () => {
                   onDownloadPdf={handleDownloadPdf}
                   onPreviewPdf={handlePreviewPdf}
                   onShowQrPayment={handleShowQrPayment}
+                  initialExpanded={!!(documentId === event.id && changeRequestIdFromUrl)}
+                  highlightChangeRequestId={documentId === event.id ? changeRequestIdFromUrl : null}
+                  onClearChangeRequestParam={clearChangeRequestParam}
                 />
               ))
             )}
@@ -1694,7 +1899,7 @@ export const BuyerTimeline = () => {
 
         {/* Updates/Feed View */}
         {activeView === 'updates' && (
-          <Feed isAgent={false} embedded={true} />
+          <Feed isAgent={false} embedded={true} highlightActivityId={searchParams.get('activity_id')} />
         )}
 
         {/* Team View */}
@@ -1762,7 +1967,10 @@ export const BuyerTimeline = () => {
 
         {/* Decisions View */}
         {activeView === 'decisions' && (
-          <BuyerDecisionsView decisions={buyerDecisions} onRespond={async (decisionId, action, comment) => {
+          <BuyerDecisionsView
+            decisions={buyerDecisions}
+            highlightDecisionId={decisionIdFromUrl}
+            onRespond={async (decisionId, action, comment) => {
             try {
               await portalAction({ action: 'respond_decision', decision_id: decisionId, option_id: action, comment });
               toast.success(action === 'approved' ? 'Decision approved' : action === 'rejected' ? 'Decision declined' : 'Change request sent');

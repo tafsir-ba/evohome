@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useDataContext } from '../context/DataContext';
@@ -465,9 +465,9 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
  * - isAgent: determines UI permissions (create post, view all recipients)
  * - Uses same /api/activities endpoint - backend handles role-based filtering
  */
-export const Feed = ({ isAgent = false, embedded = false }) => {
+export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = null }) => {
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const clientFilter = searchParams.get('client');
   const projectFilter = searchParams.get('project');
@@ -494,6 +494,7 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
   
   // Delete confirmation state  
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, activity: null });
+  const highlightInjectAttempted = useRef(null);
 
   const fetchActivities = useCallback(async () => {
     setLoading(true);
@@ -560,6 +561,59 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
   useEffect(() => {
     fetchActivities();
   }, [fetchActivities]);
+
+  useEffect(() => {
+    highlightInjectAttempted.current = null;
+  }, [highlightActivityId]);
+
+  useEffect(() => {
+    if (isAgent || !embedded || !highlightActivityId || loading) return;
+    if (activities.some((a) => a.activity_id === highlightActivityId)) return;
+    if (highlightInjectAttempted.current === highlightActivityId) return;
+    highlightInjectAttempted.current = highlightActivityId;
+
+    (async () => {
+      try {
+        const res = await fetch(`${API}/activities/${highlightActivityId}`, {
+          credentials: 'include',
+          headers: getAuthHeaders(),
+        });
+        if (res.ok) {
+          const one = await res.json();
+          setActivities((prev) =>
+            prev.some((a) => a.activity_id === one.activity_id) ? prev : [one, ...prev]
+          );
+        } else {
+          toast.error('This update is no longer available');
+          setSearchParams((prev) => {
+            const n = new URLSearchParams(prev);
+            n.delete('activity_id');
+            return n;
+          }, { replace: true });
+        }
+      } catch {
+        toast.error('This update is no longer available');
+        setSearchParams((prev) => {
+          const n = new URLSearchParams(prev);
+          n.delete('activity_id');
+          return n;
+        }, { replace: true });
+      }
+    })();
+  }, [isAgent, embedded, highlightActivityId, loading, activities, setSearchParams]);
+
+  useEffect(() => {
+    if (isAgent || !embedded || !highlightActivityId || loading) return;
+    if (!activities.some((a) => a.activity_id === highlightActivityId)) return;
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-testid="activity-card-${highlightActivityId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+      }
+    });
+  }, [isAgent, embedded, highlightActivityId, loading, activities]);
 
   const handleReply = async (activityId, content) => {
     try {

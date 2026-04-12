@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
 import { useDataContext } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
@@ -58,7 +58,7 @@ const STATUS_CONFIG = {
 };
 
 export const AgentDecisions = () => {
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { projects } = useDataContext();
   const [decisions, setDecisions] = useState([]);
@@ -81,6 +81,7 @@ export const AgentDecisions = () => {
   const [saving, setSaving] = useState(false);
   const [sendingId, setSendingId] = useState(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const deepLinkHandledRef = useRef(null);
 
   const fetchDecisions = useCallback(async () => {
     try {
@@ -104,6 +105,33 @@ export const AgentDecisions = () => {
   useWebSocket(user?.user_id, handleDecisionSocket);
 
   useEffect(() => { fetchDecisions(); }, [fetchDecisions]);
+
+  const decisionIdFromUrl = searchParams.get('decision_id');
+
+  useEffect(() => {
+    deepLinkHandledRef.current = null;
+  }, [decisionIdFromUrl]);
+
+  useEffect(() => {
+    if (!decisionIdFromUrl || loading || decisions.length === 0) return;
+    const found = decisions.find((d) => d.decision_id === decisionIdFromUrl);
+    if (!found) {
+      if (deepLinkHandledRef.current !== `missing-${decisionIdFromUrl}`) {
+        deepLinkHandledRef.current = `missing-${decisionIdFromUrl}`;
+        toast.error('This decision is no longer available');
+        setSearchParams((prev) => {
+          const n = new URLSearchParams(prev);
+          n.delete('decision_id');
+          return n;
+        }, { replace: true });
+      }
+      return;
+    }
+    if (deepLinkHandledRef.current === decisionIdFromUrl) return;
+    deepLinkHandledRef.current = decisionIdFromUrl;
+    fetchDetail(decisionIdFromUrl);
+    setDetailOpen(true);
+  }, [decisionIdFromUrl, loading, decisions, setSearchParams]);
 
   const fetchProjectClients = async (projectId) => {
     if (!projectId) { setClients([]); return; }
@@ -395,16 +423,55 @@ export const AgentDecisions = () => {
       </Dialog>
 
       {/* Detail Dialog */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+      <Dialog
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open);
+          if (!open) {
+            setSearchParams((prev) => {
+              const n = new URLSearchParams(prev);
+              n.delete('decision_id');
+              n.delete('change_request_id');
+              return n;
+            }, { replace: true });
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          {selectedDecision && <DecisionDetail decision={selectedDecision} onSend={handleSend} onClose={handleClose} onUpload={handleUploadAttachment} uploadingAttachment={uploadingAttachment} sendingId={sendingId} />}
+          {selectedDecision && (
+            <DecisionDetail
+              decision={selectedDecision}
+              onSend={handleSend}
+              onClose={handleClose}
+              onUpload={handleUploadAttachment}
+              uploadingAttachment={uploadingAttachment}
+              sendingId={sendingId}
+              highlightChangeRequestId={searchParams.get('change_request_id')}
+              onHighlightConsumed={() => {
+                setSearchParams((prev) => {
+                  const n = new URLSearchParams(prev);
+                  n.delete('change_request_id');
+                  return n;
+                }, { replace: true });
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </AgentLayout>
   );
 };
 
-const DecisionDetail = ({ decision, onSend, onClose, onUpload, uploadingAttachment, sendingId }) => {
+const DecisionDetail = ({
+  decision,
+  onSend,
+  onClose,
+  onUpload,
+  uploadingAttachment,
+  sendingId,
+  highlightChangeRequestId,
+  onHighlightConsumed,
+}) => {
   const config = STATUS_CONFIG[decision.status] || STATUS_CONFIG.draft;
   const StatusIcon = config.icon;
 
@@ -489,7 +556,13 @@ const DecisionDetail = ({ decision, onSend, onClose, onUpload, uploadingAttachme
         )}
 
         {/* Change Requests */}
-        <ChangeRequestPanel entityType="decision" entityId={decision.decision_id} isAgent={true} />
+        <ChangeRequestPanel
+          entityType="decision"
+          entityId={decision.decision_id}
+          isAgent={true}
+          highlightChangeRequestId={highlightChangeRequestId}
+          onHighlightConsumed={onHighlightConsumed}
+        />
       </div>
 
       <DialogFooter>

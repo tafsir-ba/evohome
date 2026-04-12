@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -7,8 +8,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { Bell, Check, CheckCheck, FileText, Receipt, CreditCard, Trash2, HardHat, FolderOpen } from 'lucide-react';
+import {
+  Bell,
+  CheckCheck,
+  FileText,
+  Receipt,
+  CreditCard,
+  Trash2,
+  HardHat,
+  FolderOpen,
+  MessageSquare,
+  CheckSquare,
+  AlertCircle,
+} from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useAuth } from '../context/AuthContext';
+import { normalizeNotificationPath } from '../lib/notificationNavigation';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
@@ -19,6 +34,15 @@ const notificationIcons = {
   payment_confirmed: CreditCard,
   milestone_completed: HardHat,
   document_shared: FolderOpen,
+  document_sent: FileText,
+  invoice_created: Receipt,
+  vault_document: FolderOpen,
+  feed_update: MessageSquare,
+  change_request_created: AlertCircle,
+  change_request_response: AlertCircle,
+  change_request_resolved: AlertCircle,
+  change_request_message: MessageSquare,
+  decision_updated: CheckSquare,
 };
 
 const formatTimeAgo = (dateStr) => {
@@ -34,6 +58,8 @@ const formatTimeAgo = (dateStr) => {
 };
 
 export const NotificationCenter = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -108,18 +134,24 @@ export const NotificationCenter = () => {
     if (!notification.is_read) {
       markAsRead(notification.notification_id);
     }
-    if (notification.link) {
-      // Handle tab-based navigation (e.g., /buyer?tab=vault)
-      const url = new URL(notification.link, window.location.origin);
-      if (url.pathname === '/buyer' || url.pathname.startsWith('/buyer')) {
-        const tab = url.searchParams.get('tab');
-        if (tab) {
-          // Navigate and set tab via custom event
-          window.dispatchEvent(new CustomEvent('navigate-tab', { detail: { tab } }));
-        }
-      }
-      window.location.href = notification.link;
+    const raw = notification.link;
+    if (!raw) {
+      navigate(user?.role === 'agent' ? '/agent/home' : '/buyer/dashboard');
+      setIsOpen(false);
+      return;
     }
+    const target = normalizeNotificationPath(raw, user?.role);
+    try {
+      const url = new URL(target, window.location.origin);
+      if (url.origin === window.location.origin) {
+        navigate(`${url.pathname}${url.search}${url.hash}`);
+      } else {
+        window.location.href = target;
+      }
+    } catch {
+      window.location.href = target;
+    }
+    setIsOpen(false);
   };
 
   return (

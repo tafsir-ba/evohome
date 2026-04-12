@@ -108,6 +108,14 @@ async def list_notifications_with_count(user_id: str) -> Dict[str, Any]:
         {"user_id": user_id, "is_read": False}
     )
 
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "role": 1})
+    role = (u or {}).get("role") or "buyer"
+    try:
+        from core.notification_routing import enrich_notification_record
+        notifications = [enrich_notification_record(n, role) for n in notifications]
+    except Exception as e:
+        logger.warning(f"Notification enrich failed: {e}")
+
     return {"notifications": notifications, "unread_count": unread_count}
 
 

@@ -75,14 +75,16 @@ async def create_vault_document(
     trace_service("services.vault_service.create_vault_document")
     trace_db_mutation("vault_documents", "insert_one", doc_id)
 
+    from core.notification_routing import buyer_query
+
     for bid in buyer_ids:
         await emit_notification(
             user_id=bid,
             title="New Document Shared",
             message=f"Your agent shared '{title}' with you",
             notification_type="vault_document",
-            link="/buyer?tab=vault",
-            metadata={"vault_document_id": doc_id},
+            link=buyer_query("vault", vault_document_id=doc_id, project_id=project_id),
+            metadata={"vault_document_id": doc_id, "project_id": project_id},
         )
         trace_side_effect("notification", target=bid, detail=f"vault_document shared: {title}")
 
