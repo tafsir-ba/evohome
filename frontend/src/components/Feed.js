@@ -16,6 +16,7 @@ import {
 } from './ui/dialog';
 import { toast } from 'sonner';
 import { CreateActivityDialog } from './CreateActivityDialog';
+import { ActivityFeedAttachmentImage } from './ActivityFeedAttachmentImage';
 import { 
   Plus, 
   MessageSquare, 
@@ -89,73 +90,17 @@ const getAuthHeaders = () => {
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 };
 
-/**
- * Load attachment bytes with the same /api/activities/{id}/attachment URL as other API calls
- * (Bearer + optional cookies). Avoids raw /activities/files/... URLs that can break across
- * origins or when <img> cannot send Authorization. Uses blob: URLs for display.
- */
-const useAuthenticatedActivityImage = (activityId, enabled) => {
-  const [displaySrc, setDisplaySrc] = useState(null);
-  const [status, setStatus] = useState('idle');
-  const blobRef = useRef(null);
-
-  useEffect(() => {
-    if (!enabled || !activityId) {
-      setDisplaySrc(null);
-      setStatus('idle');
-      return;
-    }
-    let cancelled = false;
-    setStatus('loading');
-    setDisplaySrc(null);
-    if (blobRef.current) {
-      URL.revokeObjectURL(blobRef.current);
-      blobRef.current = null;
-    }
-
-    const url = `${API}/activities/${activityId}/attachment`;
-    const ac = new AbortController();
-
-    (async () => {
-      try {
-        const res = await fetch(url, {
-          credentials: 'include',
-          headers: getAuthHeaders(),
-          signal: ac.signal,
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        if (cancelled) return;
-        const ou = URL.createObjectURL(blob);
-        blobRef.current = ou;
-        setDisplaySrc(ou);
-        setStatus('ready');
-      } catch (e) {
-        if (cancelled || (e && e.name === 'AbortError')) return;
-        if (!cancelled) setStatus('error');
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      ac.abort();
-      if (blobRef.current) {
-        URL.revokeObjectURL(blobRef.current);
-        blobRef.current = null;
-      }
-    };
-  }, [activityId, enabled]);
-
-  return { displaySrc, status };
-};
-
 const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canReply = true, isAgent = false }) => {
   const [expanded, setExpanded] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [replying, setReplying] = useState(false);
   const [sending, setSending] = useState(false);
-  const [inlineImageDecodeFailed, setInlineImageDecodeFailed] = useState(false);
+  const [attachmentState, setAttachmentState] = useState({
+    phase: 'idle',
+    decodeFailed: false,
+    showInline: false,
+  });
   const [deleting, setDeleting] = useState(false);
   const [replies, setReplies] = useState(activity.replies || []);
   const [loadingReplies, setLoadingReplies] = useState(false);
@@ -170,28 +115,12 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
     (activity.file_name && isImageFile(activity.file_name)) ||
     imageUrlLooksLikeImage(fileUrlFull);
   const loadAttachmentBlob = Boolean(hasImageAttachment && activity.file_url);
-  const { displaySrc: authImageSrc, status: imageAuthStatus } = useAuthenticatedActivityImage(
-    activity.activity_id,
-    loadAttachmentBlob
-  );
 
-  useEffect(() => {
-    setInlineImageDecodeFailed(false);
-  }, [activity.activity_id, authImageSrc]);
-
-  const showImageSkeleton =
-    Boolean(loadAttachmentBlob && imageAuthStatus === 'loading');
-  const showImageInline =
-    Boolean(
-      hasImageAttachment &&
-        loadAttachmentBlob &&
-        imageAuthStatus === 'ready' &&
-        authImageSrc &&
-        !inlineImageDecodeFailed
-    );
   const showFileAttachmentRow =
     Boolean(activity.file_name && fileUrlFull) &&
-    (!hasImageAttachment || imageAuthStatus === 'error' || inlineImageDecodeFailed);
+    (!hasImageAttachment ||
+      attachmentState.phase === 'error' ||
+      attachmentState.decodeFailed);
 
   const fetchReplies = async () => {
     if (replies.length > 0 || !activity.reply_count) return;
@@ -307,36 +236,17 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
           </div>
 
           {loadAttachmentBlob && (
-            <>
-              {showImageSkeleton && (
-                <div className="mt-2 border-y border-border bg-muted/30" aria-busy>
-                  <div className="w-full min-h-[200px] max-h-[min(70vh,520px)] animate-pulse bg-muted/80" />
-                </div>
-              )}
-              {showImageInline && (
-                <div className="mt-2 border-y border-border bg-muted/30">
-                  <a
-                    href={authImageSrc}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                    data-testid={`image-preview-${activity.activity_id}`}
-                  >
-                    <img
-                      src={authImageSrc}
-                      alt=""
-                      className="w-full max-h-[min(70vh,520px)] object-contain bg-muted/20"
-                      onLoad={() => setInlineImageDecodeFailed(false)}
-                      onError={(e) => {
-                        if (authImageSrc && e.currentTarget.src === authImageSrc) {
-                          setInlineImageDecodeFailed(true);
-                        }
-                      }}
-                    />
-                  </a>
-                </div>
-              )}
-            </>
+            <ActivityFeedAttachmentImage
+              key={activity.activity_id}
+              activityId={activity.activity_id}
+              enabled={loadAttachmentBlob}
+              fileName={activity.file_name}
+              containerClassName="mt-2 border-y border-border bg-muted/30"
+              skeletonClassName="min-h-[200px] max-h-[min(70vh,520px)]"
+              imgClassName="w-full max-h-[min(70vh,520px)] object-contain bg-muted/20"
+              dataTestId={`image-preview-${activity.activity_id}`}
+              onStateChange={setAttachmentState}
+            />
           )}
 
           {showFileAttachmentRow && (
@@ -514,36 +424,16 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
       <CardContent className="pt-0 px-3 sm:px-6">
         {/* Image first (social-style), then text — blob URL so JWT is applied */}
         {loadAttachmentBlob && (
-          <>
-            {showImageSkeleton && (
-              <div className="mt-3 rounded-lg overflow-hidden bg-muted/30" aria-busy>
-                <div className="w-full min-h-[180px] max-h-96 animate-pulse bg-muted/80" />
-              </div>
-            )}
-            {showImageInline && (
-              <div className="mt-3 rounded-lg overflow-hidden bg-muted/30">
-                <a
-                  href={authImageSrc}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                  data-testid={`image-preview-${activity.activity_id}`}
-                >
-                  <img
-                    src={authImageSrc}
-                    alt={activity.file_name || 'Image attachment'}
-                    className="w-full max-h-96 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                    onLoad={() => setInlineImageDecodeFailed(false)}
-                    onError={(e) => {
-                      if (authImageSrc && e.currentTarget.src === authImageSrc) {
-                        setInlineImageDecodeFailed(true);
-                      }
-                    }}
-                  />
-                </a>
-              </div>
-            )}
-          </>
+          <ActivityFeedAttachmentImage
+            key={activity.activity_id}
+            activityId={activity.activity_id}
+            enabled={loadAttachmentBlob}
+            fileName={activity.file_name}
+            containerClassName="mt-3 rounded-lg overflow-hidden bg-muted/30"
+            imgClassName="w-full max-h-96 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+            dataTestId={`image-preview-${activity.activity_id}`}
+            onStateChange={setAttachmentState}
+          />
         )}
 
         {postBody ? (
