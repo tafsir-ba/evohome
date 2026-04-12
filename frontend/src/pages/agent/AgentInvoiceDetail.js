@@ -43,7 +43,8 @@ const getAuthHeaders = () => {
 
 export const AgentInvoiceDetail = () => {
   const { t } = useSettings();
-  const { invoiceId } = useParams();
+  const { invoiceId, documentId: docId } = useParams();
+  const id = invoiceId || docId;
   const navigate = useNavigate();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,16 +54,16 @@ export const AgentInvoiceDetail = () => {
 
   useEffect(() => {
     fetchInvoice();
-  }, [invoiceId]);
+  }, [id]);
 
   const fetchInvoice = async () => {
     try {
-      const response = await fetch(`${API}/documents/${invoiceId}`, { credentials: 'include', headers: getAuthHeaders() });
+      const response = await fetch(`${API}/documents/${id}`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         setInvoice(await response.json());
       } else {
         toast.error('Invoice not found');
-        navigate('/agent/invoices');
+        navigate('/agent/documents');
       }
     } catch (error) {
       console.error('Failed to fetch invoice:', error);
@@ -76,7 +77,7 @@ export const AgentInvoiceDetail = () => {
     setMarkingPaid(true);
     try {
       // Use document action endpoint with confirm_payment action
-      const response = await fetch(`${API}/documents/${invoiceId}/action`, {
+      const response = await fetch(`${API}/documents/${id}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
@@ -99,7 +100,7 @@ export const AgentInvoiceDetail = () => {
 
   const handleDownloadPDF = async () => {
     try {
-      const response = await fetch(`${API}/documents/${invoiceId}/pdf`, { credentials: 'include', headers: getAuthHeaders() });
+      const response = await fetch(`${API}/documents/${id}/pdf`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -122,7 +123,7 @@ export const AgentInvoiceDetail = () => {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const response = await fetch(`${API}/documents/${invoiceId}`, {
+      const response = await fetch(`${API}/documents/${id}`, {
         method: 'DELETE',
         credentials: 'include',
         headers: getAuthHeaders()
@@ -130,7 +131,7 @@ export const AgentInvoiceDetail = () => {
       
       if (response.ok) {
         toast.success('Invoice deleted');
-        navigate('/agent/invoices');
+        navigate('/agent/documents');
       } else {
         const error = await response.json();
         toast.error(error.detail || 'Failed to delete invoice');
@@ -144,13 +145,13 @@ export const AgentInvoiceDetail = () => {
   };
 
   const handleEdit = () => {
-    navigate(`/agent/invoices/edit/${invoiceId}`);
+    navigate(`/agent/documents/edit/${id}`);
   };
 
   const handleResend = async () => {
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch(`${API}/documents/${invoiceId}/action`, {
+      const response = await fetch(`${API}/documents/${id}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
         credentials: 'include',
@@ -188,7 +189,7 @@ export const AgentInvoiceDetail = () => {
         <div className="flex items-start justify-between">
           <div>
             <Link 
-              to="/agent/invoices" 
+              to="/agent/documents" 
               className="inline-flex items-center text-sm text-muted-foreground hover:text-primary mb-4 transition-colors"
               data-testid="back-link"
             >
@@ -431,7 +432,7 @@ export const AgentInvoiceDetail = () => {
             {/* Change Requests */}
             <ChangeRequestPanel
               entityType={invoice.type?.toLowerCase() || 'invoice'}
-              entityId={invoiceId}
+              entityId={id}
               isAgent={true}
             />
           </div>

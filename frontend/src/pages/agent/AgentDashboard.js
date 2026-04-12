@@ -91,14 +91,14 @@ export const AgentDashboard = () => {
             <p className="text-muted-foreground mt-1 text-sm sm:text-base">{t('dashboard.welcome')}</p>
           </div>
           <div className="flex gap-2 sm:gap-3">
-            <Link to="/agent/quotes/new" className="flex-1 sm:flex-none">
+            <Link to="/agent/documents/new?type=quote" className="flex-1 sm:flex-none">
               <Button className="w-full sm:w-auto rounded-lg text-xs sm:text-sm" data-testid="create-quote-btn">
                 <Plus className="w-4 h-4 mr-1 sm:mr-2" />
                 <span className="hidden xs:inline">{t('dashboard.newQuote')}</span>
                 <span className="xs:hidden">Quote</span>
               </Button>
             </Link>
-            <Link to="/agent/invoices/new" className="flex-1 sm:flex-none">
+            <Link to="/agent/documents/new?type=invoice" className="flex-1 sm:flex-none">
               <Button variant="outline" className="w-full sm:w-auto rounded-lg text-xs sm:text-sm" data-testid="create-invoice-btn">
                 <Plus className="w-4 h-4 mr-1 sm:mr-2" />
                 <span className="hidden xs:inline">{t('dashboard.newInvoice')}</span>
@@ -126,7 +126,7 @@ export const AgentDashboard = () => {
             </Card>
           </Link>
 
-          <Link to="/agent/quotes" data-testid="stats-quotes">
+          <Link to="/agent/documents" data-testid="stats-quotes">
             <Card className="border-border rounded-lg hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer">
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
@@ -142,7 +142,7 @@ export const AgentDashboard = () => {
             </Card>
           </Link>
 
-          <Link to="/agent/invoices" data-testid="stats-invoices">
+          <Link to="/agent/documents" data-testid="stats-invoices">
             <Card className="border-border rounded-lg hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer">
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
@@ -192,9 +192,7 @@ export const AgentDashboard = () => {
               {stats?.change_requests?.length > 0 ? (
                 <div className="divide-y divide-border">
                   {stats.change_requests.map((doc) => {
-                    const detailPath = doc.type === 'invoice' 
-                      ? `/agent/invoices/${doc.document_id}` 
-                      : `/agent/quotes/${doc.document_id}`;
+                    const detailPath = `/agent/documents/${doc.document_id}`;
                     return (
                       <Link 
                         key={doc.document_id} 
@@ -234,7 +232,7 @@ export const AgentDashboard = () => {
           {/* Recent Activity - Clickable header */}
           <Card className="border-border rounded-lg">
             <CardHeader className="border-b border-border">
-              <Link to="/agent/quotes" className="flex items-center justify-between hover:opacity-80 transition-opacity">
+              <Link to="/agent/documents" className="flex items-center justify-between hover:opacity-80 transition-opacity">
                 <CardTitle className="text-lg font-outfit font-semibold">Recent Quotes</CardTitle>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-primary">View all</span>
@@ -248,7 +246,7 @@ export const AgentDashboard = () => {
                   {stats.recent_documents.filter(d => d.type === 'quote').slice(0, 5).map((quote) => (
                     <Link 
                       key={quote.document_id} 
-                      to={`/agent/quotes/${quote.document_id}`}
+                      to={`/agent/documents/${quote.document_id}`}
                       className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
                       data-testid={`recent-quote-${quote.document_id}`}
                     >
@@ -270,7 +268,7 @@ export const AgentDashboard = () => {
                 <div className="p-8 text-center">
                   <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
                   <p className="text-muted-foreground">No quotes yet</p>
-                  <Link to="/agent/quotes/new">
+                  <Link to="/agent/documents/new?type=quote">
                     <Button variant="outline" className="mt-4 rounded-lg">
                       Create your first quote
                     </Button>
@@ -294,7 +292,7 @@ export const AgentDashboard = () => {
             <ArrowRight className="w-5 h-5 text-muted-foreground" />
           </Link>
           
-          <Link to="/agent/quotes" className="card-swiss p-4 flex items-center gap-4 hover:shadow-lg transition-all" data-testid="quick-action-quotes">
+          <Link to="/agent/documents" className="card-swiss p-4 flex items-center gap-4 hover:shadow-lg transition-all" data-testid="quick-action-quotes">
             <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center">
               <FileText className="w-6 h-6 text-blue-600" />
             </div>
@@ -305,7 +303,7 @@ export const AgentDashboard = () => {
             <ArrowRight className="w-5 h-5 text-muted-foreground" />
           </Link>
           
-          <Link to="/agent/invoices" className="card-swiss p-4 flex items-center gap-4 hover:shadow-lg transition-all" data-testid="quick-action-invoices">
+          <Link to="/agent/documents" className="card-swiss p-4 flex items-center gap-4 hover:shadow-lg transition-all" data-testid="quick-action-invoices">
             <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center">
               <Receipt className="w-6 h-6 text-purple-600" />
             </div>

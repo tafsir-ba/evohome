@@ -95,7 +95,7 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
           label="Change Requests"
           icon={MessageSquareWarning}
           activeColor="amber"
-          onClick={() => navigate('/agent/invoices')}
+          onClick={() => navigate('/agent/documents')}
           testId="action-card-change-requests"
         />
         <ActionCard
@@ -103,7 +103,7 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
           label="Pending Invoices"
           icon={CreditCard}
           activeColor="red"
-          onClick={() => navigate('/agent/invoices')}
+          onClick={() => navigate('/agent/documents')}
           testId="action-card-pending-invoices"
         />
         <ActionCard
@@ -111,7 +111,7 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
           label="Pending Quotes"
           icon={FileText}
           activeColor="blue"
-          onClick={() => navigate('/agent/quotes')}
+          onClick={() => navigate('/agent/documents')}
           testId="action-card-pending-quotes"
         />
         <ActionCard

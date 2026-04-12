@@ -49,8 +49,7 @@ export const AgentLayout = ({ children }) => {
     { name: t('nav.team'), href: '/agent/team', icon: UserCircle },
     { name: t('nav.feed'), href: '/agent/feed', icon: MessageSquare },
     { name: 'Decisions', href: '/agent/decisions', icon: CheckSquare },
-    { name: t('nav.quotes'), href: '/agent/quotes', icon: FileText },
-    { name: t('nav.invoices'), href: '/agent/invoices', icon: Receipt },
+    { name: t('nav.quotes') + ' / ' + t('nav.invoices'), href: '/agent/documents', icon: FileText },
     { name: t('nav.settings'), href: '/agent/settings', icon: Settings },
   ];
 

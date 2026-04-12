@@ -133,7 +133,7 @@ export const ActionPreviewDrawer = ({
         setTimeout(() => {
           if (result.result?.redirect) navigate(result.result.redirect);
           else {
-            const path = docType === 'invoice' ? '/agent/invoices' : docType === 'quote' ? '/agent/quotes' : '/agent/feed';
+            const path = docType === 'invoice' ? '/agent/documents' : docType === 'quote' ? '/agent/documents' : '/agent/feed';
             navigate(path);
           }
         }, 500);
@@ -311,7 +311,7 @@ export const ActionPreviewDrawer = ({
           <Button
             variant="outline"
             onClick={() => {
-              const editPaths = { 'create_invoice': '/agent/invoices/new', 'create_quote': '/agent/quotes/new', 'create_message': '/agent/feed' };
+              const editPaths = { 'create_invoice': '/agent/documents/new?type=invoice', 'create_quote': '/agent/documents/new?type=quote', 'create_message': '/agent/feed' };
               const path = editPaths[previewData?.intent] || previewData?.suggested_action?.path;
               if (path) { navigate(path); onOpenChange(false); }
             }}

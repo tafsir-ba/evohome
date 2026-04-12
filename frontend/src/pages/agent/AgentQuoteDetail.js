@@ -39,7 +39,8 @@ const getAuthHeaders = () => {
 
 export const AgentQuoteDetail = () => {
   const { t } = useSettings();
-  const { quoteId } = useParams();
+  const { quoteId, documentId: docId } = useParams();
+  const id = quoteId || docId;
   const navigate = useNavigate();
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -49,17 +50,17 @@ export const AgentQuoteDetail = () => {
 
   useEffect(() => {
     fetchQuote();
-  }, [quoteId]);
+  }, [id]);
 
   const fetchQuote = async () => {
     try {
       // Use unified documents endpoint
-      const response = await fetch(`${API}/documents/${quoteId}`, { credentials: 'include', headers: getAuthHeaders() });
+      const response = await fetch(`${API}/documents/${id}`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         setQuote(await response.json());
       } else {
-        toast.error('Quote not found');
-        navigate('/agent/quotes');
+        toast.error('Document not found');
+        navigate('/agent/documents');
       }
     } catch (error) {
       console.error('Failed to fetch quote:', error);
@@ -72,7 +73,7 @@ export const AgentQuoteDetail = () => {
   const handleSend = async () => {
     setSendLoading(true);
     try {
-      const response = await fetch(`${API}/documents/${quoteId}/send`, {
+      const response = await fetch(`${API}/documents/${id}/send`, {
         method: 'POST',
         credentials: 'include',
         headers: getAuthHeaders()
@@ -102,7 +103,7 @@ export const AgentQuoteDetail = () => {
 
   const handleDownloadPDF = async () => {
     try {
-      const response = await fetch(`${API}/documents/${quoteId}/pdf`, { credentials: 'include', headers: getAuthHeaders() });
+      const response = await fetch(`${API}/documents/${id}/pdf`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -125,7 +126,7 @@ export const AgentQuoteDetail = () => {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const response = await fetch(`${API}/documents/${quoteId}`, {
+      const response = await fetch(`${API}/documents/${id}`, {
         method: 'DELETE',
         credentials: 'include',
         headers: getAuthHeaders()
@@ -133,7 +134,7 @@ export const AgentQuoteDetail = () => {
       
       if (response.ok) {
         toast.success('Quote deleted');
-        navigate('/agent/quotes');
+        navigate('/agent/documents');
       } else {
         const error = await response.json();
         toast.error(error.detail || 'Failed to delete quote');
@@ -147,7 +148,7 @@ export const AgentQuoteDetail = () => {
   };
 
   const handleEdit = () => {
-    navigate(`/agent/quotes/edit/${quoteId}`);
+    navigate(`/agent/documents/edit/${id}`);
   };
 
   if (loading) {
@@ -173,7 +174,7 @@ export const AgentQuoteDetail = () => {
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <Link 
-              to="/agent/quotes" 
+              to="/agent/documents" 
               className="inline-flex items-center text-sm text-muted-foreground hover:text-primary mb-4 transition-colors"
               data-testid="back-link"
             >
@@ -368,7 +369,7 @@ export const AgentQuoteDetail = () => {
             {/* Change Requests */}
             <ChangeRequestPanel
               entityType={quote.type?.toLowerCase() || 'quote'}
-              entityId={quoteId}
+              entityId={id}
               isAgent={true}
             />
           </div>
