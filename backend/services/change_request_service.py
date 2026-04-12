@@ -240,7 +240,7 @@ async def resolve_change_request(
     if not result:
         raise ValueError(f"Change request {change_request_id} not found")
 
-    from core.trace import trace_service, trace_db_mutation, trace_side_effect
+    from core.trace import trace_service, trace_db_mutation, trace_side_effect, trace_related_entity
     trace_service("services.change_request_service.resolve_change_request")
     trace_db_mutation("change_requests", "find_one_and_update", change_request_id)
 
@@ -257,6 +257,7 @@ async def resolve_change_request(
             {"$set": update_fields}
         )
         trace_db_mutation(collection, "update_one", result["entity_id"])
+        trace_related_entity(result["entity_type"], result["entity_id"])
 
     # Notify buyer that CR is resolved
     buyer_id = result.get("buyer_id") or result.get("created_by")

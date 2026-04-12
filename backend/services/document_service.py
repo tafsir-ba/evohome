@@ -106,6 +106,17 @@ async def create_document(
         "updated_at": now,
     }
     await db.documents.insert_one(doc)
+
+    # Trace: document creation
+    try:
+        from core.trace import trace_service, trace_db_mutation, set_trace_entity, set_trace_response_summary
+        trace_service("services.document_service.create_document")
+        trace_db_mutation("documents", "insert_one", doc_id)
+        set_trace_entity("document", doc_id)
+        set_trace_response_summary({"status": "Draft", "type": doc_type, "amount": float(amount)})
+    except Exception:
+        pass
+
     result = await db.documents.find_one({"document_id": doc_id}, {"_id": 0})
     return result
 
@@ -287,6 +298,15 @@ async def send_document(document_id: str, agent_id: str, agent_user: dict) -> Di
         "$set": {"status": "Sent", "sent_at": now, "change_request_comment": None, "updated_at": now}
     })
 
+    # Trace: status transition + DB mutation
+    try:
+        from core.trace import trace_service, trace_db_mutation, set_trace_response_summary
+        trace_service("services.document_service.send_document")
+        trace_db_mutation("documents", "update_one", document_id)
+        set_trace_response_summary({"status": "Sent", "previous_status": doc["status"]})
+    except Exception:
+        pass
+
     project = await db.projects.find_one({"project_id": doc.get('project_id')}, {"_id": 0})
     delivery = {"notification_created": False, "websocket_sent": False, "email_sent": False, "email_error": None}
 
@@ -400,10 +420,22 @@ async def document_action(
 
     now = datetime.now(timezone.utc).isoformat()
 
+    # Trace: document action
+    try:
+        from core.trace import trace_service, trace_db_mutation, set_trace_response_summary
+        trace_service("services.document_service.document_action")
+    except Exception:
+        pass
+
     if action == 'approve' and doc['type'] == 'quote' and user_role == 'buyer':
         if not validate_transition('quote', doc['status'], 'Approved'):
             raise ValueError("Cannot approve quote in current status")
         await db.documents.update_one({"document_id": document_id}, {"$set": {"status": "Approved", "updated_at": now}})
+        try:
+            trace_db_mutation("documents", "update_one", document_id)
+            set_trace_response_summary({"status": "Approved", "previous_status": doc["status"], "action": action})
+        except Exception:
+            pass
         await _notify_agent_action(doc, "Quote Approved", f"{user_name} approved quote {doc['document_number']}", "quote_approved", user_name)
         return {"message": "Quote approved", "status": "Approved"}
 
@@ -411,6 +443,11 @@ async def document_action(
         if not validate_transition('quote', doc['status'], 'Rejected'):
             raise ValueError("Cannot reject quote in current status")
         await db.documents.update_one({"document_id": document_id}, {"$set": {"status": "Rejected", "updated_at": now}})
+        try:
+            trace_db_mutation("documents", "update_one", document_id)
+            set_trace_response_summary({"status": "Rejected", "previous_status": doc["status"], "action": action})
+        except Exception:
+            pass
         return {"message": "Quote rejected", "status": "Rejected"}
 
     if action == 'request_change' and user_role == 'buyer':

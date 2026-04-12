@@ -43,10 +43,21 @@ async def send_email_async(to_email: str, subject: str, html_content: str, reque
     try:
         result = await asyncio.to_thread(resend.Emails.send, params)
         logger.info(f"Email sent to {to_email}: {subject}")
+        # Record side effect in trace
+        try:
+            from core.trace import trace_side_effect
+            trace_side_effect("email", target=to_email, detail=f"sent: {subject[:50]}")
+        except Exception:
+            pass
         return {"status": "success", "email_id": result.get("id") if isinstance(result, dict) else str(result)}
     except Exception as e:
         capture_email_error(e, recipient=to_email, template=subject[:50], request=request)
         logger.error(f"Failed to send email to {to_email}: {str(e)}")
+        try:
+            from core.trace import trace_side_effect
+            trace_side_effect("email", target=to_email, detail=f"failed: {subject[:50]}: {str(e)[:30]}")
+        except Exception:
+            pass
         return {"status": "error", "error": str(e)}
 
 

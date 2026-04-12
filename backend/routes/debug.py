@@ -141,9 +141,13 @@ async def inspect_entity(entity_type: str, entity_id: str, _=Depends(require_deb
         {"entity_type": entity_type, "entity_id": entity_id}, {"_id": 0}
     ).sort("created_at", -1).to_list(50)
 
-    # Also find traces that reference this entity in endpoint URL
+    # Also find traces that reference this entity via related_entities or endpoint URL
     url_traces = await db.trace_events.find(
-        {"endpoint": {"$regex": entity_id}}, {"_id": 0}
+        {"$or": [
+            {"endpoint": {"$regex": entity_id}},
+            {"related_entities": {"$elemMatch": {"entity_type": entity_type, "entity_id": entity_id}}},
+        ]},
+        {"_id": 0}
     ).sort("created_at", -1).to_list(20)
 
     # Merge and deduplicate

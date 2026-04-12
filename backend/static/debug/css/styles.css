@@ -1,0 +1,46 @@
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#c9d1d9;--text-dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149;--amber:#d29922;--font:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;line-height:1.5}
+.auth-gate{display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px}
+.auth-gate input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:6px;width:320px;font-family:var(--font);font-size:13px}
+.auth-gate button{background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-family:var(--font);font-size:13px}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:15px;font-weight:600;color:var(--accent)}
+.header .status{font-size:12px;color:var(--green)}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 24px}
+.tab{padding:10px 20px;cursor:pointer;color:var(--text-dim);border-bottom:2px solid transparent;font-size:13px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-color:var(--accent)}
+.content{padding:20px 24px;max-width:100%;overflow-x:auto}
+.filters{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.filters select,.filters input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--font);font-size:12px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:8px 12px;border-bottom:2px solid var(--border);color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:0.5px}
+td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:12px}
+tr:hover{background:rgba(88,166,255,0.04)}
+tr.error td{background:rgba(248,81,73,0.06)}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
+.badge-success{background:rgba(63,185,80,0.15);color:var(--green)}
+.badge-error{background:rgba(248,81,73,0.15);color:var(--red)}
+.badge-warn{background:rgba(210,153,34,0.15);color:var(--amber)}
+.badge-info{background:rgba(88,166,255,0.15);color:var(--accent)}
+.badge-untested{background:var(--surface);color:var(--text-dim);border:1px solid var(--border)}
+.badge-passed{background:rgba(63,185,80,0.15);color:var(--green)}
+.badge-failed{background:rgba(248,81,73,0.15);color:var(--red)}
+.expand{cursor:pointer;color:var(--accent)}
+.detail{background:var(--surface);padding:12px;border-radius:6px;margin:8px 0;white-space:pre-wrap;word-break:break-all;font-size:11px;max-height:400px;overflow-y:auto}
+.entity-state{background:var(--surface);padding:16px;border-radius:6px;border:1px solid var(--border);margin:12px 0}
+.entity-state h3{font-size:13px;color:var(--accent);margin-bottom:8px}
+.entity-state pre{white-space:pre-wrap;word-break:break-all;font-size:11px;color:var(--text)}
+.inspector-input{display:flex;gap:8px;margin-bottom:16px}
+.inspector-input select,.inspector-input input,.inspector-input button{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:var(--font);font-size:13px}
+.inspector-input button{background:var(--accent);color:#fff;cursor:pointer;border:none}
+.checklist-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.checklist-item .id{width:80px;color:var(--text-dim);font-size:12px}
+.checklist-item .cat{width:80px;font-size:11px;color:var(--text-dim)}
+.checklist-item .name{flex:1;font-size:13px}
+.checklist-item select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-family:var(--font);font-size:11px}
+.checklist-item .notes-input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-family:var(--font);font-size:11px;width:200px}
+.empty{text-align:center;padding:40px;color:var(--text-dim)}
+.auto-refresh{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-dim)}
+.auto-refresh input[type="checkbox"]{accent-color:var(--accent)}

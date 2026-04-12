@@ -43,6 +43,15 @@ async def create_notification(
         "is_read": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
+
+    # Record side effect in trace (non-blocking, non-failing)
+    try:
+        from core.trace import trace_side_effect, trace_db_mutation
+        trace_side_effect("notification", target=user_id, detail=f"{notification_type}: {title}")
+        trace_db_mutation("notifications", "insert_one", notification_id)
+    except Exception:
+        pass
+
     return notification_id
 
 
