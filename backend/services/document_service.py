@@ -19,7 +19,7 @@ from services.notification_service import emit_notification, emit_email, emit_re
 logger = logging.getLogger(__name__)
 
 VALID_DOC_TYPES = {"quote", "invoice"}
-FINALIZED_STATUSES = {"Approved", "Rejected", "Paid"}
+FINALIZED_STATUSES = {"Approved", "Paid"}
 
 
 # ── Core CRUD ──
@@ -193,6 +193,10 @@ async def update_document(document_id: str, agent_id: str, updates: Dict[str, An
         raise ValueError(f"Cannot edit document with status '{doc['status']}'")
 
     update_data = {}
+    # Revert to Draft if editing a rejected or change-requested doc
+    if doc['status'] in ('Rejected', 'Change Requested'):
+        update_data['status'] = 'Draft'
+
     for k in ('title', 'amount', 'supplier_name', 'notes', 'summary', 'hero_image_url'):
         if k in updates and updates[k] is not None:
             update_data[k] = updates[k]
@@ -557,7 +561,15 @@ async def get_document_timeline(user_id: str, role: str) -> Dict[str, Any]:
         project_id = clients[0]['project_id'] if clients else None
         project = await db.projects.find_one({"project_id": project_id}, {"_id": 0}) if project_id else None
         if project and clients:
-            project['unit_reference'] = clients[0].get('unit_reference', '')
+            # Enrich unit_reference from units collection if not on client
+            unit_ref = clients[0].get('unit_reference')
+            if not unit_ref and clients[0].get('unit_id'):
+                unit = await db.units.find_one(
+                    {"unit_id": clients[0]['unit_id']}, {"_id": 0, "unit_reference": 1}
+                )
+                if unit:
+                    unit_ref = unit.get('unit_reference')
+            project['unit_reference'] = unit_ref or ''
 
         events = [{
             "id": d['document_id'], "type": d['type'], "title": d['title'],
