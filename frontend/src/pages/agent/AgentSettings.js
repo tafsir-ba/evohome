@@ -537,7 +537,7 @@ export const AgentSettings = () => {
                     <div className="flex items-center gap-4">
                       <div className="w-20 h-20 rounded-lg border border-border overflow-hidden bg-muted flex items-center justify-center">
                         <img 
-                          src={`${BASE_URL}${settings.company_logo_url}`}
+                          src={settings.company_logo_url?.startsWith('http') ? settings.company_logo_url : `${BASE_URL}${settings.company_logo_url}`}
                           alt="Company logo"
                           className="max-w-full max-h-full object-contain"
                           onError={(e) => {

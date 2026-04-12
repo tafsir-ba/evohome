@@ -320,7 +320,7 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
       {heroImageUrl ? (
         <div className="relative group">
           <img
-            src={`${BASE_URL}${heroImageUrl}`}
+            src={heroImageUrl.startsWith('http') ? heroImageUrl : `${BASE_URL}${heroImageUrl}`}
             alt="Hero"
             className="w-full h-32 object-cover rounded-lg border border-border"
           />

@@ -710,11 +710,12 @@ export const SettingsProvider = ({ children }) => {
   const getLogo = useCallback(() => {
     const baseUrl = process.env.REACT_APP_BACKEND_URL;
     if (agentBranding?.company_logo_url) {
-      // Logo URLs are stored as /api/uploads/... to ensure proper routing
-      return `${baseUrl}${agentBranding.company_logo_url}`;
+      const url = agentBranding.company_logo_url;
+      return url.startsWith('http') ? url : `${baseUrl}${url}`;
     }
     if (settings.company_logo_url) {
-      return `${baseUrl}${settings.company_logo_url}`;
+      const url = settings.company_logo_url;
+      return url.startsWith('http') ? url : `${baseUrl}${url}`;
     }
     return null;
   }, [settings.company_logo_url, agentBranding]);
