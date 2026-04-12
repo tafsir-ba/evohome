@@ -371,6 +371,18 @@ async def delete_decision(decision_id: str, agent_id: str) -> bool:
     if decision["status"] != "draft":
         raise ValueError("Can only delete draft decisions")
 
+    from services import file_service
+
+    for att in decision.get("attachments") or []:
+        sf = att.get("stored_filename")
+        if not sf and att.get("url"):
+            sf = file_service.stored_filename_from_public_url(att["url"])
+        if sf:
+            try:
+                file_service.delete_file(sf)
+            except Exception:
+                pass
+
     await db.decisions.delete_one({"decision_id": decision_id})
     await db.decision_recipients.delete_many({"decision_id": decision_id})
     return True

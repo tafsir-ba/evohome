@@ -6,20 +6,15 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional, List
-import os
-import uuid
 from datetime import datetime, timezone
 
 from core.auth import get_current_user, get_current_agent, get_current_buyer
-from services import decision_service
+from services import decision_service, file_service
 from database import db
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 class CreateDecisionBody(BaseModel):
@@ -159,19 +154,20 @@ async def upload_attachment(
     if not decision or decision["agent_id"] != user["user_id"]:
         raise HTTPException(status_code=404, detail="Decision not found")
 
-    ext = os.path.splitext(file.filename)[1].lower()
-    filename = f"decision_{decision_id}_{uuid.uuid4().hex[:8]}{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    content = await file.read()
-    with open(filepath, "wb") as f:
-        f.write(content)
+    meta = await file_service.save_upload(
+        file,
+        "decisions",
+        file_service.MAX_SIZE_VAULT,
+        file_service.VAULT_MIME_TYPES,
+        file_service.VAULT_EXTENSIONS,
+    )
 
     attachment = {
         "type": "document",
-        "filename": file.filename,
-        "url": f"/api/uploads/{filename}",
-        "size": len(content),
+        "filename": meta["original_filename"],
+        "url": meta["url"],
+        "stored_filename": meta["stored_filename"],
+        "size": meta["file_size"],
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
     }
 
