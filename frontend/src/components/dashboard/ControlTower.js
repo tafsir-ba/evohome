@@ -17,7 +17,12 @@ import {
   CheckSquare,
 } from 'lucide-react';
 
-export const ControlTower = ({ projectCount = 0, onRefresh }) => {
+export const ControlTower = ({
+  projectCount = 0,
+  onRefresh,
+  title = 'Command Center',
+  subtitle = 'What needs your attention — then share updates with clients.',
+}) => {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -71,10 +76,10 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-outfit font-semibold text-foreground tracking-tight">
-            Control Tower
+            {title}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            What needs your attention today.
+            {subtitle}
           </p>
         </div>
         <Button
@@ -88,6 +93,7 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
         </Button>
       </div>
 
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Needs attention</p>
       {/* Action Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="action-cards">
         <ActionCard
@@ -124,6 +130,7 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
         />
       </div>
 
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-2">Overview</p>
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="kpi-strip">
         <KpiItem icon={Users} value={stats.total_clients || 0} label="Total Clients" />

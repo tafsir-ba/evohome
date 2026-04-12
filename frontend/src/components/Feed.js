@@ -630,7 +630,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
  * - isAgent: determines UI permissions (create post, view all recipients)
  * - Uses same /api/activities endpoint - backend handles role-based filtering
  */
-export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = null }) => {
+export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = null, compact = false }) => {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -897,12 +897,15 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
       <div data-testid="feed-empty">
         {/* Header for agent view */}
         {isAgent && !embedded && (
-          <div className="flex items-start justify-between mb-6">
+          <div className={cn('flex items-start justify-between', compact ? 'mb-4' : 'mb-6')}>
             <div>
-              <h1 className="text-3xl font-outfit font-semibold text-foreground tracking-tight">
-                Activity Feed
+              <h1 className={cn(
+                'font-outfit font-semibold text-foreground tracking-tight',
+                compact ? 'text-xl' : 'text-3xl'
+              )}>
+                {compact ? 'Client updates' : 'Activity Feed'}
               </h1>
-              <p className="text-muted-foreground mt-1">0 activities</p>
+              <p className="text-muted-foreground mt-1 text-sm">0 activities</p>
             </div>
             <Button 
               className="rounded-lg"
@@ -957,13 +960,16 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
     <div className="space-y-6" data-testid="feed-container">
       {/* Header - only for non-embedded agent view */}
       {isAgent && !embedded && (
-        <div className="flex items-start justify-between">
+        <div className={cn('flex items-start justify-between', compact && 'mb-1')}>
           <div>
-            <h1 className="text-3xl font-outfit font-semibold text-foreground tracking-tight">
-              Activity Feed
+            <h1 className={cn(
+              'font-outfit font-semibold text-foreground tracking-tight',
+              compact ? 'text-xl' : 'text-3xl'
+            )}>
+              {compact ? 'Client updates' : 'Activity Feed'}
             </h1>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <p className="text-muted-foreground">{total} activit{total === 1 ? 'y' : 'ies'}</p>
+              <p className={cn('text-muted-foreground', compact && 'text-sm')}>{total} activit{total === 1 ? 'y' : 'ies'}</p>
               {filterClient && (
                 <button 
                   onClick={clearFilters}
