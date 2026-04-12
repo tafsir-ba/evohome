@@ -187,6 +187,43 @@ async def get_activity_file(filename: str, user: dict = Depends(get_current_user
     return FileResponse(file_path, media_type=_media_type(file_path), filename=filename)
 
 
+@router.get("/activities/{activity_id}/attachment")
+async def get_activity_attachment(activity_id: str, user: dict = Depends(get_current_user)):
+    """
+    Stream the file for an activity using the same auth rules as viewing the activity.
+    Prefer this from the SPA so fetch() uses /api/activities/{id}/attachment with Bearer
+    (avoids cross-origin/CORS issues with direct /activities/files/... URLs).
+    """
+    activity = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
+    if not activity or not activity.get("file_url"):
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    if user["role"] == "buyer":
+        if not await activity_service.can_buyer_access_activity(user["user_id"], activity_id):
+            raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        if activity.get("author_id") != user["user_id"]:
+            p = await db.projects.find_one(
+                {"project_id": activity.get("project_id"), "agent_id": user["user_id"]}
+            )
+            if not p:
+                raise HTTPException(status_code=403, detail="Access denied")
+
+    fu = (activity.get("file_url") or "").strip()
+    filename = fu.split("/")[-1] if fu else ""
+    if not filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid file reference")
+
+    file_path = (ACTIVITY_UPLOAD_DIR / filename).resolve()
+    try:
+        file_path.relative_to(ACTIVITY_UPLOAD_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file reference")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path, media_type=_media_type(file_path), filename=filename)
+
+
 @router.get("/activities/{activity_id}")
 async def get_activity(activity_id: str, user: dict = Depends(get_current_user)):
     """Get single activity with replies. Role-based access."""

@@ -90,16 +90,17 @@ const getAuthHeaders = () => {
 };
 
 /**
- * Activity file URLs require JWT; <img src> does not send Authorization headers.
- * Load bytes with fetch + blob URL so images stay visible after remount/navigation.
+ * Load attachment bytes with the same /api/activities/{id}/attachment URL as other API calls
+ * (Bearer + optional cookies). Avoids raw /activities/files/... URLs that can break across
+ * origins or when <img> cannot send Authorization. Uses blob: URLs for display.
  */
-const useAuthenticatedActivityImage = (imageUrl) => {
+const useAuthenticatedActivityImage = (activityId, enabled) => {
   const [displaySrc, setDisplaySrc] = useState(null);
   const [status, setStatus] = useState('idle');
   const blobRef = useRef(null);
 
   useEffect(() => {
-    if (!imageUrl) {
+    if (!enabled || !activityId) {
       setDisplaySrc(null);
       setStatus('idle');
       return;
@@ -112,11 +113,15 @@ const useAuthenticatedActivityImage = (imageUrl) => {
       blobRef.current = null;
     }
 
+    const url = `${API}/activities/${activityId}/attachment`;
+    const ac = new AbortController();
+
     (async () => {
       try {
-        const res = await fetch(imageUrl, {
+        const res = await fetch(url, {
           credentials: 'include',
           headers: getAuthHeaders(),
+          signal: ac.signal,
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const blob = await res.blob();
@@ -125,19 +130,21 @@ const useAuthenticatedActivityImage = (imageUrl) => {
         blobRef.current = ou;
         setDisplaySrc(ou);
         setStatus('ready');
-      } catch {
+      } catch (e) {
+        if (cancelled || (e && e.name === 'AbortError')) return;
         if (!cancelled) setStatus('error');
       }
     })();
 
     return () => {
       cancelled = true;
+      ac.abort();
       if (blobRef.current) {
         URL.revokeObjectURL(blobRef.current);
         blobRef.current = null;
       }
     };
-  }, [imageUrl]);
+  }, [activityId, enabled]);
 
   return { displaySrc, status };
 };
@@ -162,19 +169,22 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
     activity.type === 'image' ||
     (activity.file_name && isImageFile(activity.file_name)) ||
     imageUrlLooksLikeImage(fileUrlFull);
-  const imageUrl = hasImageAttachment && fileUrlFull ? fileUrlFull : null;
-  const { displaySrc: authImageSrc, status: imageAuthStatus } = useAuthenticatedActivityImage(imageUrl);
+  const loadAttachmentBlob = Boolean(hasImageAttachment && activity.file_url);
+  const { displaySrc: authImageSrc, status: imageAuthStatus } = useAuthenticatedActivityImage(
+    activity.activity_id,
+    loadAttachmentBlob
+  );
 
   useEffect(() => {
     setInlineImageDecodeFailed(false);
-  }, [activity.activity_id, imageUrl]);
+  }, [activity.activity_id, authImageSrc]);
 
   const showImageSkeleton =
-    Boolean(hasImageAttachment && imageUrl && imageAuthStatus === 'loading');
+    Boolean(loadAttachmentBlob && imageAuthStatus === 'loading');
   const showImageInline =
     Boolean(
       hasImageAttachment &&
-        imageUrl &&
+        loadAttachmentBlob &&
         imageAuthStatus === 'ready' &&
         authImageSrc &&
         !inlineImageDecodeFailed
@@ -296,7 +306,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
             </div>
           </div>
 
-          {hasImageAttachment && imageUrl && (
+          {loadAttachmentBlob && (
             <>
               {showImageSkeleton && (
                 <div className="mt-2 border-y border-border bg-muted/30" aria-busy>
@@ -316,7 +326,12 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
                       src={authImageSrc}
                       alt=""
                       className="w-full max-h-[min(70vh,520px)] object-contain bg-muted/20"
-                      onError={() => setInlineImageDecodeFailed(true)}
+                      onLoad={() => setInlineImageDecodeFailed(false)}
+                      onError={(e) => {
+                        if (authImageSrc && e.currentTarget.src === authImageSrc) {
+                          setInlineImageDecodeFailed(true);
+                        }
+                      }}
                     />
                   </a>
                 </div>
@@ -498,7 +513,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
       
       <CardContent className="pt-0 px-3 sm:px-6">
         {/* Image first (social-style), then text — blob URL so JWT is applied */}
-        {hasImageAttachment && imageUrl && (
+        {loadAttachmentBlob && (
           <>
             {showImageSkeleton && (
               <div className="mt-3 rounded-lg overflow-hidden bg-muted/30" aria-busy>
@@ -518,7 +533,12 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
                     src={authImageSrc}
                     alt={activity.file_name || 'Image attachment'}
                     className="w-full max-h-96 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                    onError={() => setInlineImageDecodeFailed(true)}
+                    onLoad={() => setInlineImageDecodeFailed(false)}
+                    onError={(e) => {
+                      if (authImageSrc && e.currentTarget.src === authImageSrc) {
+                        setInlineImageDecodeFailed(true);
+                      }
+                    }}
                   />
                 </a>
               </div>
