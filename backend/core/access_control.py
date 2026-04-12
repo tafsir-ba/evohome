@@ -93,11 +93,11 @@ async def get_accessible_client_ids(user: Dict[str, Any]) -> List[str]:
 
 # ── Vault access ──
 
-async def can_access_vault_doc(user: Dict[str, Any], vault_id: str) -> bool:
+async def can_access_vault_doc(user: Dict[str, Any], vault_document_id: str) -> bool:
     db = get_db()
     if user['role'] == 'agent':
         return await db.vault_documents.find_one(
-            {"vault_id": vault_id, "agent_id": user['user_id']}
+            {"vault_document_id": vault_document_id, "agent_id": user['user_id']}
         ) is not None
     elif user['role'] == 'buyer':
         client = await db.clients.find_one(
@@ -106,10 +106,13 @@ async def can_access_vault_doc(user: Dict[str, Any], vault_id: str) -> bool:
         if not client:
             return False
         return await db.vault_documents.find_one({
-            "vault_id": vault_id,
+            "vault_document_id": vault_document_id,
             "agent_id": client.get('agent_id'),
             "access_level": "shared",
-            "shared_with_clients": client.get('client_id')
+            "$or": [
+                {"buyer_ids": user['user_id']},
+                {"client_ids": client.get('client_id')},
+            ]
         }) is not None
     return False
 

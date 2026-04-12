@@ -23,6 +23,14 @@ Single communication layer between agent and buyer:
 - **After every mutation**: returns fresh portal state — frontend auto-updates all views
 - **No bypass**: buyer frontend only calls portal endpoints + 3 binary file downloads
 
+## Vault Real-Time Sync (April 12, 2026)
+- `vault_service.create_vault_document()` now emits `vault_shared` via WebSocket to all `buyer_ids`
+- `vault_service.update_vault_document()` emits `vault_shared` when `client_ids` or `access_level` changes
+- `BuyerTimeline.js` handles both `document_sent` and `vault_shared` WebSocket events → triggers `fetchData()`
+- Switching to Vault tab also refetches portal data (catches uploads made while on another tab)
+- Buyer vault download/preview fallback URL corrected: `/vault/documents/{vault_document_id}/download`
+- `can_access_vault_doc` in access_control.py fixed: uses `vault_document_id`, `client_ids`, `buyer_ids`
+
 ## Units API Contract
 - `POST /api/projects/{project_id}/units` — Create unit
 - `GET /api/projects/{project_id}/units` — List units (enriched with `assigned_client_name`)
@@ -31,15 +39,13 @@ Single communication layer between agent and buyer:
 - `DELETE /api/units/{unit_id}` — Delete unit (NOT nested under /projects/)
 
 ## List Endpoints Query Param Audit (April 12, 2026)
-All GET list endpoints verified: every `?param=` the frontend sends is declared on the route handler.
-- `GET /api/clients?project_id=X` — NOW WORKS (was silently ignored). Calls `list_clients_by_project()` with `can_access_project` check.
-- `GET /api/activities?limit=&offset=&client_id=&project_id=` — All params declared, with ownership checks
+- `GET /api/clients?project_id=X` — Server-side filtering with `can_access_project` ownership check
+- `GET /api/activities?limit=&offset=&client_id=&project_id=` — All params declared
 - `GET /api/analytics?period=` — Declared
-- `GET /api/decisions?project_id=&status=&limit=&offset=` — All declared with `Query()`
+- `GET /api/decisions?project_id=&status=&limit=&offset=` — All declared
 - `GET /api/workflows/selectors?selector_type=&project_id=` — Declared
 - `GET /api/team/directory?search=&limit=` — Declared
 - `GET /api/vault/documents?project_id=` — Declared
-- `GET /api/documents` — No query params sent from list page (client-side filtering). Backend has `doc_type`/`status` available if needed.
 
 ## File Storage (DigitalOcean Spaces)
 - All uploads persist in `evohome-assets.fra1.digitaloceanspaces.com/uploads/`
@@ -63,8 +69,8 @@ All GET list endpoints verified: every `?param=` the frontend sends is declared 
 - [x] PdfUploadZone prop fixes
 - [x] Unit bugs: DELETE path + field name alignment
 - [x] Test file fix: `test_foundation_features.py` cleanup path
-- [x] **Clients list `?project_id=` filtering** — backend now declares, validates ownership, and delegates to `list_clients_by_project()`
-- [x] **Auth header fix** on `AgentClients.js` fetch call
+- [x] Clients list `?project_id=` filtering
+- [x] **Vault real-time sync**: WebSocket push on create/update, tab-switch refetch, fallback URL fix, access_control fix
 
 ## Remaining
 - P0: Deploy and verify unified architecture on production

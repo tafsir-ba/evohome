@@ -1090,16 +1090,6 @@ export const BuyerTimeline = () => {
   // QR Payment Modal
   const [qrModal, setQrModal] = useState({ open: false, invoice: null, qrData: null, loading: false });
 
-  // WebSocket for real-time updates
-  const handleWebSocketMessage = useCallback((message) => {
-    if (message.type === 'document_sent') {
-      // Refresh data when new document is received
-      fetchData();
-    }
-  }, []);
-  
-  const { isConnected } = useWebSocket(user?.user_id, handleWebSocketMessage);
-
   const fetchData = useCallback(async () => {
     try {
       const portalRes = await fetch(`${API}/buyer/portal`, { credentials: 'include', headers: getAuthHeaders() });
@@ -1149,6 +1139,16 @@ export const BuyerTimeline = () => {
     }
   }, []);
 
+  // WebSocket for real-time updates
+  const handleWebSocketMessage = useCallback((message) => {
+    if (message.type === 'document_sent' || message.type === 'vault_shared') {
+      // Refresh data when new document or vault file is received
+      fetchData();
+    }
+  }, [fetchData]);
+  
+  const { isConnected } = useWebSocket(user?.user_id, handleWebSocketMessage);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -1181,9 +1181,11 @@ export const BuyerTimeline = () => {
     if (activeView === 'updates') {
       portalAction({ action: 'mark_seen' }).catch(() => {});
     }
-  }, [activeView]);
-
-  // Vault documents already loaded from portal - no separate fetch needed
+    // Refetch portal data when switching to Vault tab (catches uploads made while on another tab)
+    if (activeView === 'vault') {
+      fetchData();
+    }
+  }, [activeView, fetchData]);
 
   const handleAction = async (eventId, action, comment = null) => {
     if (action === 'approve' || action === 'reject') {
@@ -1289,7 +1291,7 @@ export const BuyerTimeline = () => {
     // Fallback for local URLs: use in-app PDF viewer
     setPdfViewer({
       open: true,
-      url: `${API}/vault/${document.vault_id}/download`,
+      url: `${API}/vault/documents/${document.vault_document_id}/download`,
       filename: document.original_filename || document.name || 'document.pdf'
     });
   };
@@ -1309,7 +1311,7 @@ export const BuyerTimeline = () => {
     }
     // Fallback
     try {
-      const res = await fetch(`${API}/vault/${document.vault_id}/download`, { credentials: 'include', headers: getAuthHeaders() });
+      const res = await fetch(`${API}/vault/documents/${document.vault_document_id}/download`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);

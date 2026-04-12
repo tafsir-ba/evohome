@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from database import db
-from services.notification_service import emit_notification
+from services.notification_service import emit_notification, emit_realtime
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +85,13 @@ async def create_vault_document(
             metadata={"vault_document_id": doc_id},
         )
         trace_side_effect("notification", target=bid, detail=f"vault_document shared: {title}")
+
+    # Real-time push so buyer UI refreshes without page reload
+    if buyer_ids:
+        await emit_realtime(buyer_ids, "vault_shared", {
+            "vault_document_id": doc_id,
+            "title": title,
+        })
 
     return doc
 
@@ -169,7 +176,18 @@ async def update_vault_document(
     filtered["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     await db.vault_documents.update_one(query, {"$set": filtered})
-    return await db.vault_documents.find_one(query, {"_id": 0})
+    updated = await db.vault_documents.find_one(query, {"_id": 0})
+
+    # Push realtime to affected buyers when sharing changes
+    if updated and ("client_ids" in filtered or "access_level" in filtered):
+        affected_buyer_ids = updated.get("buyer_ids", [])
+        if affected_buyer_ids and updated.get("access_level") == "shared":
+            await emit_realtime(affected_buyer_ids, "vault_shared", {
+                "vault_document_id": vault_document_id,
+                "title": updated.get("title", ""),
+            })
+
+    return updated
 
 
 async def delete_vault_document(vault_document_id: str, agent_id: str) -> Optional[str]:
