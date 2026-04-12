@@ -4,21 +4,61 @@ Canonical File Service — Unified Upload / Media System.
 Single source of truth for all file upload, validation, storage, and deletion.
 No other module should handle file I/O directly.
 
-Storage: All files → /app/backend/uploads/ with prefixed stored_filenames.
+Storage: DigitalOcean Spaces (S3-compatible) for persistent storage.
+Falls back to local disk if Spaces is not configured.
 Parent entities persist: url, stored_filename, original_filename, file_size, content_type.
 Never persist absolute disk paths.
 """
+import os
 import uuid
 import logging
 from pathlib import Path
-from typing import Dict, Any, Set
+from typing import Dict, Any, Set, Optional
 
+import boto3
+from botocore.exceptions import ClientError
 from fastapi import UploadFile, HTTPException
 
 logger = logging.getLogger(__name__)
 
+# ── Storage Configuration ──
+
+SPACES_KEY = os.environ.get("SPACES_KEY", "")
+SPACES_SECRET = os.environ.get("SPACES_SECRET", "")
+SPACES_BUCKET = os.environ.get("SPACES_BUCKET", "")
+SPACES_REGION = os.environ.get("SPACES_REGION", "fra1")
+SPACES_ENDPOINT = f"https://{SPACES_REGION}.digitaloceanspaces.com"
+SPACES_CDN_URL = os.environ.get("SPACES_CDN_URL", f"https://{SPACES_BUCKET}.{SPACES_REGION}.digitaloceanspaces.com")
+SPACES_PREFIX = "uploads/"
+
+USE_SPACES = bool(SPACES_KEY and SPACES_SECRET and SPACES_BUCKET)
+
+# Local fallback
 UPLOAD_DIR = Path("/app/backend/uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+# S3 client (initialized lazily)
+_s3_client = None
+
+
+def _get_s3():
+    global _s3_client
+    if _s3_client is None and USE_SPACES:
+        session = boto3.session.Session()
+        _s3_client = session.client(
+            "s3",
+            region_name=SPACES_REGION,
+            endpoint_url=SPACES_ENDPOINT,
+            aws_access_key_id=SPACES_KEY,
+            aws_secret_access_key=SPACES_SECRET,
+        )
+    return _s3_client
+
+
+if USE_SPACES:
+    logger.info(f"File storage: DigitalOcean Spaces ({SPACES_BUCKET}.{SPACES_REGION})")
+else:
+    logger.warning("File storage: LOCAL DISK (files will NOT persist across deploys)")
 
 
 # ── Frozen Validation Rules ──
@@ -92,9 +132,7 @@ async def save_upload(
 ) -> Dict[str, Any]:
     """
     Save an uploaded file. Returns canonical metadata dict.
-
-    Caller stores the returned fields on the parent entity.
-    Never returns or stores absolute disk paths.
+    Uses Spaces if configured, local disk otherwise.
     """
     content = await file.read()
 
@@ -112,7 +150,11 @@ async def save_upload(
     id_part = f"_{identifier}" if identifier else ""
     stored_filename = f"{prefix}{id_part}_{hash_part}{ext}"
 
-    (UPLOAD_DIR / stored_filename).write_bytes(content)
+    if USE_SPACES:
+        url = _upload_to_spaces(stored_filename, content, file.content_type or "application/octet-stream")
+    else:
+        (UPLOAD_DIR / stored_filename).write_bytes(content)
+        url = f"/api/uploads/{stored_filename}"
 
     # Record trace metadata
     from core.trace import set_trace_request_summary
@@ -122,10 +164,11 @@ async def save_upload(
         "content_type": file.content_type,
         "prefix": prefix,
         "stored_filename": stored_filename,
+        "storage": "spaces" if USE_SPACES else "local",
     })
 
     return {
-        "url": f"/api/uploads/{stored_filename}",
+        "url": url,
         "stored_filename": stored_filename,
         "original_filename": file.filename or stored_filename,
         "file_size": len(content),
@@ -133,15 +176,71 @@ async def save_upload(
     }
 
 
+def _upload_to_spaces(stored_filename: str, content: bytes, content_type: str) -> str:
+    """Upload file to DigitalOcean Spaces. Returns public URL."""
+    s3 = _get_s3()
+    key = f"{SPACES_PREFIX}{stored_filename}"
+    try:
+        s3.put_object(
+            Bucket=SPACES_BUCKET,
+            Key=key,
+            Body=content,
+            ContentType=content_type,
+            ACL="public-read",
+        )
+        return f"{SPACES_CDN_URL}/{key}"
+    except ClientError as e:
+        logger.error(f"Spaces upload failed for {stored_filename}: {e}")
+        raise HTTPException(status_code=500, detail={
+            "error": "storage_error",
+            "message": "File upload to storage failed. Please try again.",
+        })
+
+
+def get_file_url(stored_filename: str) -> Optional[str]:
+    """Get the public URL for a stored file."""
+    if not stored_filename:
+        return None
+    if USE_SPACES:
+        return f"{SPACES_CDN_URL}/{SPACES_PREFIX}{stored_filename}"
+    return f"/api/uploads/{stored_filename}"
+
+
+def get_local_path(stored_filename: str) -> Path:
+    """
+    Get a local file path for processing (e.g., AI extraction).
+    If using Spaces, downloads to local temp first.
+    If using local storage, returns the path directly.
+    """
+    local_path = UPLOAD_DIR / stored_filename
+    if local_path.exists():
+        return local_path
+    if USE_SPACES:
+        s3 = _get_s3()
+        key = f"{SPACES_PREFIX}{stored_filename}"
+        try:
+            response = s3.get_object(Bucket=SPACES_BUCKET, Key=key)
+            content = response["Body"].read()
+            local_path.write_bytes(content)
+            return local_path
+        except ClientError as e:
+            logger.error(f"Failed to download {stored_filename} from Spaces: {e}")
+    return local_path
+
+
 def resolve_path(stored_filename: str) -> Path:
-    """Resolve stored_filename to absolute disk path. Internal use only."""
+    """Resolve stored_filename to absolute disk path. Local storage only."""
     return UPLOAD_DIR / stored_filename
 
 
 def delete_file(stored_filename: str) -> bool:
-    """Delete a file by stored_filename. Returns True if removed."""
+    """Delete a file by stored_filename. Works with both Spaces and local."""
     if not stored_filename:
         return False
+
+    if USE_SPACES:
+        return _delete_from_spaces(stored_filename)
+
     path = resolve_path(stored_filename)
     if path.exists():
         try:
@@ -150,6 +249,18 @@ def delete_file(stored_filename: str) -> bool:
         except OSError as e:
             logger.warning(f"Failed to delete {stored_filename}: {e}")
     return False
+
+
+def _delete_from_spaces(stored_filename: str) -> bool:
+    """Delete file from DigitalOcean Spaces."""
+    s3 = _get_s3()
+    key = f"{SPACES_PREFIX}{stored_filename}"
+    try:
+        s3.delete_object(Bucket=SPACES_BUCKET, Key=key)
+        return True
+    except ClientError as e:
+        logger.warning(f"Spaces delete failed for {stored_filename}: {e}")
+        return False
 
 
 # ── Preset entry points (frozen validation rules) ──

@@ -141,6 +141,11 @@ async def download_vault_document(vault_document_id: str, user: dict = Depends(g
     if not stored:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "File not found"})
 
+    if file_service.USE_SPACES:
+        from fastapi.responses import RedirectResponse
+        url = file_service.get_file_url(stored)
+        return RedirectResponse(url=url)
+
     path = file_service.resolve_path(stored)
     if not path.exists():
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "File not found on disk"})

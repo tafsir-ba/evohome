@@ -48,7 +48,7 @@ async def upload_document(
 
     try:
         extraction = await extract_document_from_pdf(
-            str(file_service.resolve_path(result["stored_filename"])),
+            str(file_service.get_local_path(result["stored_filename"])),
             result["original_filename"],
         )
     except Exception as e:
@@ -128,7 +128,7 @@ async def reupload_document_pdf(
 
     try:
         extraction = await extract_document_from_pdf(
-            str(file_service.resolve_path(result["stored_filename"])),
+            str(file_service.get_local_path(result["stored_filename"])),
             result["original_filename"],
         )
     except Exception as e:
@@ -211,6 +211,11 @@ async def get_document_source_pdf(document_id: str, user: dict = Depends(get_cur
     if not stored:
         raise HTTPException(status_code=404, detail="Source PDF not found")
 
+    if file_service.USE_SPACES:
+        from fastapi.responses import RedirectResponse
+        url = file_service.get_file_url(stored)
+        return RedirectResponse(url=url)
+
     path = file_service.resolve_path(stored)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Source PDF not found on disk")
@@ -267,6 +272,11 @@ async def get_hero_image(document_id: str, user: dict = Depends(get_current_user
             return FileResponse(legacy_path, media_type=media)
     if not stored:
         raise HTTPException(status_code=404, detail="Hero image not found")
+
+    if file_service.USE_SPACES:
+        from fastapi.responses import RedirectResponse
+        url = file_service.get_file_url(stored)
+        return RedirectResponse(url=url)
 
     path = file_service.resolve_path(stored)
     if not path.exists():
