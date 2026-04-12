@@ -152,6 +152,13 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     if not user:
         raise HTTPException(status_code=401, detail="User not found. Please login again.")
     
+    # Set trace context user info (non-blocking)
+    try:
+        from core.trace import set_trace_user
+        set_trace_user(user.get("user_id", ""), user.get("role", ""))
+    except Exception:
+        pass
+    
     return user
 
 

@@ -33,6 +33,8 @@ async def upload_vault_document(
     user: dict = Depends(get_current_agent),
 ):
     """Upload a document to the vault."""
+    from core.trace import set_trace_action, set_trace_entity
+    set_trace_action("vault_upload")
     if project_id:
         project = await db.projects.find_one(
             {"project_id": project_id, "agent_id": user["user_id"]}

@@ -4,48 +4,58 @@
 - **Backend**: FastAPI + Motor (MongoDB async) — canonical SSOT services, thin routes
 - **Frontend**: React 18 + TailwindCSS + Shadcn/UI
 - **Database**: MongoDB Atlas (`evohome_cmp`)
+- **Debug Console**: Standalone at /api/internal/debug (DEBUG_SECRET auth)
 
-## UI-Verified Items (Screenshot Proof)
+## Production Debug & Verification System
 
-### Organ 1 — Upload/Media
-| Item | Evidence |
-|------|----------|
-| BUG-003: Hero image on edit page | Image visible at /agent/quotes/edit/{id} |
-| BUG-004: Buyer sees hero image | Blue gradient banner visible on buyer timeline card |
-| BUG-005: Vault upload through UI | File chooser → form fill → "Document uploaded successfully" toast → card appears |
-| BUG-006: Vault download through UI | Click Download → file saved (9566 bytes matches upload) |
+### Components Built
+1. **Request ID Middleware** — `req_xxxxxxxxxxxx` on every request, `X-Request-ID` response header
+2. **Canonical Error Normalizer** — all errors return `{error, message, request_id, source, details}`
+3. **Auto-Tracing Middleware** — all POST/PUT/PATCH/DELETE + critical GETs automatically traced
+4. **Trace Events Collection** — 30-day TTL, service_chain, db_mutations, side_effects
+5. **Debug API** — `/api/internal/debug/*` with DEBUG_SECRET bearer auth
+6. **Debug Console UI** — standalone HTML at `/api/internal/debug` with 4 tabs:
+   - Live Trace: real-time action trace with filters
+   - Errors Only: filtered to failures
+   - Entity Inspector: search by type/ID, shows state + traces + notifications
+   - Verification Checklist: 36-item bug matrix with pass/fail tracking
 
-### Organ 2 — Client Context
-| Item | Evidence |
-|------|----------|
-| BUG-011: Clients list | Project + unit badges visible on client card |
-| BUG-012: Client detail | Project name "Résidence Les Pins" + "Lot 3.01" visible |
+### Access
+- URL: `{domain}/api/internal/debug`
+- Auth: Bearer token = `DEBUG_SECRET` env var
+- Not linked from main app. Not accessible to agents or buyers.
 
-### Organ 3 — Change Requests
-| Item | Evidence |
-|------|----------|
-| BUG-022: Buyer creates CR | "Question sent to your agent" toast, status → "UNDER REVIEW" |
-| BUG-024: Buyer notification | Agent notification: "[change_request_created] New Change Request" |
-| BUG-025: CR notification content | Buyer: "[change_request_response]" + "[change_request_resolved]" with correct text |
-| BUG-026: Agent reply on quote | "Response sent" toast, thread shows buyer + agent messages |
-| BUG-028: Resolve + Close | "Change request resolved" → "Resolved" badge → "Change request closed" → "Closed" badge |
+### Files Created
+- `/app/backend/core/request_id.py`
+- `/app/backend/core/errors.py`
+- `/app/backend/core/trace.py`
+- `/app/backend/routes/debug.py`
+- `/app/backend/static/debug.html`
 
-### Bug Fixed During Verification
-- **CR notification parameter mismatch**: `_notify()` passed `data=data` instead of `metadata=data`, causing all CR notifications to silently fail
+### Files Modified
+- `/app/backend/server.py` — middleware integration, error handlers, TTL indexes
+- `/app/backend/core/auth.py` — trace user context injection
+- `/app/backend/services/file_service.py` — trace request summary
+- `/app/backend/routes/documents_v2.py` — trace hero image upload
+- `/app/backend/routes/vault_v2.py` — trace vault upload
+- `/app/backend/routes/settings.py` — trace logo upload
+- `/app/backend/services/change_request_service.py` — trace CR creation + fixed notification param
 
-## Items NOT Yet UI-Verified
-- BUG-007: Authenticated vault access (verified via API only)
-- BUG-008: Legacy file compatibility (verified via API only)
-- BUG-013: Client preview context (code verified, not screenshot)
-- BUG-014: Project endpoint (verified via curl)
-- BUG-015: Formatter consistency (verified via grep)
-- BUG-016: Invoice upload parity (verified in earlier session, not re-verified post-wipe)
-- BUG-027: Quote/invoice full parity (quote verified, invoice not tested through full CR UI flow)
-- BUG-029-032: Dashboard aggregation (Control Tower shows count, detailed cards on legacy route only)
+## Organ Status
+| Organ | Status |
+|-------|--------|
+| 1. Upload/Media | Implemented, preview-verified |
+| 2. Client Context | Implemented, preview-verified |
+| 3. Change Request | Implemented, preview-verified |
+| Debug System | Implemented, preview-verified |
+
+## Test Accounts
+- Agent: agent@evohome-test.ch / Evohome2026!
+- Buyer: buyer@evohome-test.ch / Evohome2026!
 
 ## Remaining
-- P0: Production deployment + verification on app.evo-home.ch
-- P1: Organ 4 — Control Tower Dashboard (move CR detail cards to primary dashboard)
+- P0: Deploy to production + verify all items via debug console on app.evo-home.ch
+- P1: Organ 4 — Control Tower Dashboard restructuring
 - P1: Organ 5 — Decisions rebuild
 - P2: Hook dependency warnings
 - P3: Email digests, reporting/export

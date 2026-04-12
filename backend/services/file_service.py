@@ -114,6 +114,16 @@ async def save_upload(
 
     (UPLOAD_DIR / stored_filename).write_bytes(content)
 
+    # Record trace metadata
+    from core.trace import set_trace_request_summary
+    set_trace_request_summary({
+        "original_filename": file.filename,
+        "file_size": len(content),
+        "content_type": file.content_type,
+        "prefix": prefix,
+        "stored_filename": stored_filename,
+    })
+
     return {
         "url": f"/api/uploads/{stored_filename}",
         "stored_filename": stored_filename,

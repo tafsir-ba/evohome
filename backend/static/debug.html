@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evohome Debug Console</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#c9d1d9;--text-dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149;--amber:#d29922;--font:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;line-height:1.5}
+.auth-gate{display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px}
+.auth-gate input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:6px;width:320px;font-family:var(--font);font-size:13px}
+.auth-gate button{background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-family:var(--font);font-size:13px}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:15px;font-weight:600;color:var(--accent)}
+.header .status{font-size:12px;color:var(--green)}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 24px}
+.tab{padding:10px 20px;cursor:pointer;color:var(--text-dim);border-bottom:2px solid transparent;font-size:13px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-color:var(--accent)}
+.content{padding:20px 24px;max-width:100%;overflow-x:auto}
+.filters{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.filters select,.filters input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--font);font-size:12px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:8px 12px;border-bottom:2px solid var(--border);color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:0.5px}
+td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:12px}
+tr:hover{background:rgba(88,166,255,0.04)}
+tr.error td{background:rgba(248,81,73,0.06)}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
+.badge-success{background:rgba(63,185,80,0.15);color:var(--green)}
+.badge-error{background:rgba(248,81,73,0.15);color:var(--red)}
+.badge-warn{background:rgba(210,153,34,0.15);color:var(--amber)}
+.badge-info{background:rgba(88,166,255,0.15);color:var(--accent)}
+.badge-untested{background:var(--surface);color:var(--text-dim);border:1px solid var(--border)}
+.badge-passed{background:rgba(63,185,80,0.15);color:var(--green)}
+.badge-failed{background:rgba(248,81,73,0.15);color:var(--red)}
+.expand{cursor:pointer;color:var(--accent)}
+.detail{background:var(--surface);padding:12px;border-radius:6px;margin:8px 0;white-space:pre-wrap;word-break:break-all;font-size:11px;max-height:400px;overflow-y:auto}
+.entity-state{background:var(--surface);padding:16px;border-radius:6px;border:1px solid var(--border);margin:12px 0}
+.entity-state h3{font-size:13px;color:var(--accent);margin-bottom:8px}
+.entity-state pre{white-space:pre-wrap;word-break:break-all;font-size:11px;color:var(--text)}
+.inspector-input{display:flex;gap:8px;margin-bottom:16px}
+.inspector-input select,.inspector-input input,.inspector-input button{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:var(--font);font-size:13px}
+.inspector-input button{background:var(--accent);color:#fff;cursor:pointer;border:none}
+.checklist-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.checklist-item .id{width:80px;color:var(--text-dim);font-size:12px}
+.checklist-item .cat{width:80px;font-size:11px;color:var(--text-dim)}
+.checklist-item .name{flex:1;font-size:13px}
+.checklist-item select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-family:var(--font);font-size:11px}
+.checklist-item .notes-input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-family:var(--font);font-size:11px;width:200px}
+.empty{text-align:center;padding:40px;color:var(--text-dim)}
+.mono{font-family:var(--font)}
+.auto-refresh{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-dim)}
+.auto-refresh input[type="checkbox"]{accent-color:var(--accent)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const API_BASE = window.location.origin + '/api/internal/debug';
+let SECRET = sessionStorage.getItem('debug_secret') || '';
+let currentTab = 'traces';
+let autoRefresh = false;
+let refreshTimer = null;
+
+function getHeaders() {
+  return {'Authorization': 'Bearer ' + SECRET, 'Content-Type': 'application/json'};
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API_BASE + path, {headers: getHeaders(), ...opts});
+  if (res.status === 401) { sessionStorage.removeItem('debug_secret'); SECRET = ''; render(); return null; }
+  return res.json();
+}
+
+function render() {
+  if (!SECRET) { renderAuth(); return; }
+  document.getElementById('app').innerHTML = `
+    <div class="header">
+      <h1>Evohome Debug Console</h1>
+      <div class="status" id="health-status">connecting...</div>
+    </div>
+    <div class="tabs">
+      <div class="tab ${currentTab==='traces'?'active':''}" onclick="switchTab('traces')">Live Trace</div>
+      <div class="tab ${currentTab==='errors'?'active':''}" onclick="switchTab('errors')">Errors Only</div>
+      <div class="tab ${currentTab==='entity'?'active':''}" onclick="switchTab('entity')">Entity Inspector</div>
+      <div class="tab ${currentTab==='verify'?'active':''}" onclick="switchTab('verify')">Verification</div>
+    </div>
+    <div class="content" id="tab-content"></div>`;
+  loadHealth();
+  loadTab();
+}
+
+function renderAuth() {
+  document.getElementById('app').innerHTML = `
+    <div class="auth-gate">
+      <h1 style="color:var(--accent);font-size:18px">Evohome Debug Console</h1>
+      <p style="color:var(--text-dim)">Enter DEBUG_SECRET to continue</p>
+      <input type="password" id="secret-input" placeholder="DEBUG_SECRET" onkeydown="if(event.key==='Enter')doAuth()"/>
+      <button onclick="doAuth()">Authenticate</button>
+    </div>`;
+}
+
+function doAuth() {
+  SECRET = document.getElementById('secret-input').value;
+  sessionStorage.setItem('debug_secret', SECRET);
+  render();
+}
+
+function switchTab(tab) { currentTab = tab; loadTab(); document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.textContent.trim().toLowerCase().includes(tab.substring(0,4)))); }
+
+async function loadHealth() {
+  const d = await apiFetch('/health');
+  if (d) document.getElementById('health-status').innerHTML = `<span style="color:var(--green)">${d.trace_count} traces</span>`;
+}
+
+async function loadTab() {
+  const el = document.getElementById('tab-content');
+  if (!el) return;
+  if (currentTab === 'traces') await loadTraces(el);
+  else if (currentTab === 'errors') await loadTraces(el, 'errors');
+  else if (currentTab === 'entity') loadEntityForm(el);
+  else if (currentTab === 'verify') await loadVerifications(el);
+}
+
+async function loadTraces(el, mode) {
+  const params = mode === 'errors' ? '?limit=100&outcome=validation_error&outcome=auth_error&outcome=service_error&outcome=storage_error&outcome=not_found' : '?limit=100';
+  const filterParams = mode !== 'errors' ? `
+    <div class="filters">
+      <select id="f-outcome" onchange="filterTraces()"><option value="">All outcomes</option><option value="success">success</option><option value="validation_error">validation</option><option value="auth_error">auth</option><option value="service_error">service</option><option value="storage_error">storage</option></select>
+      <select id="f-method" onchange="filterTraces()"><option value="">All methods</option><option value="POST">POST</option><option value="PUT">PUT</option><option value="DELETE">DELETE</option><option value="GET">GET</option></select>
+      <input id="f-action" placeholder="Filter by action..." oninput="filterTraces()"/>
+      <div class="auto-refresh"><input type="checkbox" id="auto-ref" onchange="toggleAutoRefresh(this.checked)"/> <label for="auto-ref">Auto-refresh (10s)</label></div>
+    </div>` : '';
+  
+  // For errors mode, get all error outcomes
+  let url = '/traces?limit=100';
+  if (mode === 'errors') url = '/traces?limit=100';
+  
+  const data = await apiFetch(url);
+  if (!data) return;
+  
+  let traces = data.traces || [];
+  if (mode === 'errors') traces = traces.filter(t => t.outcome !== 'success');
+  
+  window._traces = traces;
+  
+  el.innerHTML = filterParams + `<div id="traces-table"></div>`;
+  renderTracesTable(traces);
+}
+
+function filterTraces() {
+  let traces = window._traces || [];
+  const outcome = document.getElementById('f-outcome')?.value;
+  const method = document.getElementById('f-method')?.value;
+  const action = document.getElementById('f-action')?.value?.toLowerCase();
+  if (outcome) traces = traces.filter(t => t.outcome === outcome);
+  if (method) traces = traces.filter(t => t.method === method);
+  if (action) traces = traces.filter(t => (t.action||'').toLowerCase().includes(action) || (t.endpoint||'').toLowerCase().includes(action));
+  renderTracesTable(traces);
+}
+
+function renderTracesTable(traces) {
+  const el = document.getElementById('traces-table');
+  if (!traces.length) { el.innerHTML = '<div class="empty">No traces found</div>'; return; }
+  el.innerHTML = `<table><thead><tr><th>Time</th><th>Method</th><th>Endpoint</th><th>Action</th><th>User</th><th>Outcome</th><th>Duration</th><th>Request ID</th><th></th></tr></thead><tbody>${
+    traces.map((t,i) => {
+      const cls = t.outcome !== 'success' ? ' class="error"' : '';
+      const badge = t.outcome === 'success' ? 'badge-success' : t.outcome.includes('auth') ? 'badge-warn' : 'badge-error';
+      const time = t.created_at ? new Date(t.created_at).toLocaleTimeString() : '?';
+      return `<tr${cls}><td>${time}</td><td>${t.method}</td><td style="max-width:250px;overflow:hidden;text-overflow:ellipsis">${t.endpoint}</td><td>${t.action||'-'}</td><td>${t.user_id ? t.user_id.substring(0,15)+'...' : '-'}</td><td><span class="badge ${badge}">${t.outcome}</span></td><td>${t.duration_ms}ms</td><td style="font-size:10px;color:var(--text-dim)">${t.request_id}</td><td><span class="expand" onclick="toggleDetail(${i})">+</span></td></tr><tr id="detail-${i}" style="display:none"><td colspan="9"><div class="detail">${JSON.stringify({request_summary:t.request_summary,response_summary:t.response_summary,service_chain:t.service_chain,db_mutations:t.db_mutations,side_effects:t.side_effects,error_code:t.error_code,error_message:t.error_message,entity_type:t.entity_type,entity_id:t.entity_id},null,2)}</div></td></tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+
+function toggleDetail(i) { const el = document.getElementById('detail-'+i); el.style.display = el.style.display === 'none' ? '' : 'none'; }
+
+function toggleAutoRefresh(on) {
+  autoRefresh = on;
+  if (refreshTimer) clearInterval(refreshTimer);
+  if (on) refreshTimer = setInterval(() => loadTab(), 10000);
+}
+
+function loadEntityForm(el) {
+  el.innerHTML = `
+    <div class="inspector-input">
+      <select id="ent-type"><option value="document">document</option><option value="quote">quote</option><option value="invoice">invoice</option><option value="vault_document">vault_document</option><option value="client">client</option><option value="change_request">change_request</option><option value="decision">decision</option><option value="user">user</option></select>
+      <input id="ent-id" placeholder="Entity ID (e.g. doc_xxx)" style="flex:1"/>
+      <button onclick="inspectEntity()">Inspect</button>
+    </div>
+    <div id="entity-result"></div>`;
+}
+
+async function inspectEntity() {
+  const type = document.getElementById('ent-type').value;
+  const id = document.getElementById('ent-id').value.trim();
+  if (!id) return;
+  const data = await apiFetch('/entity/'+type+'/'+id);
+  if (!data) return;
+  const el = document.getElementById('entity-result');
+  el.innerHTML = `
+    <div class="entity-state"><h3>Current State (${data.exists ? 'exists' : 'NOT FOUND'})</h3><pre>${data.current_state ? JSON.stringify(data.current_state, null, 2) : 'Entity not found in database'}</pre></div>
+    ${data.state_transitions?.length ? `<div class="entity-state"><h3>State Transitions</h3><pre>${JSON.stringify(data.state_transitions, null, 2)}</pre></div>` : ''}
+    ${data.change_requests?.length ? `<div class="entity-state"><h3>Change Requests (${data.change_requests.length})</h3><pre>${JSON.stringify(data.change_requests, null, 2)}</pre></div>` : ''}
+    ${data.notifications?.length ? `<div class="entity-state"><h3>Notifications (${data.notifications.length})</h3><pre>${JSON.stringify(data.notifications, null, 2)}</pre></div>` : ''}
+    <div class="entity-state"><h3>Related Traces (${data.traces?.length || 0})</h3>${
+      data.traces?.length ? `<table><thead><tr><th>Time</th><th>Action</th><th>Outcome</th><th>User</th><th>Request ID</th></tr></thead><tbody>${
+        data.traces.map(t => `<tr><td>${new Date(t.created_at).toLocaleString()}</td><td>${t.action||t.method+' '+t.endpoint}</td><td><span class="badge badge-${t.outcome==='success'?'success':'error'}">${t.outcome}</span></td><td>${t.user_id||'-'}</td><td style="font-size:10px">${t.request_id}</td></tr>`).join('')
+      }</tbody></table>` : '<div class="empty">No traces for this entity</div>'
+    }</div>`;
+}
+
+async function loadVerifications(el) {
+  const data = await apiFetch('/verifications');
+  if (!data) return;
+  const items = data.items || [];
+  const stats = {passed: items.filter(i=>i.status==='passed').length, failed: items.filter(i=>i.status==='failed').length, untested: items.filter(i=>i.status==='untested').length};
+  el.innerHTML = `
+    <div style="margin-bottom:16px;display:flex;gap:16px">
+      <span class="badge badge-passed">${stats.passed} passed</span>
+      <span class="badge badge-failed">${stats.failed} failed</span>
+      <span class="badge badge-untested">${stats.untested} untested</span>
+      <span style="color:var(--text-dim);font-size:12px">${items.length} total items</span>
+    </div>
+    <div id="checklist">${items.map(item => `
+      <div class="checklist-item">
+        <span class="id">${item.item_id}</span>
+        <span class="cat">${item.category}</span>
+        <span class="name">${item.name}<br><span style="color:var(--text-dim);font-size:11px">${item.description}</span></span>
+        <select onchange="updateVerification('${item.item_id}', this.value)" style="width:90px">
+          <option value="untested" ${item.status==='untested'?'selected':''}>untested</option>
+          <option value="passed" ${item.status==='passed'?'selected':''}>passed</option>
+          <option value="failed" ${item.status==='failed'?'selected':''}>failed</option>
+        </select>
+        <input class="notes-input" placeholder="Notes..." value="${item.notes||''}" onchange="updateVerificationNotes('${item.item_id}', this.value)"/>
+        ${item.last_verified ? `<span style="font-size:10px;color:var(--text-dim)">${new Date(item.last_verified).toLocaleDateString()}</span>` : ''}
+      </div>`).join('')}</div>`;
+}
+
+async function updateVerification(id, status) {
+  await apiFetch('/verifications/'+id, {method:'PUT', body: JSON.stringify({status, verified_by:'debug_console'})});
+}
+async function updateVerificationNotes(id, notes) {
+  await apiFetch('/verifications/'+id, {method:'PUT', body: JSON.stringify({notes})});
+}
+
+render();
+</script>
+</body>
+</html>
