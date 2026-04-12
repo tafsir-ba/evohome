@@ -469,9 +469,11 @@ class TestClientUnitValidation:
         print(f"Client linked to unit: {client.get('unit_reference')}")
         
         # Cleanup - delete client first (unit might be in use)
-        self.session.delete(f"{BASE_URL}/api/clients/{client['client_id']}")
-        # Then delete unit
-        self.session.delete(f"{BASE_URL}/api/projects/{self.demo_project['project_id']}/units/{new_unit['unit_id']}")
+        del_client = self.session.delete(f"{BASE_URL}/api/clients/{client['client_id']}")
+        assert del_client.status_code == 200, f"Client cleanup failed: {del_client.status_code}"
+        # Then delete unit via canonical path
+        del_unit = self.session.delete(f"{BASE_URL}/api/units/{new_unit['unit_id']}")
+        assert del_unit.status_code == 200, f"Unit cleanup failed: {del_unit.status_code}"
         print("PASS: Unit->Client flow works")
 
 
