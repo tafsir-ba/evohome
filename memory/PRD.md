@@ -14,45 +14,43 @@
 3. **Auto-Tracing Middleware** — all POST/PUT/PATCH/DELETE + critical GETs automatically traced
 4. **Trace Events Collection** — 30-day TTL, service_chain, db_mutations, side_effects
 5. **Debug API** — `/api/internal/debug/*` with DEBUG_SECRET bearer auth
-6. **Debug Console UI** — modular HTML/JS/CSS at `/api/internal/debug` with 4 tabs:
-   - Live Trace: real-time action trace with filters (outcome, method, action search, auto-refresh)
-   - Errors Only: filtered to failures
-   - Entity Inspector: search by type/ID, shows state + traces + notifications + state transitions
-   - Verification Checklist: 36-item bug matrix with pass/fail tracking + notes
+6. **Debug Console UI** — modular HTML/JS/CSS at `/api/internal/debug` with 4 tabs
 
-### Auto-Extraction Features (Verified E2E)
-- **Entity extraction**: URL patterns auto-populate `entity_type` and `entity_id` for documents, vault_documents, change_requests, decisions, clients, projects
-- **Action derivation**: Method + URL automatically maps to human-readable action names (e.g., `document_create`, `cr_respond`, `vault_upload`)
-- **Response summary**: State transitions tracked (e.g., `{status: "Change Requested", previous_status: "Sent"}`)
-- **DB mutations**: Tracked per-request (collection, operation, entity_id)
-- **Side effects**: Notifications and emails logged in trace context
-- **Related entities**: CR creation links back to parent document via `related_entities`
+### Auto-Extraction (Verified E2E)
+- Entity extraction from URL patterns (document, vault_document, change_request, decision, client, project)
+- Action derivation from method+path (document_create, cr_respond, vault_upload, etc.)
+- Response summary with state transitions (e.g., {status: "Change Requested", previous_status: "Sent"})
+- DB mutations per-request (collection, operation, entity_id)
+- Side effects (notifications, emails) logged in trace context
+- Related entities (CR → parent document linkage)
 
-### Verified Trace Flows (E2E April 12)
-- `document_create` → entity=document, db_mutations=[documents.insert_one], response_summary={status, type, amount}
-- `document_send` → entity=document, db_mutations=[documents.update_one, notifications.insert_one], side_effects=[notification, email], response_summary={status: Sent, previous_status: Draft}
-- `document_action(request_change)` → entity=change_request, related_entities=[document], db_mutations=[documents.update_one, notifications.insert_one x2, change_requests.insert_one], side_effects=[notification x2, email], response_summary={status: Change Requested, previous_status: Sent}
+### Trace Coverage (All Mutating Paths)
+- document_create, document_send, document_reupload, document_revert_draft
+- document_action: approve, reject, request_change, confirm_payment, convert_to_invoice
+- change_request: create, respond, resolve, close
+- vault: upload, download
+- settings: logo upload/delete, hero image upload/delete
+- auth: login, register, logout
 
-### Modular Debug Console Architecture
+### Modular Debug Console
 ```
 /app/backend/static/debug/
-├── index.html              # Shell — loads all modules
-├── css/styles.css          # All styles (dark theme, tables, badges)
-├── js/api.js               # API layer (fetch, auth, secret management)
-├── js/traces.js            # Live Trace + Errors tab (filters, table rendering)
-├── js/entity-inspector.js  # Entity Inspector tab (state, transitions, traces)
-└── js/verifications.js     # Verification Checklist tab (36-item matrix)
+├── index.html              # Shell
+├── css/styles.css          # Dark theme styles
+├── js/api.js               # Fetch + auth layer
+├── js/traces.js            # Live Trace + Errors tabs
+├── js/entity-inspector.js  # Entity Inspector tab
+└── js/verifications.js     # 36-item Verification Checklist
 ```
 
 ### Security
-- Path traversal protection on static asset routes (realpath validation)
-- XSS escaping on verification notes input
+- Path traversal protection (realpath containment check)
+- XSS escaping on user-input fields
 - DEBUG_SECRET bearer auth on all API endpoints
 
-### Access
-- URL: `{domain}/api/internal/debug`
-- Auth: Bearer token = `DEBUG_SECRET` env var
-- Not linked from main app. Not accessible to agents or buyers.
+### Testing (Iteration 30)
+- Backend: 35/35 tests passed (auth, health, traces, entity inspector, verifications, static assets, path traversal)
+- Frontend: All 4 tabs verified via Playwright (auth gate, trace expand, entity inspect, verification update, filters, auto-refresh)
 
 ## Organ Status
 | Organ | Status |
@@ -60,21 +58,25 @@
 | 1. Upload/Media | Implemented, preview-verified |
 | 2. Client Context | Implemented, preview-verified |
 | 3. Change Request | Implemented, preview-verified |
-| Debug System | Implemented, modularized, E2E verified |
+| Debug System | Implemented, modularized, tested (35/35 + UI) |
 
 ## Test Accounts
 - Agent: agent@evohome-test.ch / Evohome2026!
 - Buyer: buyer@evohome-test.ch / Evohome2026!
 
 ## Remaining
-- P1: Fix Control Tower Dashboard CR Cards (Issue 3)
-- P1: Client Context formatting UI verification (Issue 4)
+- P1: Fix Control Tower Dashboard CR Cards (move to /agent/home)
+- P1: Client Context formatting UI verification (AgentClientDetail.js, ClientPreview.js)
 - P1: Organ 4 — Control Tower Dashboard restructuring
 - P1: Organ 5 — Decisions rebuild
 - P2: Execute 36-item Verification Checklist via Debug Console
 - P2: Hook dependency warnings (74+ instances)
 - P3: Email digests, reporting/export
 - P3: Dead code cleanup (parseApiError in api.js)
+
+### Known Limitations
+- Debug console JS modules rely on global scope and implicit load order (not ES modules)
+- Orphaned test documents in DB: doc_1057cdb1c89d, doc_4ea1e9124d2b (with CRs, cannot delete)
 
 ---
 Last Updated: April 12, 2026
