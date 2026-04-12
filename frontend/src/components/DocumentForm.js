@@ -260,7 +260,7 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
       return;
     }
 
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
     if (!allowedTypes.includes(file.type)) {
       toast.error('Please upload a JPEG, PNG, or WebP image');
       return;
@@ -332,7 +332,7 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
             <label className="cursor-pointer">
               <input
                 type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
                 onChange={handleUpload}
                 className="hidden"
                 disabled={uploading}

@@ -63,8 +63,8 @@ else:
 
 # ── Frozen Validation Rules ──
 
-IMAGE_MIME_TYPES: Set[str] = {"image/jpeg", "image/png", "image/webp"}
-IMAGE_EXTENSIONS: Set[str] = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_MIME_TYPES: Set[str] = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+IMAGE_EXTENSIONS: Set[str] = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 
 VAULT_MIME_TYPES: Set[str] = {
     "image/jpeg", "image/png", "image/webp",
