@@ -271,6 +271,7 @@ from routes.workflows import router as workflows_router
 from routes.team_v2 import router as team_router
 from routes.change_requests import router as change_requests_router
 from routes.decisions import router as decisions_router
+from routes.buyer_portal import router as buyer_portal_router
 
 for r in [
     auth_router, projects_router, clients_router, documents_router,
@@ -280,6 +281,7 @@ for r in [
     demo_router, billing_router, invitations_router, settings_router,
     admin_router, commands_router, doc_extraction_router, workflows_router,
     units_router, team_router, change_requests_router, decisions_router,
+    buyer_portal_router,
 ]:
     api_router.include_router(r)
 

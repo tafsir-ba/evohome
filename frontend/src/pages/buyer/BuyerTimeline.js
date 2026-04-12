@@ -1099,60 +1099,47 @@ export const BuyerTimeline = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      const timelineRes = await fetch(`${API}/timeline`, { credentials: 'include', headers: getAuthHeaders() });
+      const portalRes = await fetch(`${API}/buyer/portal`, { credentials: 'include', headers: getAuthHeaders() });
       
-      if (timelineRes.ok) {
-        const data = await timelineRes.json();
-        setEvents(data.documents || []);
-        setProjectInfo(data.project_info);
+      if (portalRes.ok) {
+        const portal = await portalRes.json();
+
+        // Documents
+        setEvents(portal.documents || []);
         
-        if (data.project_info?.project_id) {
-          // Fetch construction timeline (new workflow system)
-          const ctRes = await fetch(`${API}/project-timeline`, { credentials: 'include', headers: getAuthHeaders() });
-          if (ctRes.ok) {
-            const ctData = await ctRes.json();
-            setConstructionTimeline(ctData);
-            // Use canonical field names directly
-            if (ctData.steps && ctData.steps.length > 0) {
-              const stepsFromTimeline = ctData.steps.map(step => ({
-                step_id: step.step_id,
-                title: step.title,
-                status: step.status === 'approved' ? 'completed' : step.status,
-                description: step.description,
-                planned_date: step.planned_date,
-                completed_at: step.completed_at,
-                documents: step.documents
-              }));
-              setStages(stepsFromTimeline);
-            }
-          }
-          
-          // Fetch team members
-          const teamRes = await fetch(`${API}/projects/${data.project_info.project_id}/team`, { credentials: 'include', headers: getAuthHeaders() });
-          if (teamRes.ok) {
-            const teamData = await teamRes.json();
-            setTeamMembers(teamData);
+        // Project info
+        setProjectInfo(portal.project);
+        
+        // Construction timeline + stages
+        if (portal.construction_timeline) {
+          setConstructionTimeline(portal.construction_timeline);
+          if (portal.construction_timeline.steps?.length > 0) {
+            setStages(portal.construction_timeline.steps.map(step => ({
+              step_id: step.step_id,
+              title: step.title,
+              status: step.status === 'approved' ? 'completed' : step.status,
+              description: step.description,
+              planned_date: step.planned_date,
+              completed_at: step.completed_at,
+              documents: step.documents
+            })));
           }
         }
+        
+        // Team
+        setTeamMembers(portal.team || []);
+        
+        // Unread count
+        setUnreadCount(portal.unread_count || 0);
+        
+        // Decisions
+        setBuyerDecisions(portal.decisions || []);
+        
+        // Vault
+        setVaultDocuments(portal.vault_files || []);
       }
-      
-      // Fetch unread count
-      const unreadRes = await fetch(`${API}/activities/unread-count`, { credentials: 'include', headers: getAuthHeaders() });
-      if (unreadRes.ok) {
-        const unreadData = await unreadRes.json();
-        setUnreadCount(unreadData.unread_count);
-      }
-      
-      // Fetch buyer decisions
-      try {
-        const decRes = await fetch(`${API}/buyer/decisions`, { credentials: 'include', headers: getAuthHeaders() });
-        if (decRes.ok) {
-          const decData = await decRes.json();
-          setBuyerDecisions(decData.decisions || []);
-        }
-      } catch { /* Decisions not available yet */ }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      console.error('Failed to fetch portal data:', error);
       toast.error('Failed to load timeline');
     } finally {
       setLoading(false);
@@ -1181,26 +1168,7 @@ export const BuyerTimeline = () => {
     }
   }, [activeView]);
 
-  // Fetch vault documents when vault tab is selected
-  useEffect(() => {
-    if (activeView === 'vault' && vaultDocuments.length === 0) {
-      const fetchVaultDocuments = async () => {
-        setVaultLoading(true);
-        try {
-          const res = await fetch(`${API}/vault/buyer`, { credentials: 'include', headers: getAuthHeaders() });
-          if (res.ok) {
-            const data = await res.json();
-            setVaultDocuments(data);
-          }
-        } catch (error) {
-          console.error('Failed to fetch vault documents:', error);
-        } finally {
-          setVaultLoading(false);
-        }
-      };
-      fetchVaultDocuments();
-    }
-  }, [activeView, vaultDocuments.length]);
+  // Vault documents already loaded from portal - no separate fetch needed
 
   const handleAction = async (eventId, action, comment = null) => {
     if (action === 'approve' || action === 'reject') {
@@ -1327,15 +1295,29 @@ export const BuyerTimeline = () => {
   };
 
   const handleVaultPreview = (document) => {
-    // Use the download endpoint for preview - it handles auth and file serving properly
+    // Use direct Spaces URL if available (avoids CORS issues)
+    const fileUrl = document.url || `${API}/vault/${document.vault_id}/download`;
     setPdfViewer({
       open: true,
-      url: `${API}/vault/${document.vault_id}/download`,
+      url: fileUrl,
       filename: document.original_filename || document.name || 'document.pdf'
     });
   };
 
   const handleVaultDownload = async (document) => {
+    // Use direct Spaces URL if available
+    const fileUrl = document.url;
+    if (fileUrl && fileUrl.startsWith('http')) {
+      const a = window.document.createElement('a');
+      a.href = fileUrl;
+      a.download = document.original_filename || document.name || 'document';
+      a.target = '_blank';
+      window.document.body.appendChild(a);
+      a.click();
+      window.document.body.removeChild(a);
+      return;
+    }
+    // Fallback
     try {
       const res = await fetch(`${API}/vault/${document.vault_id}/download`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
