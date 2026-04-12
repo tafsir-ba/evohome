@@ -221,9 +221,10 @@ async def get_document_source_pdf(document_id: str, user: dict = Depends(get_cur
 @router.post("/documents/{document_id}/hero-image")
 async def upload_hero_image(document_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_agent)):
     """Upload a hero/banner image for a document."""
-    from core.trace import set_trace_action, set_trace_entity, trace_db_mutation
+    from core.trace import set_trace_action, set_trace_entity, trace_db_mutation, trace_service, set_trace_response_summary
     set_trace_action("hero_image_upload")
     set_trace_entity("document", document_id)
+    trace_service("routes.documents_v2.upload_hero_image")
     query = {"document_id": document_id, "agent_id": user["user_id"]}
     doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
@@ -235,6 +236,7 @@ async def upload_hero_image(document_id: str, file: UploadFile = File(...), user
         file_service.delete_file(old_stored)
 
     result = await file_service.save_hero_image(file, document_id)
+    trace_service("services.file_service.save_hero_image")
 
     from datetime import timezone
     await db.documents.update_one(query, {"$set": {
@@ -242,6 +244,8 @@ async def upload_hero_image(document_id: str, file: UploadFile = File(...), user
         "hero_image_stored_filename": result["stored_filename"],
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }})
+    trace_db_mutation("documents", "update_one", document_id)
+    set_trace_response_summary({"hero_image_url": result["url"], "file_size": result["file_size"]})
 
     return {"url": result["url"], "filename": result["original_filename"], "size": result["file_size"]}
 
