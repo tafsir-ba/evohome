@@ -116,8 +116,11 @@ export const AgentDocumentUpload = () => {
   };
 
   const handleFileSelect = async (selectedFile) => {
-    const fileToUpload = selectedFile || file;
-    if (!fileToUpload) return;
+    const fileToUpload = (selectedFile instanceof File) ? selectedFile : file;
+    if (!fileToUpload) {
+      toast.error('No file selected');
+      return;
+    }
     if (fileToUpload.type !== 'application/pdf') {
       toast.error('Please upload a PDF file');
       return;
@@ -134,7 +137,7 @@ export const AgentDocumentUpload = () => {
     formData.append('doc_type', docType);
 
     try {
-      const res = await fetch(`${API}/documents/upload-pdf`, {
+      const res = await fetch(`${API}/documents/upload`, {
         method: 'POST', credentials: 'include', headers: getAuthHeaders(),
         body: formData
       });

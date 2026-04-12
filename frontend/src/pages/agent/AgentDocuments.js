@@ -119,9 +119,9 @@ export const AgentDocuments = () => {
     return matchesCategory && matchesSearch && matchesStatus;
   });
 
-  const pageTitle = categoryFilter === 'quote' ? t('documents.quotes') 
-    : categoryFilter === 'invoice' ? t('documents.invoices') 
-    : 'Quotes / Invoices';
+  const pageTitle = categoryFilter === 'quote' ? t('nav.quotes') 
+    : categoryFilter === 'invoice' ? t('nav.invoices') 
+    : t('nav.quotes') + ' / ' + t('nav.invoices');
 
   if (loading) {
     return (
@@ -151,13 +151,13 @@ export const AgentDocuments = () => {
             <Link to="/agent/documents/new?type=quote">
               <Button className="rounded-lg" data-testid="create-quote-btn">
                 <Plus className="w-4 h-4 mr-2" />
-                {t('documents.newQuote')}
+                New Quote
               </Button>
             </Link>
             <Link to="/agent/documents/new?type=invoice">
               <Button variant="outline" className="rounded-lg" data-testid="create-invoice-btn">
                 <Plus className="w-4 h-4 mr-2" />
-                {t('documents.newInvoice')}
+                New Invoice
               </Button>
             </Link>
           </div>
