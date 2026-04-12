@@ -34,13 +34,29 @@ Single communication layer between agent and buyer:
 - Buyer: batafsir3@gmail.com (Google OAuth)
 - Debug: app.evo-home.ch/api/internal/debug (DEBUG_SECRET auth)
 
+## Completed (as of April 12, 2026)
+- [x] Production database wiped (preserving tafsir@evo-home.ch only)
+- [x] Unified Document Architecture (AgentDocuments.js, AgentDocumentUpload.js, AgentDocumentDetail.js)
+- [x] Unified Sync Layer (buyer_portal_service.py)
+- [x] DigitalOcean Spaces file storage migration
+- [x] HEIC / macOS octet-stream upload validation
+- [x] Vault preview CORS fix (window.open)
+- [x] Vault buyer parity (client_ids fallback)
+- [x] Editing "Rejected" documents (reverts to Draft)
+- [x] Buyer Auth Token Bug fix (localStorage)
+- [x] PdfUploadZone prop fixes
+- [x] Debug Console modularized
+
 ## Remaining
-- P0: Deploy and verify on production
+- P0: Deploy and verify unified architecture on production
+- P1: Control Tower Dashboard restructuring
+- P1: Decisions Module completion
 - P1: Image previews in feed (not just file links)
-- P1: Decisions reflected in feed
 - P2: Agent-side sync pipeline (agent mutations auto-propagate to buyer)
-- P2: Hook dependency warnings
+- P2: Hook dependency warnings (74+ instances)
 - P3: Email digests, reporting/export
+- P3: Dead code cleanup in api.js
+- P3: Strip legacy /agent/quotes and /agent/invoices route aliases
 
 ---
 Last Updated: April 12, 2026
