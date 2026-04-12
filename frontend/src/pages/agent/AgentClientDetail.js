@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
 import { useSettings } from '../../context/SettingsContext';
+import { formatContextSubtitle } from '../../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -225,14 +226,7 @@ export const AgentClientDetail = () => {
                 {project?.name && (
                   <span className="flex items-center gap-1">
                     <Building2 className="w-4 h-4" />
-                    {project.name}
-                    {client?.unit_reference && client.unit_reference !== 'General' && (
-                      <>
-                        <span className="mx-1">•</span>
-                        <Home className="w-4 h-4" />
-                        {client.unit_reference}
-                      </>
-                    )}
+                    {formatContextSubtitle({ project_name: project.name, unit_reference: client?.unit_reference !== 'General' ? client?.unit_reference : undefined })}
                   </span>
                 )}
               </p>
@@ -361,7 +355,7 @@ export const AgentClientDetail = () => {
                           {formData.unit_id ? (
                             <span className="flex items-center gap-2">
                               <Home className="w-4 h-4" />
-                              {currentUnit?.unit_reference || currentUnit?.name || 'Unit'}
+                              {currentUnit?.unit_reference || currentUnit?.name}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">No unit assigned</span>

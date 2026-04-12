@@ -18,7 +18,7 @@ import {
   Trash2, Download, Eye, Pencil, Loader2, Search, Filter,
   Lock, Unlock, Building2, X
 } from 'lucide-react';
-import { cn, formatClientContextCompact, formatContextSubtitle } from '../../lib/utils';
+import { cn, formatContextSubtitle } from '../../lib/utils';
 
 const BASE_URL = process.env.REACT_APP_BACKEND_URL;
 const API = BASE_URL + '/api';

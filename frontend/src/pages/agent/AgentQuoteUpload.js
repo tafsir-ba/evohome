@@ -8,7 +8,7 @@ import { Textarea } from '../../components/ui/textarea';
 import { Label } from '../../components/ui/label';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import { cn, formatClientContextCompact, formatContextSubtitle } from '../../lib/utils';
+import { cn, formatContextSubtitle } from '../../lib/utils';
 import { SupplierAutocomplete } from '../../components/SupplierAutocomplete';
 import {
   PdfUploadZone,
