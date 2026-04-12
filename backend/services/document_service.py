@@ -480,6 +480,8 @@ async def document_action(
         if not validate_transition('invoice', doc['status'], 'Paid'):
             raise ValueError("Cannot confirm payment in current status")
         await db.documents.update_one({"document_id": document_id}, {"$set": {"status": "Paid", "paid_date": now, "updated_at": now}})
+        trace_db_mutation("documents", "update_one", document_id)
+        set_trace_response_summary({"status": "Paid", "previous_status": doc["status"], "action": action})
         await _notify_agent_action(doc, "Payment Confirmed", f"Payment confirmed for invoice {doc['document_number']}", "payment_confirmed", user_name)
         return {"message": "Payment confirmed", "status": "Paid"}
 
@@ -664,6 +666,11 @@ async def _convert_quote_to_invoice(quote, agent_id, now):
         "updated_at": now,
     }
     await db.documents.insert_one(invoice_doc)
+
+    from core.trace import trace_db_mutation, set_trace_response_summary, trace_related_entity
+    trace_db_mutation("documents", "insert_one", invoice_id)
+    trace_related_entity("document", quote["document_id"])
+    set_trace_response_summary({"status": "Draft", "type": "invoice", "converted_from": quote["document_id"], "amount": float(quote["amount"])})
 
     if quote.get('buyer_id'):
         await emit_notification(

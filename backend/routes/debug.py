@@ -22,8 +22,6 @@ DEBUG_SECRET = os.environ.get("DEBUG_SECRET", "")
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 DEBUG_STATIC_DIR = os.path.join(STATIC_DIR, "debug")
 
-MIME_MAP = {".css": "text/css", ".js": "application/javascript"}
-
 
 async def require_debug_auth(request: Request):
     """Verify DEBUG_SECRET bearer token. Not a JWT. Simple comparison."""
