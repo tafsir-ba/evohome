@@ -6,59 +6,44 @@
 - **Database**: MongoDB Atlas (`evohome_cmp`)
 - **Integrations**: OpenAI GPT-4o, Stripe (webhooks verified), Resend, Google OAuth
 
-## Canonical Service Layer
-
-### file_service.py (Organ 1)
-- Single upload pipeline. Frozen validation. stored_filename (no absolute paths in DB).
-- Legacy backward compat for old pdf_path and hero_image_path fields
-
-### Client Context Formatters (Organ 2)
-- `formatClientContext`: "Name — Project — Unit" (full label for cards, detail)
-- `formatClientContextCompact`: "Name (Project / Unit)" (selectors)
-- `formatContextSubtitle`: "Project / Unit" (below-selector context)
-- `formatDocContext`: "Number · Client · Project · Unit" (list rows)
-- All defined in `lib/utils.js`. Used across all 14 mandatory files. Zero inline formatting.
-
-### change_request_service.py (Organ 3)
-- One collection, embedded messages, buyer_id, state guards
-- Resolve → Sent (NEVER Draft). Quote/invoice identical.
-- Notifications: create → agent, respond → buyer, resolve → buyer
-
 ## Organ Status (Contractual)
-| Organ | Backend | Frontend | Preview-Verified | Production-Verified |
-|-------|---------|----------|-----------------|-------------------|
-| 1. Upload/Media | Canonical | Rebuilt | Yes | No |
-| 2. Client Context | Enriched | Canonical formatters used everywhere | Yes | No |
-| 3. Change Request | Canonical | Verified via UI screenshots | Partially | No |
+| Organ | Status | Preview-Verified |
+|-------|--------|-----------------|
+| 1. Upload/Media | Implemented | Partial (backend curl + vault page screenshot) |
+| 2. Client/Project/Unit | Implemented | Yes (all pages screenshotted) |
+| 3. Change Request Thread | Implemented | Yes (full e2e via UI) |
 
-## What Has Been UI-Verified (Preview Only)
-- Vault page loads correctly with upload, search, filter
-- Quotes list shows formatDocContext format
-- Clients list shows project/unit badges
-- Quote detail shows ChangeRequestPanel with Reply/Resolve
-- Buyer portal shows change request thread with buyer + agent messages
-- Buyer portal shows invoice + quote with correct type badges and status
-- Dashboard home shows aggregate CR count
-- Agent reply textarea opens and is functional
+**None are production-verified. Closure requires deployment to app.evo-home.ch.**
 
-## What Has NOT Been UI-Verified
-- Actual Reply submission through UI (textarea opened, not submitted)
-- Resolve through UI
-- Close through UI
-- Invoice-specific CR panel through UI
-- Notification content when bell is clicked
-- Hero image display on buyer timeline
-- Logo upload/display through settings page
-- Vault download through UI
+## Verified via UI Screenshots (Preview)
+- Invoice upload: context subtitle shows `Résidence Les Pins / Lot 3.01` below selector
+- Clients list: project + unit badges visible
+- Client detail: project name renders correctly (after GET /projects/{id} fix)
+- Quote detail: ChangeRequestPanel with Reply/Resolve buttons
+- Invoice detail: ChangeRequestPanel identical to quote (parity confirmed)
+- Agent Reply submission: toast "Response sent", status → Under Review, message visible
+- Agent Resolve: toast "Change request resolved", status → Resolved, Close button appears
+- Buyer sees resolved thread: full message history (buyer + agent) visible after resolution
+- Buyer notifications: real notifications visible in bell dropdown
+- Dashboard: 6 Change Requests aggregate count
+
+## Canonical Formatters (lib/utils.js)
+- `formatClientContext`: "Name — Project — Unit"
+- `formatClientContextCompact`: "Name (Project / Unit)"
+- `formatContextSubtitle`: "Project / Unit"
+- `formatDocContext`: "Number · Client · Project · Unit"
+
+## Bug Fixed During Validation
+- Missing `GET /api/projects/{project_id}` endpoint (caused raw ID display in client detail)
 
 ## Test Accounts
 - Agent: agent@evohome-test.ch / Evohome2026! (POST /api/auth/login)
 - Buyer: buyer@evohome-test.ch / Evohome2026! (POST /api/auth/buyer/login)
 
-## Remaining Work
+## Remaining
 - P0: Production deployment + verification on app.evo-home.ch
 - P1: Organ 4 — Control Tower Dashboard restructuring
-- P1: Organ 5 — Decisions rebuild on unified CR thread
+- P1: Organ 5 — Decisions rebuild
 - P2: Hook dependency warnings
 - P3: Email digests, reporting/export
 

@@ -66,6 +66,18 @@ async def create_project(data: CreateProjectRequest, user=Depends(get_current_ag
     return project
 
 
+@router.get("/projects/{project_id}")
+async def get_project(project_id: str, user=Depends(get_current_agent)):
+    """Get a single project by ID."""
+    if not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    project = await project_service.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+
 @router.put("/projects/{project_id}")
 async def update_project(project_id: str, data: UpdateProjectRequest, user=Depends(get_current_agent)):
     """Update a project. Agent only."""
