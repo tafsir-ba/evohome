@@ -249,13 +249,27 @@ export const LineItemsEditor = ({ items, onChange }) => {
 };
 
 // Hero Image Uploader Component
-export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
+export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate, onAutoSave }) => {
   const [uploading, setUploading] = useState(false);
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!documentId) {
+
+    // Auto-save draft if document doesn't exist yet
+    let docId = documentId;
+    if (!docId && onAutoSave) {
+      try {
+        docId = await onAutoSave();
+        if (!docId) {
+          toast.error('Failed to save draft. Please try again.');
+          return;
+        }
+      } catch (err) {
+        toast.error('Failed to save draft. Please try again.');
+        return;
+      }
+    } else if (!docId) {
       toast.error('Please save the document as a draft first before uploading a hero image');
       return;
     }
@@ -266,7 +280,7 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
 
     try {
       const token = localStorage.getItem('auth_token');
-      const res = await fetch(`${API}/documents/${documentId}/hero-image`, {
+      const res = await fetch(`${API}/documents/${docId}/hero-image`, {
         method: 'POST',
         credentials: 'include',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
@@ -279,7 +293,7 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
         toast.success('Hero image uploaded');
       } else {
         const error = await res.json();
-        const msg = error.detail?.message || error.detail || 'Upload failed';
+        const msg = error.message || error.detail?.message || error.detail || 'Upload failed';
         throw new Error(typeof msg === 'string' ? msg : 'Upload failed');
       }
     } catch (error) {
@@ -341,11 +355,6 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
               <X className="w-4 h-4 mr-1" /> Remove
             </Button>
           </div>
-        </div>
-      ) : !documentId ? (
-        <div className="border-2 border-dashed rounded-lg p-4 text-center border-border opacity-60">
-          <ImageIcon className="w-6 h-6 text-muted-foreground mx-auto mb-1" />
-          <p className="text-xs text-muted-foreground">Save as draft first to upload a hero image</p>
         </div>
       ) : (
         <label className="cursor-pointer">

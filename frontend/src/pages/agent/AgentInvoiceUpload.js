@@ -295,6 +295,45 @@ export const AgentInvoiceUpload = () => {
     }
   };
 
+  const autoSaveDraft = async () => {
+    if (!invoiceData || !invoiceData.is_preview) return invoiceData?.document_id;
+    
+    const totalAmount = parseFloat(editedData.amount) || 0;
+    try {
+      const createRes = await fetch(`${API}/documents/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
+        body: JSON.stringify({
+          preview_id: invoiceData.preview_id,
+          type: 'invoice',
+          client_id: selectedClient,
+          project_id: clients.find(c => c.client_id === selectedClient)?.project_id || null,
+          unit_id: clients.find(c => c.client_id === selectedClient)?.unit_id || null,
+          title: editedData.title,
+          amount: totalAmount,
+          items: editedData.line_items?.filter(item => item.description) || [],
+          supplier_name: editedData.supplier_name,
+          summary: editedData.summary,
+          notes: editedData.notes,
+          due_date: editedData.due_date,
+          pdf_filename: invoiceData.pdf_filename,
+          pdf_stored_filename: invoiceData.pdf_stored_filename,
+          ai_extraction_confidence: invoiceData.ai_extraction_confidence
+        })
+      });
+
+      if (!createRes.ok) return null;
+      
+      const createdDoc = await createRes.json();
+      setInvoiceData({ ...createdDoc, is_preview: false });
+      toast.success('Draft saved');
+      return createdDoc.document_id;
+    } catch {
+      return null;
+    }
+  };
+
   const clearFile = () => {
     setFile(null);
     setInvoiceData(null);
@@ -515,6 +554,7 @@ export const AgentInvoiceUpload = () => {
                 documentId={invoiceData.document_id}
                 heroImageUrl={invoiceData.hero_image_url}
                 onUpdate={(url) => setInvoiceData(prev => ({ ...prev, hero_image_url: url }))}
+                onAutoSave={autoSaveDraft}
               />
 
               {/* Total Summary */}

@@ -288,6 +288,45 @@ export const AgentQuoteUpload = () => {
 
   const documentId = quoteData?.document_id;
 
+  // Auto-save draft silently (for hero image upload on unsaved forms)
+  const autoSaveDraft = async () => {
+    if (!quoteData || !quoteData.is_preview) return quoteData?.document_id;
+    
+    const totalAmount = parseFloat(editedData.amount) || 0;
+    try {
+      const createRes = await fetch(`${API}/documents/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
+        body: JSON.stringify({
+          preview_id: quoteData.preview_id,
+          type: 'quote',
+          client_id: selectedClient,
+          project_id: clients.find(c => c.client_id === selectedClient)?.project_id || null,
+          unit_id: clients.find(c => c.client_id === selectedClient)?.unit_id || null,
+          title: editedData.title,
+          amount: totalAmount,
+          items: editedData.line_items?.length > 0 ? editedData.line_items : undefined,
+          supplier_name: editedData.supplier_name,
+          summary: editedData.summary || editedData.description,
+          notes: editedData.notes,
+          pdf_filename: quoteData.pdf_filename,
+          pdf_stored_filename: quoteData.pdf_stored_filename,
+          ai_extraction_confidence: quoteData.ai_extraction_confidence
+        })
+      });
+
+      if (!createRes.ok) return null;
+      
+      const createdDoc = await createRes.json();
+      setQuoteData({ ...createdDoc, is_preview: false });
+      toast.success('Draft saved');
+      return createdDoc.document_id;
+    } catch {
+      return null;
+    }
+  };
+
   if (loading) {
     return (
       <AgentLayout>
@@ -467,6 +506,7 @@ export const AgentQuoteUpload = () => {
                   documentId={documentId}
                   heroImageUrl={quoteData?.hero_image_url}
                   onUpdate={(url) => setQuoteData(prev => ({ ...prev, hero_image_url: url }))}
+                  onAutoSave={autoSaveDraft}
                 />
 
                 {/* Quote Total Summary */}
