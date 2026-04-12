@@ -89,13 +89,66 @@ const getAuthHeaders = () => {
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 };
 
+/**
+ * Activity file URLs require JWT; <img src> does not send Authorization headers.
+ * Load bytes with fetch + blob URL so images stay visible after remount/navigation.
+ */
+const useAuthenticatedActivityImage = (imageUrl) => {
+  const [displaySrc, setDisplaySrc] = useState(null);
+  const [status, setStatus] = useState('idle');
+  const blobRef = useRef(null);
+
+  useEffect(() => {
+    if (!imageUrl) {
+      setDisplaySrc(null);
+      setStatus('idle');
+      return;
+    }
+    let cancelled = false;
+    setStatus('loading');
+    setDisplaySrc(null);
+    if (blobRef.current) {
+      URL.revokeObjectURL(blobRef.current);
+      blobRef.current = null;
+    }
+
+    (async () => {
+      try {
+        const res = await fetch(imageUrl, {
+          credentials: 'include',
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (cancelled) return;
+        const ou = URL.createObjectURL(blob);
+        blobRef.current = ou;
+        setDisplaySrc(ou);
+        setStatus('ready');
+      } catch {
+        if (!cancelled) setStatus('error');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobRef.current) {
+        URL.revokeObjectURL(blobRef.current);
+        blobRef.current = null;
+      }
+    };
+  }, [imageUrl]);
+
+  return { displaySrc, status };
+};
+
 const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canReply = true, isAgent = false }) => {
   const [expanded, setExpanded] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [replying, setReplying] = useState(false);
   const [sending, setSending] = useState(false);
-  const [imageError, setImageError] = useState(false);
+  const [inlineImageDecodeFailed, setInlineImageDecodeFailed] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [replies, setReplies] = useState(activity.replies || []);
   const [loadingReplies, setLoadingReplies] = useState(false);
@@ -110,6 +163,25 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
     (activity.file_name && isImageFile(activity.file_name)) ||
     imageUrlLooksLikeImage(fileUrlFull);
   const imageUrl = hasImageAttachment && fileUrlFull ? fileUrlFull : null;
+  const { displaySrc: authImageSrc, status: imageAuthStatus } = useAuthenticatedActivityImage(imageUrl);
+
+  useEffect(() => {
+    setInlineImageDecodeFailed(false);
+  }, [activity.activity_id, imageUrl]);
+
+  const showImageSkeleton =
+    Boolean(hasImageAttachment && imageUrl && imageAuthStatus === 'loading');
+  const showImageInline =
+    Boolean(
+      hasImageAttachment &&
+        imageUrl &&
+        imageAuthStatus === 'ready' &&
+        authImageSrc &&
+        !inlineImageDecodeFailed
+    );
+  const showFileAttachmentRow =
+    Boolean(activity.file_name && fileUrlFull) &&
+    (!hasImageAttachment || imageAuthStatus === 'error' || inlineImageDecodeFailed);
 
   const fetchReplies = async () => {
     if (replies.length > 0 || !activity.reply_count) return;
@@ -224,21 +296,35 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
             </div>
           </div>
 
-          {hasImageAttachment && imageUrl && !imageError && (
-            <div className="mt-2 border-y border-border bg-muted/30">
-              <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="block" data-testid={`image-preview-${activity.activity_id}`}>
-                <img
-                  src={imageUrl}
-                  alt=""
-                  className="w-full max-h-[min(70vh,520px)] object-contain bg-muted/20"
-                  onError={() => setImageError(true)}
-                  loading="lazy"
-                />
-              </a>
-            </div>
+          {hasImageAttachment && imageUrl && (
+            <>
+              {showImageSkeleton && (
+                <div className="mt-2 border-y border-border bg-muted/30" aria-busy>
+                  <div className="w-full min-h-[200px] max-h-[min(70vh,520px)] animate-pulse bg-muted/80" />
+                </div>
+              )}
+              {showImageInline && (
+                <div className="mt-2 border-y border-border bg-muted/30">
+                  <a
+                    href={authImageSrc}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block"
+                    data-testid={`image-preview-${activity.activity_id}`}
+                  >
+                    <img
+                      src={authImageSrc}
+                      alt=""
+                      className="w-full max-h-[min(70vh,520px)] object-contain bg-muted/20"
+                      onError={() => setInlineImageDecodeFailed(true)}
+                    />
+                  </a>
+                </div>
+              )}
+            </>
           )}
 
-          {activity.file_name && (!hasImageAttachment || imageError) && fileUrlFull && (
+          {showFileAttachmentRow && (
             <div className="mx-4 mt-3 p-3 rounded-lg border border-border bg-muted/40 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
@@ -411,25 +497,33 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
       </CardHeader>
       
       <CardContent className="pt-0 px-3 sm:px-6">
-        {/* Image first (social-style), then text */}
-        {hasImageAttachment && imageUrl && !imageError && (
-          <div className="mt-3 rounded-lg overflow-hidden bg-muted/30">
-            <a
-              href={imageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block"
-              data-testid={`image-preview-${activity.activity_id}`}
-            >
-              <img
-                src={imageUrl}
-                alt={activity.file_name || 'Image attachment'}
-                className="w-full max-h-96 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                onError={() => setImageError(true)}
-                loading="lazy"
-              />
-            </a>
-          </div>
+        {/* Image first (social-style), then text — blob URL so JWT is applied */}
+        {hasImageAttachment && imageUrl && (
+          <>
+            {showImageSkeleton && (
+              <div className="mt-3 rounded-lg overflow-hidden bg-muted/30" aria-busy>
+                <div className="w-full min-h-[180px] max-h-96 animate-pulse bg-muted/80" />
+              </div>
+            )}
+            {showImageInline && (
+              <div className="mt-3 rounded-lg overflow-hidden bg-muted/30">
+                <a
+                  href={authImageSrc}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                  data-testid={`image-preview-${activity.activity_id}`}
+                >
+                  <img
+                    src={authImageSrc}
+                    alt={activity.file_name || 'Image attachment'}
+                    className="w-full max-h-96 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                    onError={() => setInlineImageDecodeFailed(true)}
+                  />
+                </a>
+              </div>
+            )}
+          </>
         )}
 
         {postBody ? (
@@ -441,8 +535,8 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
           </p>
         ) : null}
         
-        {/* File attachment - for non-image files or failed image loads */}
-        {activity.file_name && (!hasImageAttachment || imageError) && (
+        {/* File attachment - PDF/docs, or image when fetch/decode failed */}
+        {showFileAttachmentRow && (
           <div className="mt-3 p-2 sm:p-3 bg-muted rounded-lg flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <Paperclip className="w-4 h-4 text-muted-foreground flex-shrink-0" />
