@@ -67,11 +67,38 @@ const formatDate = (dateStr) => {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-const isImageFile = (filename) => {
-  if (!filename) return false;
-  const ext = filename.toLowerCase().split('.').pop();
-  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
+/** Last segment of a path or URL, without query/hash. */
+const pathBasename = (pathOrUrl) => {
+  if (!pathOrUrl) return '';
+  const noQ = String(pathOrUrl).split(/[?#]/)[0];
+  const parts = noQ.replace(/\\/g, '/').split('/').filter(Boolean);
+  return parts.pop() || '';
 };
+
+/**
+ * Extension from the basename only, using the last dot (not split('.').pop(), which
+ * breaks names like "Screenshot 2026-04-12 at 19.00.00.png" and multi-dot iOS names).
+ */
+const getFilenameExtension = (pathOrUrl) => {
+  const base = pathBasename(pathOrUrl);
+  const i = base.lastIndexOf('.');
+  if (i <= 0 || i >= base.length - 1) return '';
+  return base.slice(i + 1).toLowerCase();
+};
+
+const IMAGE_FILE_EXTENSIONS = new Set([
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'bmp',
+  'svg',
+  'heic',
+  'heif',
+]);
+
+const isImageExtension = (ext) => Boolean(ext && IMAGE_FILE_EXTENSIONS.has(ext));
 
 /** One text block for display (legacy rows may have title + content). */
 const getActivityPostBody = (activity) => {
@@ -82,7 +109,20 @@ const getActivityPostBody = (activity) => {
 };
 
 const imageUrlLooksLikeImage = (url) =>
-  url && /\.(jpe?g|png|gif|webp|bmp|svg)(\?|#|$)/i.test(url);
+  url && /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif)(\?|#|$)/i.test(url);
+
+const activityLooksLikeImageAttachment = (activity, fileUrlFull) => {
+  const nameExt = getFilenameExtension(activity.file_name || '');
+  const storageExt = getFilenameExtension(activity.file_url || '');
+  const mime = (activity.file_type || '').toLowerCase();
+  return (
+    activity.type === 'image' ||
+    isImageExtension(nameExt) ||
+    isImageExtension(storageExt) ||
+    mime.startsWith('image/') ||
+    imageUrlLooksLikeImage(fileUrlFull)
+  );
+};
 
 // Helper: get auth headers for fetch calls
 const getAuthHeaders = () => {
@@ -110,10 +150,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
   const isDraft = activity.is_draft;
   const postBody = getActivityPostBody(activity);
   const fileUrlFull = activity.file_url ? `${process.env.REACT_APP_BACKEND_URL}${activity.file_url}` : null;
-  const hasImageAttachment =
-    activity.type === 'image' ||
-    (activity.file_name && isImageFile(activity.file_name)) ||
-    imageUrlLooksLikeImage(fileUrlFull);
+  const hasImageAttachment = activityLooksLikeImageAttachment(activity, fileUrlFull);
   const loadAttachmentBlob = Boolean(hasImageAttachment && activity.file_url);
 
   const showFileAttachmentRow =
