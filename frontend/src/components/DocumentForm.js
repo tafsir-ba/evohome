@@ -254,7 +254,11 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !documentId) return;
+    if (!file) return;
+    if (!documentId) {
+      toast.error('Please save the document as a draft first before uploading a hero image');
+      return;
+    }
 
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
@@ -343,6 +347,11 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
               <X className="w-4 h-4 mr-1" /> Remove
             </Button>
           </div>
+        </div>
+      ) : !documentId ? (
+        <div className="border-2 border-dashed rounded-lg p-4 text-center border-border opacity-60">
+          <ImageIcon className="w-6 h-6 text-muted-foreground mx-auto mb-1" />
+          <p className="text-xs text-muted-foreground">Save as draft first to upload a hero image</p>
         </div>
       ) : (
         <label className="cursor-pointer">

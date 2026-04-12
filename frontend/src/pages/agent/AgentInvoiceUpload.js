@@ -65,6 +65,18 @@ export const AgentInvoiceUpload = () => {
     }
   }, [invoiceId]);
 
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    if (invoiceData?.is_preview) {
+      const handler = (e) => {
+        e.preventDefault();
+        e.returnValue = '';
+      };
+      window.addEventListener('beforeunload', handler);
+      return () => window.removeEventListener('beforeunload', handler);
+    }
+  }, [invoiceData?.is_preview]);
+
   const fetchExistingInvoice = async () => {
     try {
       const res = await fetch(`${API}/documents/${invoiceId}`, { credentials: 'include', headers: getAuthHeaders() });

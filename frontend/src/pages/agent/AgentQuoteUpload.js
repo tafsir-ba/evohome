@@ -65,6 +65,18 @@ export const AgentQuoteUpload = () => {
     }
   }, [quoteId]);
 
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    if (quoteData?.is_preview) {
+      const handler = (e) => {
+        e.preventDefault();
+        e.returnValue = '';
+      };
+      window.addEventListener('beforeunload', handler);
+      return () => window.removeEventListener('beforeunload', handler);
+    }
+  }, [quoteData?.is_preview]);
+
   const fetchExistingQuote = async () => {
     try {
       const res = await fetch(`${API}/documents/${quoteId}`, { credentials: 'include', headers: getAuthHeaders() });
