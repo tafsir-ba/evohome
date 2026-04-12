@@ -1295,11 +1295,16 @@ export const BuyerTimeline = () => {
   };
 
   const handleVaultPreview = (document) => {
-    // Use direct Spaces URL if available (avoids CORS issues)
-    const fileUrl = document.url || `${API}/vault/${document.vault_id}/download`;
+    // Direct Spaces URLs can't be embedded in iframe — open in new tab
+    const fileUrl = document.url;
+    if (fileUrl && fileUrl.startsWith('http')) {
+      window.open(fileUrl, '_blank');
+      return;
+    }
+    // Fallback for local URLs: use in-app PDF viewer
     setPdfViewer({
       open: true,
-      url: fileUrl,
+      url: `${API}/vault/${document.vault_id}/download`,
       filename: document.original_filename || document.name || 'document.pdf'
     });
   };

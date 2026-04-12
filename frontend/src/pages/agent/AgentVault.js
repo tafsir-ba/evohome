@@ -291,25 +291,17 @@ export const AgentVault = () => {
   };
 
   const handlePreview = async (doc) => {
-    // If the file URL is a Spaces URL, open directly (no CORS/credentials issue)
+    // Spaces URLs can't be embedded in iframe — open in new tab
     const fileUrl = doc.url || doc.file_url;
     if (fileUrl && fileUrl.startsWith('http')) {
-      if (doc.content_type === 'application/pdf') {
-        setPreviewDoc({ ...doc, blobUrl: fileUrl });
-      } else {
-        window.open(fileUrl, '_blank');
-      }
+      window.open(fileUrl, '_blank');
       return;
     }
 
-    // Fallback: fetch through backend
+    // Fallback: fetch through backend for local files
     if (doc.content_type === 'application/pdf') {
       try {
-        const res = await authFetch(`${API}/vault/documents/${doc.vault_document_id}/download`, { redirect: 'manual' });
-        if (res.type === 'opaqueredirect' || res.status === 307 || res.status === 302) {
-          const redirectUrl = res.headers.get('Location');
-          if (redirectUrl) { setPreviewDoc({ ...doc, blobUrl: redirectUrl }); return; }
-        }
+        const res = await authFetch(`${API}/vault/documents/${doc.vault_document_id}/download`);
         if (res.ok) {
           const blob = await res.blob();
           const blobUrl = window.URL.createObjectURL(blob);
