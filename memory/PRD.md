@@ -30,6 +30,17 @@ Single communication layer between agent and buyer:
 - `PUT /api/units/{unit_id}` — Update unit
 - `DELETE /api/units/{unit_id}` — Delete unit (NOT nested under /projects/)
 
+## List Endpoints Query Param Audit (April 12, 2026)
+All GET list endpoints verified: every `?param=` the frontend sends is declared on the route handler.
+- `GET /api/clients?project_id=X` — NOW WORKS (was silently ignored). Calls `list_clients_by_project()` with `can_access_project` check.
+- `GET /api/activities?limit=&offset=&client_id=&project_id=` — All params declared, with ownership checks
+- `GET /api/analytics?period=` — Declared
+- `GET /api/decisions?project_id=&status=&limit=&offset=` — All declared with `Query()`
+- `GET /api/workflows/selectors?selector_type=&project_id=` — Declared
+- `GET /api/team/directory?search=&limit=` — Declared
+- `GET /api/vault/documents?project_id=` — Declared
+- `GET /api/documents` — No query params sent from list page (client-side filtering). Backend has `doc_type`/`status` available if needed.
+
 ## File Storage (DigitalOcean Spaces)
 - All uploads persist in `evohome-assets.fra1.digitaloceanspaces.com/uploads/`
 - HEIC/HEIF supported, validation by MIME OR extension
@@ -43,28 +54,28 @@ Single communication layer between agent and buyer:
 
 ## Completed (as of April 12, 2026)
 - [x] Production database wiped (preserving tafsir@evo-home.ch only)
-- [x] Unified Document Architecture (AgentDocuments.js, AgentDocumentUpload.js, AgentDocumentDetail.js)
+- [x] Unified Document Architecture
 - [x] Unified Sync Layer (buyer_portal_service.py)
 - [x] DigitalOcean Spaces file storage migration
 - [x] HEIC / macOS octet-stream upload validation
-- [x] Vault preview CORS fix (window.open)
-- [x] Vault buyer parity (client_ids fallback)
-- [x] Editing "Rejected" documents (reverts to Draft)
+- [x] Vault preview CORS fix, buyer parity
 - [x] Buyer Auth Token Bug fix (localStorage)
 - [x] PdfUploadZone prop fixes
-- [x] Debug Console modularized
-- [x] Unit bugs fixed: DELETE path corrected to `/api/units/{unit_id}`, field names aligned to `assigned_client_id`/`assigned_client_name`
+- [x] Unit bugs: DELETE path + field name alignment
+- [x] Test file fix: `test_foundation_features.py` cleanup path
+- [x] **Clients list `?project_id=` filtering** — backend now declares, validates ownership, and delegates to `list_clients_by_project()`
+- [x] **Auth header fix** on `AgentClients.js` fetch call
 
 ## Remaining
 - P0: Deploy and verify unified architecture on production
 - P1: Control Tower Dashboard restructuring
 - P1: Decisions Module completion
-- P1: Image previews in feed (not just file links)
-- P2: Agent-side sync pipeline (agent mutations auto-propagate to buyer)
-- P2: Hook dependency warnings (74+ instances)
+- P1: Image previews in feed
+- P2: Agent-side sync pipeline
+- P2: Hook dependency warnings (74+)
 - P3: Email digests, reporting/export
 - P3: Dead code cleanup in api.js
-- P3: Strip legacy /agent/quotes and /agent/invoices route aliases
+- P3: Strip legacy route aliases
 
 ---
 Last Updated: April 12, 2026

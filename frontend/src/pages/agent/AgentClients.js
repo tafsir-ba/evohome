@@ -82,7 +82,7 @@ export const AgentClients = () => {
         ? `${API}/clients?project_id=${projectFilter}`
         : `${API}/clients`;
       
-      const clientsRes = await fetch(clientsUrl, { credentials: 'include' });
+      const clientsRes = await fetch(clientsUrl, { credentials: 'include', headers: getAuthHeaders() });
       
       if (clientsRes.ok) setClients(await clientsRes.json());
     } catch (error) {
