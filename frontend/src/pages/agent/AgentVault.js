@@ -261,6 +261,19 @@ export const AgentVault = () => {
   };
 
   const handleDownload = async (doc) => {
+    // If Spaces URL available, download directly
+    const fileUrl = doc.url || doc.file_url;
+    if (fileUrl && fileUrl.startsWith('http')) {
+      const a = document.createElement('a');
+      a.href = fileUrl;
+      a.download = doc.original_filename || doc.title;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+    // Fallback: fetch through backend
     try {
       const res = await authFetch(`${API}/vault/documents/${doc.vault_document_id}/download`);
       if (res.ok) {
@@ -278,9 +291,25 @@ export const AgentVault = () => {
   };
 
   const handlePreview = async (doc) => {
+    // If the file URL is a Spaces URL, open directly (no CORS/credentials issue)
+    const fileUrl = doc.url || doc.file_url;
+    if (fileUrl && fileUrl.startsWith('http')) {
+      if (doc.content_type === 'application/pdf') {
+        setPreviewDoc({ ...doc, blobUrl: fileUrl });
+      } else {
+        window.open(fileUrl, '_blank');
+      }
+      return;
+    }
+
+    // Fallback: fetch through backend
     if (doc.content_type === 'application/pdf') {
       try {
-        const res = await authFetch(`${API}/vault/documents/${doc.vault_document_id}/download`);
+        const res = await authFetch(`${API}/vault/documents/${doc.vault_document_id}/download`, { redirect: 'manual' });
+        if (res.type === 'opaqueredirect' || res.status === 307 || res.status === 302) {
+          const redirectUrl = res.headers.get('Location');
+          if (redirectUrl) { setPreviewDoc({ ...doc, blobUrl: redirectUrl }); return; }
+        }
         if (res.ok) {
           const blob = await res.blob();
           const blobUrl = window.URL.createObjectURL(blob);

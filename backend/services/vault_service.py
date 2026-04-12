@@ -93,7 +93,8 @@ async def list_vault_documents(agent_id: str, project_id: Optional[str] = None) 
     query = {"agent_id": agent_id}
     if project_id:
         query["project_id"] = project_id
-    return await db.vault_documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    docs = await db.vault_documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return _enrich_urls(docs)
 
 
 async def list_buyer_vault(buyer_id: str) -> List[Dict[str, Any]]:
@@ -113,9 +114,18 @@ async def list_buyer_vault(buyer_id: str) -> List[Dict[str, Any]]:
     else:
         query["buyer_ids"] = buyer_id
 
-    return await db.vault_documents.find(
+    docs = await db.vault_documents.find(
         query, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
+    return _enrich_urls(docs)
+
+
+def _enrich_urls(docs):
+    from services.file_service import get_file_url
+    for doc in docs:
+        if doc.get("stored_filename"):
+            doc["url"] = get_file_url(doc["stored_filename"])
+    return docs
 
 
 async def get_vault_document(vault_document_id: str) -> Optional[Dict[str, Any]]:
