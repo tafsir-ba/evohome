@@ -23,6 +23,13 @@ Single communication layer between agent and buyer:
 - **After every mutation**: returns fresh portal state — frontend auto-updates all views
 - **No bypass**: buyer frontend only calls portal endpoints + 3 binary file downloads
 
+## Units API Contract
+- `POST /api/projects/{project_id}/units` — Create unit
+- `GET /api/projects/{project_id}/units` — List units (enriched with `assigned_client_name`)
+- `GET /api/units/{unit_id}` — Get single unit
+- `PUT /api/units/{unit_id}` — Update unit
+- `DELETE /api/units/{unit_id}` — Delete unit (NOT nested under /projects/)
+
 ## File Storage (DigitalOcean Spaces)
 - All uploads persist in `evohome-assets.fra1.digitaloceanspaces.com/uploads/`
 - HEIC/HEIF supported, validation by MIME OR extension
@@ -46,6 +53,7 @@ Single communication layer between agent and buyer:
 - [x] Buyer Auth Token Bug fix (localStorage)
 - [x] PdfUploadZone prop fixes
 - [x] Debug Console modularized
+- [x] Unit bugs fixed: DELETE path corrected to `/api/units/{unit_id}`, field names aligned to `assigned_client_id`/`assigned_client_name`
 
 ## Remaining
 - P0: Deploy and verify unified architecture on production

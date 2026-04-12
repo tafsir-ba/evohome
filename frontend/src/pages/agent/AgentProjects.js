@@ -237,8 +237,9 @@ export const AgentProjects = () => {
 
   const handleDeleteUnit = async (unitId) => {
     try {
-      const res = await fetch(`${API}/projects/${unitsProject.project_id}/units/${unitId}`, {
+      const res = await fetch(`${API}/units/${unitId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
         credentials: 'include'
       });
 
@@ -600,14 +601,14 @@ export const AgentProjects = () => {
                         </div>
                         <div>
                           <p className="font-medium text-sm">{unit.unit_reference}</p>
-                          {unit.client_name ? (
-                            <p className="text-xs text-muted-foreground">Assigned to {unit.client_name}</p>
+                          {unit.assigned_client_name ? (
+                            <p className="text-xs text-muted-foreground">Assigned to {unit.assigned_client_name}</p>
                           ) : (
                             <p className="text-xs text-amber-600">Available</p>
                           )}
                         </div>
                       </div>
-                      {!unit.client_id && (
+                      {!unit.assigned_client_id && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -624,7 +625,7 @@ export const AgentProjects = () => {
             </div>
             
             <p className="text-xs text-muted-foreground mt-3">
-              {units.length} unit{units.length !== 1 ? 's' : ''} • {units.filter(u => !u.client_id).length} available
+              {units.length} unit{units.length !== 1 ? 's' : ''} • {units.filter(u => !u.assigned_client_id).length} available
             </p>
           </div>
           
