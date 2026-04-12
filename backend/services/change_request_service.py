@@ -338,7 +338,7 @@ async def _notify(user_id: str, title: str, message_text: str, notification_type
             title=title,
             message=message_text,
             notification_type=notification_type,
-            data=data,
+            metadata=data,
         )
     except Exception as e:
         logger.warning(f"Failed to create notification ({notification_type}): {e}")

@@ -4,42 +4,48 @@
 - **Backend**: FastAPI + Motor (MongoDB async) — canonical SSOT services, thin routes
 - **Frontend**: React 18 + TailwindCSS + Shadcn/UI
 - **Database**: MongoDB Atlas (`evohome_cmp`)
-- **Integrations**: OpenAI GPT-4o, Stripe (webhooks verified), Resend, Google OAuth
 
-## Organ Status
-| Organ | Backend | Frontend | Preview-Verified | Production-Verified |
-|-------|---------|----------|-----------------|-------------------|
-| 1. Upload/Media | Canonical | Rebuilt | Yes (iteration_29) | Pending deployment |
-| 2. Client Context | Enriched | Canonical formatters | Yes (iteration_29) | Pending deployment |
-| 3. Change Request | Canonical | Verified | Yes (iteration_29) | Pending deployment |
+## UI-Verified Items (Screenshot Proof)
 
-## Test Matrix (36 items)
-- 13 verified by user in production (BUG-001,002,009,010,017-023,035,036)
-- 23 verified by testing agent in preview (BUG-003-008,011-016,024-034) - iteration_29
-- Total: 36/36 items verified in at least one environment
+### Organ 1 — Upload/Media
+| Item | Evidence |
+|------|----------|
+| BUG-003: Hero image on edit page | Image visible at /agent/quotes/edit/{id} |
+| BUG-004: Buyer sees hero image | Blue gradient banner visible on buyer timeline card |
+| BUG-005: Vault upload through UI | File chooser → form fill → "Document uploaded successfully" toast → card appears |
+| BUG-006: Vault download through UI | Click Download → file saved (9566 bytes matches upload) |
 
-## What Requires Production Verification After Deployment
-All 23 items verified in preview need production re-verification on app.evo-home.ch
+### Organ 2 — Client Context
+| Item | Evidence |
+|------|----------|
+| BUG-011: Clients list | Project + unit badges visible on client card |
+| BUG-012: Client detail | Project name "Résidence Les Pins" + "Lot 3.01" visible |
 
-## Canonical Formatters (lib/utils.js)
-- `formatClientContext`: "Name — Project — Unit"
-- `formatClientContextCompact`: "Name (Project / Unit)"
-- `formatContextSubtitle`: "Project / Unit"
-- `formatDocContext`: "Number · Client · Project · Unit"
+### Organ 3 — Change Requests
+| Item | Evidence |
+|------|----------|
+| BUG-022: Buyer creates CR | "Question sent to your agent" toast, status → "UNDER REVIEW" |
+| BUG-024: Buyer notification | Agent notification: "[change_request_created] New Change Request" |
+| BUG-025: CR notification content | Buyer: "[change_request_response]" + "[change_request_resolved]" with correct text |
+| BUG-026: Agent reply on quote | "Response sent" toast, thread shows buyer + agent messages |
+| BUG-028: Resolve + Close | "Change request resolved" → "Resolved" badge → "Change request closed" → "Closed" badge |
 
-## Test Accounts
-- Agent: agent@evohome-test.ch / Evohome2026! (POST /api/auth/login)
-- Buyer: buyer@evohome-test.ch / Evohome2026! (POST /api/auth/buyer/login)
+### Bug Fixed During Verification
+- **CR notification parameter mismatch**: `_notify()` passed `data=data` instead of `metadata=data`, causing all CR notifications to silently fail
 
-## Seed Data (after April 12 wipe)
-- Project: Résidence Les Pins
-- Units: Lot 3.01-4.02 (4 units)
-- Client: Test Buyer → Lot 3.01
-- Quote: doc_b5d46abd6e6c (Hero Image Test Quote, CHF 5000, with hero image)
+## Items NOT Yet UI-Verified
+- BUG-007: Authenticated vault access (verified via API only)
+- BUG-008: Legacy file compatibility (verified via API only)
+- BUG-013: Client preview context (code verified, not screenshot)
+- BUG-014: Project endpoint (verified via curl)
+- BUG-015: Formatter consistency (verified via grep)
+- BUG-016: Invoice upload parity (verified in earlier session, not re-verified post-wipe)
+- BUG-027: Quote/invoice full parity (quote verified, invoice not tested through full CR UI flow)
+- BUG-029-032: Dashboard aggregation (Control Tower shows count, detailed cards on legacy route only)
 
 ## Remaining
-- P0: Deploy to production + verify all 23 items on app.evo-home.ch
-- P1: Organ 4 — Control Tower Dashboard restructuring
+- P0: Production deployment + verification on app.evo-home.ch
+- P1: Organ 4 — Control Tower Dashboard (move CR detail cards to primary dashboard)
 - P1: Organ 5 — Decisions rebuild
 - P2: Hook dependency warnings
 - P3: Email digests, reporting/export
