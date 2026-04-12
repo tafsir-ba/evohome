@@ -7,7 +7,10 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 from core.auth import get_current_user, get_current_agent
+from database import db
 from services import change_request_service
+from services.change_request_access import user_can_access_change_request, user_can_access_entity
+from services.document_service import document_action
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +37,47 @@ class ResolveBody(BaseModel):
 @router.post("/change-requests")
 async def create_change_request(body: CreateChangeRequestBody, user: dict = Depends(get_current_user)):
     """Create a change request (buyer or agent)."""
-    try:
-        role = user.get("role", "buyer")
-        agent_id = user["user_id"] if role == "agent" else user.get("agent_id", "")
+    role = user.get("role", "buyer")
 
+    if not await user_can_access_entity(user, body.entity_type, body.entity_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Buyers on quotes/invoices: single path (one notification, one document write)
+    if role == "buyer" and body.entity_type in ("quote", "invoice"):
+        try:
+            u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "name": 1})
+            user_name = (u or {}).get("name", "")
+            result = await document_action(
+                document_id=body.entity_id,
+                action="request_change",
+                user_id=user["user_id"],
+                user_role="buyer",
+                user_name=user_name,
+                comment=body.message,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        cr_id = result.get("change_request_id")
+        if not cr_id:
+            raise HTTPException(status_code=500, detail="Change request not created")
+        cr = await change_request_service.get_change_request(cr_id)
+        if not cr:
+            raise HTTPException(status_code=500, detail="Change request not found")
+        return cr
+
+    if role == "agent":
+        agent_id = user["user_id"]
+    elif body.entity_type == "decision":
+        dec = await db.decisions.find_one({"decision_id": body.entity_id}, {"_id": 0, "agent_id": 1})
+        agent_id = (dec or {}).get("agent_id") or ""
+    else:
+        doc = await db.documents.find_one({"document_id": body.entity_id}, {"_id": 0, "agent_id": 1})
+        agent_id = (doc or {}).get("agent_id") or user.get("agent_id", "")
+
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="Could not resolve agent for change request")
+
+    try:
         cr = await change_request_service.create_change_request(
             entity_type=body.entity_type,
             entity_id=body.entity_id,
@@ -81,6 +121,8 @@ async def get_entity_change_requests(
     user: dict = Depends(get_current_user),
 ):
     """Get all change requests for a specific entity."""
+    if not await user_can_access_entity(user, entity_type, entity_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     items = await change_request_service.get_change_requests_for_entity(entity_type, entity_id)
     return {"change_requests": items}
 
@@ -91,6 +133,8 @@ async def get_change_request(change_request_id: str, user: dict = Depends(get_cu
     cr = await change_request_service.get_change_request(change_request_id)
     if not cr:
         raise HTTPException(status_code=404, detail="Change request not found")
+    if not await user_can_access_change_request(user, cr):
+        raise HTTPException(status_code=403, detail="Forbidden")
     return cr
 
 
@@ -108,6 +152,11 @@ async def respond_to_change_request(
     trace_service("routes.change_requests.respond_to_change_request")
     try:
         role = user.get("role", "buyer")
+        existing = await change_request_service.get_change_request(change_request_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Change request not found")
+        if not await user_can_access_change_request(user, existing):
+            raise HTTPException(status_code=403, detail="Forbidden")
         cr = await change_request_service.respond_to_change_request(
             change_request_id=change_request_id,
             message=body.message,
@@ -116,8 +165,13 @@ async def respond_to_change_request(
             attachments=body.attachments,
         )
         return cr
+    except HTTPException:
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail={"error": "state_error", "message": str(e), "source": "service"})
+        msg = str(e)
+        if "Not authorized" in msg:
+            raise HTTPException(status_code=403, detail=msg)
+        raise HTTPException(status_code=400, detail={"error": "state_error", "message": msg, "source": "service"})
 
 
 @router.post("/change-requests/{change_request_id}/resolve")
@@ -133,14 +187,22 @@ async def resolve_change_request(
     set_trace_request_summary({"change_request_id": change_request_id, "has_note": bool(body.resolution_note)})
     trace_service("routes.change_requests.resolve_change_request")
     try:
+        cr = await change_request_service.get_change_request(change_request_id)
+        if cr and not await user_can_access_change_request(user, cr):
+            raise HTTPException(status_code=403, detail="Forbidden")
         cr = await change_request_service.resolve_change_request(
             change_request_id=change_request_id,
             resolved_by=user["user_id"],
             resolution_note=body.resolution_note,
         )
         return cr
+    except HTTPException:
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail={"error": "state_error", "message": str(e), "source": "service"})
+        msg = str(e)
+        if "Not authorized" in msg:
+            raise HTTPException(status_code=403, detail=msg)
+        raise HTTPException(status_code=400, detail={"error": "state_error", "message": msg, "source": "service"})
 
 
 @router.post("/change-requests/{change_request_id}/close")
@@ -154,10 +216,18 @@ async def close_change_request(
     set_trace_entity("change_request", change_request_id)
     trace_service("routes.change_requests.close_change_request")
     try:
+        cr = await change_request_service.get_change_request(change_request_id)
+        if cr and not await user_can_access_change_request(user, cr):
+            raise HTTPException(status_code=403, detail="Forbidden")
         cr = await change_request_service.close_change_request(
             change_request_id=change_request_id,
             closed_by=user["user_id"],
         )
         return cr
+    except HTTPException:
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail={"error": "state_error", "message": str(e), "source": "service"})
+        msg = str(e)
+        if "Not authorized" in msg:
+            raise HTTPException(status_code=403, detail=msg)
+        raise HTTPException(status_code=400, detail={"error": "state_error", "message": msg, "source": "service"})

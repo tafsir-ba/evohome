@@ -43,6 +43,66 @@ def _get_entity_id_field(entity_type: str) -> Optional[str]:
 
 # ── Core operations ──
 
+async def supersede_open_change_requests_for_entity(
+    entity_type: str,
+    entity_id: str,
+    resolution_note: str,
+    resolved_by_user_id: str,
+    author_role_for_note: str = "buyer",
+) -> int:
+    """
+    Mark open/under_review CRs for this entity as resolved without touching the entity row.
+    Used before a new CR, after resend, or when the agent moves the document to Draft.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    query = {
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "status": {"$in": ["open", "under_review"]},
+    }
+    crs = await db.change_requests.find(query, {"_id": 0, "change_request_id": 1}).to_list(50)
+    n = 0
+    for row in crs:
+        cid = row["change_request_id"]
+        msg = {
+            "message_id": f"msg_{uuid.uuid4().hex[:8]}",
+            "content": resolution_note,
+            "author_id": resolved_by_user_id,
+            "author_role": author_role_for_note,
+            "created_at": now,
+            "attachments": [],
+        }
+        await db.change_requests.update_one(
+            {"change_request_id": cid},
+            {
+                "$set": {
+                    "status": "resolved",
+                    "resolved_at": now,
+                    "updated_at": now,
+                },
+                "$push": {"messages": msg},
+            },
+        )
+        n += 1
+    return n
+
+
+async def resolve_open_change_requests_after_sent_document(
+    entity_type: str,
+    document_id: str,
+    agent_id: str,
+    resolution_note: str = "Addressed by sending an updated document.",
+) -> int:
+    """After send_document from Change Requested: close out open CR threads without changing the document again."""
+    return await supersede_open_change_requests_for_entity(
+        entity_type,
+        document_id,
+        resolution_note,
+        resolved_by_user_id=agent_id,
+        author_role_for_note="agent",
+    )
+
+
 async def create_change_request(
     entity_type: str,
     entity_id: str,
@@ -52,10 +112,28 @@ async def create_change_request(
     agent_id: str,
     project_id: Optional[str] = None,
     attachments: Optional[List[dict]] = None,
+    *,
+    update_entity: bool = True,
+    notify_agent_on_buyer_create: bool = True,
+    supersede_prior_open: bool = True,
 ) -> Dict[str, Any]:
-    """Create a new change request on any entity."""
+    """Create a new change request on any entity.
+
+    When ``update_entity`` is False, the caller has already updated the entity (e.g. document_action);
+    skip duplicate writes and use ``notify_agent_on_buyer_create`` to avoid duplicate agent notifications.
+    For quote/invoice, prior open CRs are superseded when ``supersede_prior_open`` is True.
+    """
     cr_id = f"cr_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
+
+    if supersede_prior_open and entity_type in ("quote", "invoice"):
+        await supersede_open_change_requests_for_entity(
+            entity_type,
+            entity_id,
+            resolution_note="Superseded by a new change request.",
+            resolved_by_user_id=created_by,
+            author_role_for_note=created_by_role,
+        )
 
     # Resolve buyer_id from the entity's client relationship
     buyer_id = None
@@ -108,19 +186,24 @@ async def create_change_request(
     trace_related_entity(entity_type, entity_id)
 
     # Update entity status to 'Change Requested' + denormalized comment
-    collection = _get_entity_collection(entity_type)
-    id_field = _get_entity_id_field(entity_type)
-    if collection and id_field:
-        await db[collection].update_one(
-            {id_field: entity_id},
-            {"$set": {"status": "Change Requested", "change_request_comment": message, "updated_at": now}}
-        )
+    if update_entity:
+        collection = _get_entity_collection(entity_type)
+        id_field = _get_entity_id_field(entity_type)
+        if collection and id_field:
+            await db[collection].update_one(
+                {id_field: entity_id},
+                {"$set": {"status": "Change Requested", "change_request_comment": message, "updated_at": now}}
+            )
 
     logger.info(f"Change request {cr_id} created on {entity_type}/{entity_id} by {created_by}")
     change_request.pop("_id", None)
 
     # Notify agent when buyer creates a CR
-    if created_by_role == "buyer" and agent_id:
+    if (
+        notify_agent_on_buyer_create
+        and created_by_role == "buyer"
+        and agent_id
+    ):
         await _notify(
             user_id=agent_id,
             title="New Change Request",
@@ -140,12 +223,18 @@ async def respond_to_change_request(
     attachments: Optional[List[dict]] = None,
 ) -> Dict[str, Any]:
     """Add a response message to a change request."""
-    # Verify current status allows transition
-    cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0, "status": 1})
+    cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0})
     if not cr:
         raise ValueError(f"Change request {change_request_id} not found")
     if cr["status"] not in ("open", "under_review"):
         raise ValueError(f"Cannot respond to change request in status '{cr['status']}'")
+
+    if author_role == "agent" and cr.get("agent_id") != author_id:
+        raise ValueError("Not authorized to respond to this change request")
+    if author_role == "buyer":
+        buyer_ref = cr.get("buyer_id") or cr.get("created_by")
+        if buyer_ref != author_id:
+            raise ValueError("Not authorized to respond to this change request")
 
     now = datetime.now(timezone.utc).isoformat()
 
@@ -207,9 +296,11 @@ async def resolve_change_request(
 ) -> Dict[str, Any]:
     """Mark a change request as resolved. Document reverts to Sent (NEVER Draft)."""
     # Verify current status allows transition
-    cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0, "status": 1})
+    cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0, "status": 1, "agent_id": 1})
     if not cr:
         raise ValueError(f"Change request {change_request_id} not found")
+    if cr.get("agent_id") != resolved_by:
+        raise ValueError("Not authorized to resolve this change request")
     if not _can_transition(cr["status"], "resolved"):
         raise ValueError(f"Cannot resolve change request in status '{cr['status']}'")
 
@@ -281,9 +372,11 @@ async def close_change_request(
     closed_by: str,
 ) -> Dict[str, Any]:
     """Close a change request (final state). No notification."""
-    cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0, "status": 1})
+    cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0, "status": 1, "agent_id": 1})
     if not cr:
         raise ValueError(f"Change request {change_request_id} not found")
+    if cr.get("agent_id") != closed_by:
+        raise ValueError("Not authorized to close this change request")
     if not _can_transition(cr["status"], "closed"):
         raise ValueError(f"Cannot close change request in status '{cr['status']}'")
 

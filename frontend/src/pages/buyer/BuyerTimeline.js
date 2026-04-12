@@ -69,39 +69,43 @@ const ChangeRequestThread = ({
 }) => {
   const [thread, setThread] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [replyText, setReplyText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const fetchThread = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `${API}/change-requests/entity/${entityType}/${entityId}`,
+        { credentials: 'include', headers: getAuthHeaders() }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const list = data.change_requests || [];
+        let chosen = null;
+        if (preferredChangeRequestId) {
+          const match = list.find((cr) => cr.change_request_id === preferredChangeRequestId);
+          if (match) {
+            chosen = match;
+          } else {
+            toast.error('This change request is no longer available');
+            onPreferredMiss?.();
+          }
+        } else {
+          chosen = list[0] || null;
+        }
+        setThread(chosen);
+      }
+    } catch {
+      // Fallback to just showing the buyer comment
+    } finally {
+      setLoading(false);
+    }
+  }, [entityType, entityId, preferredChangeRequestId, onPreferredMiss]);
 
   useEffect(() => {
-    const fetchThread = async () => {
-      try {
-        const res = await fetch(
-          `${API}/change-requests/entity/${entityType}/${entityId}`,
-          { credentials: 'include', headers: getAuthHeaders() }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const list = data.change_requests || [];
-          let chosen = null;
-          if (preferredChangeRequestId) {
-            const match = list.find((cr) => cr.change_request_id === preferredChangeRequestId);
-            if (match) {
-              chosen = match;
-            } else {
-              toast.error('This change request is no longer available');
-              onPreferredMiss?.();
-            }
-          } else {
-            chosen = list[0] || null;
-          }
-          setThread(chosen);
-        }
-      } catch {
-        // Fallback to just showing the buyer comment
-      } finally {
-        setLoading(false);
-      }
-    };
+    setLoading(true);
     fetchThread();
-  }, [entityType, entityId, preferredChangeRequestId]);
+  }, [fetchThread]);
 
   useEffect(() => {
     if (!thread?.change_request_id || !preferredChangeRequestId) return;
@@ -118,6 +122,31 @@ const ChangeRequestThread = ({
     });
   }, [thread, preferredChangeRequestId]);
 
+  const handleSendReply = async () => {
+    if (!thread?.change_request_id || !replyText.trim()) return;
+    setSending(true);
+    try {
+      const res = await fetch(`${API}/change-requests/${thread.change_request_id}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
+        body: JSON.stringify({ message: replyText.trim() }),
+      });
+      if (res.ok) {
+        toast.success('Message sent');
+        setReplyText('');
+        await fetchThread();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail?.message || err.detail || 'Failed to send');
+      }
+    } catch {
+      toast.error('Failed to send');
+    } finally {
+      setSending(false);
+    }
+  };
+
   // If no canonical thread exists and no legacy comment, hide
   if (loading) return null;
 
@@ -130,6 +159,8 @@ const ChangeRequestThread = ({
       </div>
     );
   }
+
+  const canReply = thread.status === 'open' || thread.status === 'under_review';
 
   return (
     <div
@@ -173,6 +204,27 @@ const ChangeRequestThread = ({
             <p className="whitespace-pre-wrap">{msg.content}</p>
           </div>
         ))}
+        {canReply && (
+          <div className="pt-2 border-t border-blue-500/10 space-y-2">
+            <Textarea
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="Add a message to your agent..."
+              rows={3}
+              className="text-sm resize-none"
+              data-testid="change-request-reply-input"
+            />
+            <Button
+              size="sm"
+              disabled={sending || !replyText.trim()}
+              onClick={handleSendReply}
+              data-testid="change-request-reply-send"
+            >
+              {sending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+              Send
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

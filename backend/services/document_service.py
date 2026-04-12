@@ -234,6 +234,19 @@ async def update_document(document_id: str, agent_id: str, updates: Dict[str, An
 
     update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
     await db.documents.update_one(query, {"$set": update_data})
+
+    if doc["status"] == "Change Requested" and update_data.get("status") == "Draft":
+        from services.change_request_service import supersede_open_change_requests_for_entity
+        et = doc["type"].lower()
+        if et in ("quote", "invoice"):
+            await supersede_open_change_requests_for_entity(
+                et,
+                document_id,
+                resolution_note="Agent is revising the document in draft.",
+                resolved_by_user_id=agent_id,
+                author_role_for_note="agent",
+            )
+
     return await db.documents.find_one(query, {"_id": 0})
 
 
@@ -298,9 +311,15 @@ async def send_document(document_id: str, agent_id: str, agent_user: dict) -> Di
         raise ValueError(f"Cannot send document from status: {doc['status']}")
 
     now = datetime.now(timezone.utc).isoformat()
+    prev_status = doc["status"]
     await db.documents.update_one(query, {
         "$set": {"status": "Sent", "sent_at": now, "change_request_comment": None, "updated_at": now}
     })
+    if prev_status == "Change Requested" and doc["type"] in ("quote", "invoice"):
+        from services.change_request_service import resolve_open_change_requests_after_sent_document
+        await resolve_open_change_requests_after_sent_document(
+            doc["type"].lower(), document_id, agent_id
+        )
 
     # Trace: status transition + DB mutation
     try:
@@ -471,10 +490,10 @@ async def document_action(
         set_trace_response_summary({"status": target, "previous_status": doc["status"], "action": action})
         await _notify_agent_action(doc, "Change Requested", f"Changes requested for {doc['type']} {doc['document_number']}", "change_requested", user_name, {"comment": comment})
 
-        # Create canonical change request
+        # Canonical change request row only (document + agent notify already handled above)
         from services.change_request_service import create_change_request
         entity_type = doc.get('type', 'document').lower()
-        await create_change_request(
+        cr = await create_change_request(
             entity_type=entity_type,
             entity_id=document_id,
             message=comment,
@@ -482,9 +501,11 @@ async def document_action(
             created_by_role="buyer",
             agent_id=doc.get("agent_id", ""),
             project_id=doc.get("project_id"),
+            update_entity=False,
+            notify_agent_on_buyer_create=False,
         )
 
-        return {"message": "Change requested", "status": target}
+        return {"message": "Change requested", "status": target, "change_request_id": cr["change_request_id"]}
 
     if action == 'confirm_payment' and doc['type'] == 'invoice' and user_role == 'buyer':
         if not validate_transition('invoice', doc['status'], 'Paid'):
@@ -544,6 +565,17 @@ async def reupload_document(
     }
 
     await db.documents.update_one(query, {"$set": update_data})
+    if original_doc["status"] == "Change Requested":
+        from services.change_request_service import supersede_open_change_requests_for_entity
+        et = original_doc["type"].lower()
+        if et in ("quote", "invoice"):
+            await supersede_open_change_requests_for_entity(
+                et,
+                document_id,
+                resolution_note="Agent is revising the document in draft (PDF re-upload).",
+                resolved_by_user_id=agent_id,
+                author_role_for_note="agent",
+            )
     result = await db.documents.find_one(query, {"_id": 0})
     result['extraction_warning'] = extraction.get('extraction_failed', False) or extraction.get('amount') is None
     return result
