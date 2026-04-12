@@ -261,7 +261,7 @@ async def process_buyer_action(
     Processes the action, then returns the updated portal state.
     """
     from services.document_service import document_action
-    from services.notification_service import create_notification
+    from services import decision_service
 
     user = await db.users.find_one({"user_id": buyer_id}, {"_id": 0})
     user_name = user.get("name", "") if user else ""
@@ -281,9 +281,31 @@ async def process_buyer_action(
     elif action == "respond_decision":
         if not decision_id:
             raise ValueError("decision_id required")
-        await db.decisions.update_one(
-            {"decision_id": decision_id, "buyer_id": buyer_id},
-            {"$set": {"status": "responded", "response": option_id, "response_comment": comment}},
+        if not option_id:
+            raise ValueError("option_id required")
+        if option_id not in ("approved", "rejected", "request_change"):
+            raise ValueError("Invalid option_id for decision response")
+
+        buyer_clients = await db.clients.find(
+            {"buyer_id": buyer_id}, {"_id": 0, "client_id": 1}
+        ).to_list(100)
+        buyer_cids = [c["client_id"] for c in buyer_clients]
+        if not buyer_cids:
+            raise ValueError("No client record found for this buyer")
+
+        rec = await db.decision_recipients.find_one(
+            {"decision_id": decision_id, "client_id": {"$in": buyer_cids}},
+            {"_id": 0, "client_id": 1},
+        )
+        if not rec:
+            raise ValueError("You are not a recipient for this decision")
+
+        await decision_service.buyer_respond(
+            decision_id=decision_id,
+            buyer_id=buyer_id,
+            client_id=rec["client_id"],
+            action=option_id,
+            comment=comment,
         )
 
     elif action == "mark_seen":

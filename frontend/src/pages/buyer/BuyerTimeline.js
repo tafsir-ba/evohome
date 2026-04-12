@@ -1144,7 +1144,8 @@ export const BuyerTimeline = () => {
     if (
       message.type === 'document_sent' ||
       message.type === 'vault_updated' ||
-      message.type === 'vault_shared'
+      message.type === 'vault_shared' ||
+      message.type === 'decision_updated'
     ) {
       fetchData();
     }
@@ -1184,7 +1185,7 @@ export const BuyerTimeline = () => {
     if (activeView === 'updates') {
       portalAction({ action: 'mark_seen' }).catch(() => {});
     }
-    if (activeView === 'vault') {
+    if (activeView === 'vault' || activeView === 'decisions') {
       fetchData();
     }
   }, [activeView, fetchData]);

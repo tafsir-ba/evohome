@@ -39,11 +39,14 @@ async def buyer_portal_action(body: BuyerAction, user: dict = Depends(get_curren
     The sync layer processes the action and returns the updated portal state.
     """
     _require_buyer(user)
-    return await buyer_portal_service.process_buyer_action(
-        buyer_id=user["user_id"],
-        action=body.action,
-        document_id=body.document_id,
-        decision_id=body.decision_id,
-        comment=body.comment,
-        option_id=body.option_id,
-    )
+    try:
+        return await buyer_portal_service.process_buyer_action(
+            buyer_id=user["user_id"],
+            action=body.action,
+            document_id=body.document_id,
+            decision_id=body.decision_id,
+            comment=body.comment,
+            option_id=body.option_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

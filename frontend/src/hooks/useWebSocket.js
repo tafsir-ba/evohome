@@ -96,6 +96,10 @@ export const useWebSocket = (userId, onMessage) => {
             toast.info('Document vault updated', {
               description: message.data?.title ? `"${message.data.title}"` : 'Your agent shared a file with you',
             });
+          } else if (message.type === 'decision_updated' && message.data?.event === 'sent') {
+            toast.info('New decision from your agent', {
+              description: message.data?.title ? `"${message.data.title}"` : 'Open Decisions to respond',
+            });
           }
         } catch (e) {
           console.error('Failed to parse WebSocket message:', e);

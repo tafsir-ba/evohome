@@ -11,8 +11,37 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 from database import db
+from services.notification_service import emit_realtime
 
 logger = logging.getLogger(__name__)
+
+
+async def _buyer_user_ids_from_client_ids(client_ids: List[str]) -> List[str]:
+    """Resolve distinct buyer user_ids for the given client records."""
+    out: List[str] = []
+    for cid in client_ids:
+        c = await db.clients.find_one({"client_id": cid}, {"_id": 0, "buyer_id": 1})
+        if c and c.get("buyer_id"):
+            out.append(c["buyer_id"])
+    return list(dict.fromkeys(out))
+
+
+async def _emit_decision_updated(
+    decision_id: str,
+    event: str,
+    *,
+    agent_id: Optional[str] = None,
+    title: Optional[str] = None,
+    buyer_ids: Optional[List[str]] = None,
+) -> None:
+    """Notify agent and/or buyers over WebSocket so UIs refetch."""
+    payload: Dict[str, Any] = {"decision_id": decision_id, "event": event}
+    if title:
+        payload["title"] = title
+    if agent_id:
+        await emit_realtime([agent_id], "decision_updated", payload)
+    if buyer_ids:
+        await emit_realtime(buyer_ids, "decision_updated", payload)
 
 
 async def create_decision(
@@ -101,6 +130,14 @@ async def send_decision(decision_id: str, agent_id: str) -> Dict[str, Any]:
     decision["status"] = "pending"
     decision["sent_at"] = now
     logger.info(f"Decision {decision_id} sent to {len(client_ids)} recipients")
+
+    buyer_ids = await _buyer_user_ids_from_client_ids(client_ids)
+    await _emit_decision_updated(
+        decision_id,
+        "sent",
+        title=decision.get("title"),
+        buyer_ids=buyer_ids,
+    )
     return decision
 
 
@@ -193,6 +230,17 @@ async def buyer_respond(
 
     decision["status"] = new_status
     logger.info(f"Decision {decision_id}: buyer {buyer_id} action={action}, new_status={new_status}")
+
+    recs = await db.decision_recipients.find({"decision_id": decision_id}, {"_id": 0, "client_id": 1}).to_list(200)
+    cids = [r["client_id"] for r in recs]
+    notify_buyers = await _buyer_user_ids_from_client_ids(cids)
+    await _emit_decision_updated(
+        decision_id,
+        "buyer_responded",
+        agent_id=decision["agent_id"],
+        title=decision.get("title"),
+        buyer_ids=notify_buyers,
+    )
     return decision
 
 
@@ -211,6 +259,15 @@ async def close_decision(decision_id: str, agent_id: str) -> Dict[str, Any]:
     )
 
     decision["status"] = "closed"
+    recs = await db.decision_recipients.find({"decision_id": decision_id}, {"_id": 0, "client_id": 1}).to_list(200)
+    cids = [r["client_id"] for r in recs]
+    buyer_ids = await _buyer_user_ids_from_client_ids(cids)
+    await _emit_decision_updated(
+        decision_id,
+        "closed",
+        title=decision.get("title"),
+        buyer_ids=buyer_ids,
+    )
     return decision
 
 
