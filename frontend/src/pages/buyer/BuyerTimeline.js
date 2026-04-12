@@ -1069,7 +1069,10 @@ export const BuyerTimeline = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [activeView, setActiveView] = useState('documents'); // 'documents', 'updates', 'team', 'vault', 'decisions'
+  const [activeView, setActiveView] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'documents';
+  });
   const [unreadCount, setUnreadCount] = useState(0);
   const [teamMembers, setTeamMembers] = useState([]);
   const [constructionTimeline, setConstructionTimeline] = useState(null);

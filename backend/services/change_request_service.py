@@ -354,6 +354,7 @@ async def _notify(user_id: str, title: str, message_text: str, notification_type
             title=title,
             message=message_text,
             notification_type=notification_type,
+            link="/buyer?tab=documents",
             metadata=data,
         )
     except Exception as e:

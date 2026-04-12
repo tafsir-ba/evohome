@@ -109,6 +109,15 @@ export const NotificationCenter = () => {
       markAsRead(notification.notification_id);
     }
     if (notification.link) {
+      // Handle tab-based navigation (e.g., /buyer?tab=vault)
+      const url = new URL(notification.link, window.location.origin);
+      if (url.pathname === '/buyer' || url.pathname.startsWith('/buyer')) {
+        const tab = url.searchParams.get('tab');
+        if (tab) {
+          // Navigate and set tab via custom event
+          window.dispatchEvent(new CustomEvent('navigate-tab', { detail: { tab } }));
+        }
+      }
       window.location.href = notification.link;
     }
   };

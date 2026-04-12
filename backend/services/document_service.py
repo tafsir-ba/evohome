@@ -322,7 +322,7 @@ async def send_document(document_id: str, agent_id: str, agent_user: dict) -> Di
                 title=f"New {doc['type'].title()} Received",
                 message=f"You have a new {doc['type']} for {doc['title']} - CHF {doc['amount']:,.2f}",
                 notification_type="document_sent",
-                link="/buyer",
+                link="/buyer?tab=documents",
             )
             delivery["notification_created"] = True
         except Exception as e:
@@ -690,7 +690,7 @@ async def _convert_quote_to_invoice(quote, agent_id, now):
             title="Invoice Ready",
             message=f"Invoice {invoice_number} for CHF {quote['amount']:,.2f} is ready for payment",
             notification_type="invoice_created",
-            link="/buyer",
+            link="/buyer?tab=documents",
         )
 
     return {"message": "Invoice created", "document_id": invoice_id, "document_number": invoice_number}

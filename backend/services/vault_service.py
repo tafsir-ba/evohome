@@ -81,7 +81,7 @@ async def create_vault_document(
             title="New Document Shared",
             message=f"Your agent shared '{title}' with you",
             notification_type="vault_document",
-            link="/buyer/vault",
+            link="/buyer?tab=vault",
             metadata={"vault_document_id": doc_id},
         )
         trace_side_effect("notification", target=bid, detail=f"vault_document shared: {title}")
