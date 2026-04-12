@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evohome Debug Console</title>
+<link rel="stylesheet" href="/api/internal/debug/css/styles.css"/>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="/api/internal/debug/js/api.js"></script>
+<script src="/api/internal/debug/js/traces.js"></script>
+<script src="/api/internal/debug/js/entity-inspector.js"></script>
+<script src="/api/internal/debug/js/verifications.js"></script>
+<script>
+let currentTab = 'traces';
+
+function render() {
+  if (!SECRET) { renderAuth(); return; }
+  document.getElementById('app').innerHTML = `
+    <div class="header">
+      <h1>Evohome Debug Console</h1>
+      <div class="status" id="health-status">connecting...</div>
+    </div>
+    <div class="tabs">
+      <div class="tab ${currentTab==='traces'?'active':''}" onclick="switchTab('traces')">Live Trace</div>
+      <div class="tab ${currentTab==='errors'?'active':''}" onclick="switchTab('errors')">Errors Only</div>
+      <div class="tab ${currentTab==='entity'?'active':''}" onclick="switchTab('entity')">Entity Inspector</div>
+      <div class="tab ${currentTab==='verify'?'active':''}" onclick="switchTab('verify')">Verification</div>
+    </div>
+    <div class="content" id="tab-content"></div>`;
+  loadHealth();
+  loadTab();
+}
+
+function renderAuth() {
+  document.getElementById('app').innerHTML = `
+    <div class="auth-gate">
+      <h1 style="color:var(--accent);font-size:18px">Evohome Debug Console</h1>
+      <p style="color:var(--text-dim)">Enter DEBUG_SECRET to continue</p>
+      <input type="password" id="secret-input" placeholder="DEBUG_SECRET" onkeydown="if(event.key==='Enter')doAuth()"/>
+      <button onclick="doAuth()">Authenticate</button>
+    </div>`;
+}
+
+function doAuth() {
+  setSecret(document.getElementById('secret-input').value);
+  render();
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => {
+    const label = t.textContent.trim().toLowerCase();
+    t.classList.toggle('active',
+      (tab === 'traces' && label === 'live trace') ||
+      (tab === 'errors' && label === 'errors only') ||
+      (tab === 'entity' && label === 'entity inspector') ||
+      (tab === 'verify' && label === 'verification')
+    );
+  });
+  loadTab();
+}
+
+async function loadHealth() {
+  const d = await apiFetch('/health');
+  const el = document.getElementById('health-status');
+  if (d && el) el.innerHTML = `<span style="color:var(--green)">${d.trace_count} traces</span>`;
+}
+
+async function loadTab() {
+  const el = document.getElementById('tab-content');
+  if (!el) return;
+  if (currentTab === 'traces') await loadTraces(el);
+  else if (currentTab === 'errors') await loadTraces(el, 'errors');
+  else if (currentTab === 'entity') loadEntityForm(el);
+  else if (currentTab === 'verify') await loadVerifications(el);
+}
+
+render();
+</script>
+</body>
+</html>

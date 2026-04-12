@@ -20,6 +20,9 @@ router = APIRouter()
 
 DEBUG_SECRET = os.environ.get("DEBUG_SECRET", "")
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+DEBUG_STATIC_DIR = os.path.join(STATIC_DIR, "debug")
+
+MIME_MAP = {".css": "text/css", ".js": "application/javascript"}
 
 
 async def require_debug_auth(request: Request):
@@ -38,10 +41,28 @@ async def require_debug_auth(request: Request):
 @router.get("/internal/debug")
 async def debug_console():
     """Serve the standalone debug console HTML."""
-    html_path = os.path.join(STATIC_DIR, "debug.html")
+    html_path = os.path.join(DEBUG_STATIC_DIR, "index.html")
     if not os.path.exists(html_path):
         raise HTTPException(status_code=404, detail="Debug console not found")
     return FileResponse(html_path, media_type="text/html")
+
+
+@router.get("/internal/debug/css/{filename}")
+async def debug_css(filename: str):
+    """Serve debug console CSS assets."""
+    filepath = os.path.join(DEBUG_STATIC_DIR, "css", filename)
+    if not os.path.exists(filepath) or not filename.endswith(".css"):
+        raise HTTPException(status_code=404)
+    return FileResponse(filepath, media_type="text/css")
+
+
+@router.get("/internal/debug/js/{filename}")
+async def debug_js(filename: str):
+    """Serve debug console JS assets."""
+    filepath = os.path.join(DEBUG_STATIC_DIR, "js", filename)
+    if not os.path.exists(filepath) or not filename.endswith(".js"):
+        raise HTTPException(status_code=404)
+    return FileResponse(filepath, media_type="application/javascript")
 
 
 @router.get("/internal/debug/health")
