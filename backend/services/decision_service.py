@@ -44,6 +44,102 @@ async def _emit_decision_updated(
         await emit_realtime(buyer_ids, "decision_updated", payload)
 
 
+async def resolve_recipient_client_ids_for_send(decision: Dict[str, Any], agent_id: str) -> List[str]:
+    """
+    Who should receive this decision when sent: explicit clients, units, or whole project.
+    """
+    cov = decision.get("coverage") or {}
+    ctype = str(cov.get("type") or "project").lower()
+    explicit = cov.get("client_ids") or []
+    unit_ids = cov.get("unit_ids") or []
+    pid = decision.get("project_id")
+    if not pid:
+        return []
+
+    if ctype == "clients":
+        return list(dict.fromkeys(explicit)) if explicit else []
+
+    if ctype == "units" or unit_ids:
+        if not unit_ids:
+            return []
+        clients = await db.clients.find(
+            {"project_id": pid, "agent_id": agent_id, "unit_id": {"$in": unit_ids}},
+            {"_id": 0, "client_id": 1},
+        ).to_list(200)
+        return [c["client_id"] for c in clients]
+
+    # project-wide
+    clients = await db.clients.find(
+        {"project_id": pid, "agent_id": agent_id},
+        {"_id": 0, "client_id": 1},
+    ).to_list(200)
+    return [c["client_id"] for c in clients]
+
+
+def _client_should_receive_open_decision(client: Dict[str, Any], decision: Dict[str, Any]) -> bool:
+    """Whether a client record should have a recipient row for this open (sent) decision."""
+    cov = decision.get("coverage") or {}
+    ctype = str(cov.get("type") or "project").lower()
+    explicit = cov.get("client_ids") or []
+    unit_ids = cov.get("unit_ids") or []
+    cid = client.get("client_id")
+    if not cid or client.get("project_id") != decision.get("project_id"):
+        return False
+
+    if ctype == "clients":
+        return cid in explicit if explicit else False
+
+    if ctype == "units" or unit_ids:
+        u = client.get("unit_id")
+        return bool(u and unit_ids and u in unit_ids)
+
+    return True
+
+
+async def sync_missing_decision_recipients_for_client_ids(client_ids: List[str]) -> int:
+    """
+    Backfill decision_recipients for clients added after a decision was sent (project / unit coverage).
+    Idempotent. Returns number of new rows inserted.
+    """
+    inserted = 0
+    for cid in client_ids:
+        client = await db.clients.find_one(
+            {"client_id": cid},
+            {"_id": 0, "client_id": 1, "project_id": 1, "agent_id": 1, "unit_id": 1},
+        )
+        if not client or not client.get("project_id"):
+            continue
+
+        open_decisions = await db.decisions.find(
+            {
+                "project_id": client["project_id"],
+                "status": {"$in": ["pending", "Change Requested"]},
+                "sent_at": {"$ne": None},
+            },
+            {"_id": 0},
+        ).to_list(100)
+
+        for d in open_decisions:
+            if not _client_should_receive_open_decision(client, d):
+                continue
+            exists = await db.decision_recipients.find_one(
+                {"decision_id": d["decision_id"], "client_id": cid}
+            )
+            if exists:
+                continue
+            await db.decision_recipients.insert_one(
+                {
+                    "decision_id": d["decision_id"],
+                    "client_id": cid,
+                    "status": "pending",
+                    "responded_at": None,
+                    "comment": None,
+                }
+            )
+            inserted += 1
+    return inserted
+
+
 async def create_decision(
     agent_id: str,
     project_id: str,
@@ -104,15 +200,9 @@ async def send_decision(decision_id: str, agent_id: str) -> Dict[str, Any]:
         {"$set": {"status": "pending", "sent_at": now, "updated_at": now}}
     )
 
-    # Create recipient records for tracking
-    client_ids = decision["coverage"].get("client_ids", [])
-    if not client_ids:
-        # If coverage is project-wide, get all clients in the project
-        clients = await db.clients.find(
-            {"project_id": decision["project_id"], "agent_id": agent_id},
-            {"_id": 0, "client_id": 1}
-        ).to_list(100)
-        client_ids = [c["client_id"] for c in clients]
+    # Create recipient records for tracking (project / clients / units)
+    decision = await get_decision(decision_id) or decision
+    client_ids = await resolve_recipient_client_ids_for_send(decision, agent_id)
 
     for cid in client_ids:
         existing = await db.decision_recipients.find_one(
@@ -390,6 +480,8 @@ async def list_buyer_decisions(buyer_id: str) -> List[Dict[str, Any]]:
 
     if not client_ids:
         return []
+
+    await sync_missing_decision_recipients_for_client_ids(client_ids)
 
     # Find decisions where buyer is a recipient
     recipient_records = await db.decision_recipients.find(

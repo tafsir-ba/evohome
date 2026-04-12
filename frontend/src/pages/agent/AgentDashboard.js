@@ -53,7 +53,11 @@ export const AgentDashboard = () => {
   // WebSocket for real-time updates
   const handleWebSocketMessage = useCallback((message) => {
     // Refresh stats when buyer takes action on documents
-    if (['quote_approved', 'quote_rejected', 'change_requested', 'payment_confirmed'].includes(message.type)) {
+    if (
+      ['quote_approved', 'quote_rejected', 'change_requested', 'payment_confirmed', 'decision_updated'].includes(
+        message.type
+      )
+    ) {
       fetchStats();
     }
   }, [fetchStats]);

@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
 import { useDataContext } from '../../context/DataContext';
+import { useAuth } from '../../context/AuthContext';
+import { useWebSocket } from '../../hooks/useWebSocket';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -57,6 +59,7 @@ const STATUS_CONFIG = {
 
 export const AgentDecisions = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { projects } = useDataContext();
   const [decisions, setDecisions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -79,7 +82,7 @@ export const AgentDecisions = () => {
   const [sendingId, setSendingId] = useState(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
-  const fetchDecisions = async () => {
+  const fetchDecisions = useCallback(async () => {
     try {
       const res = await fetch(`${API}/decisions`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
@@ -91,9 +94,16 @@ export const AgentDecisions = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchDecisions(); }, []);
+  const handleDecisionSocket = useCallback((message) => {
+    if (message.type === 'decision_updated') {
+      fetchDecisions();
+    }
+  }, [fetchDecisions]);
+  useWebSocket(user?.user_id, handleDecisionSocket);
+
+  useEffect(() => { fetchDecisions(); }, [fetchDecisions]);
 
   const fetchProjectClients = async (projectId) => {
     if (!projectId) { setClients([]); return; }

@@ -8,6 +8,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from database import db
 from services import file_service
+from services.decision_service import sync_missing_decision_recipients_for_client_ids
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,8 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
         return _empty_portal()
 
     client_ids = [c["client_id"] for c in clients]
+    await sync_missing_decision_recipients_for_client_ids(client_ids)
+
     primary_client = clients[0]
     project_id = primary_client.get("project_id")
     unit_id = primary_client.get("unit_id")
@@ -85,32 +88,47 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
         } for cr in crs]
 
     # ── Step 6: Decisions requiring buyer response ──
-    # Query via decision_recipients (linked by client_id)
+    # Query via decision_recipients (linked by client_id); group by decision for multi-client buyers
     pending_recipients = await db.decision_recipients.find(
         {"client_id": {"$in": client_ids}},
         {"_id": 0}
-    ).to_list(50)
-    recipient_map = {r["decision_id"]: r for r in pending_recipients}
-    decision_ids = list(recipient_map.keys())
-    
+    ).to_list(200)
+    by_decision: Dict[str, List[Dict[str, Any]]] = {}
+    for r in pending_recipients:
+        did = r.get("decision_id")
+        if did:
+            by_decision.setdefault(did, []).append(r)
+    decision_ids = list(by_decision.keys())
+
     decisions = []
     if decision_ids:
         decisions_raw = await db.decisions.find(
-            {"decision_id": {"$in": decision_ids}},
+            {
+                "decision_id": {"$in": decision_ids},
+                "status": {"$nin": ["draft"]},
+            },
             {"_id": 0}
         ).sort("created_at", -1).to_list(50)
-        decisions = [{
-            "decision_id": d["decision_id"],
-            "title": d.get("title", ""),
-            "description": d.get("description", ""),
-            "options": d.get("options", []),
-            "status": d.get("status"),
-            "buyer_status": recipient_map.get(d["decision_id"], {}).get("status", "pending"),
-            "deadline": d.get("deadline"),
-            "created_at": d.get("created_at"),
-            "external_link": d.get("external_link"),
-            "attachments": d.get("attachments", []),
-        } for d in decisions_raw]
+        for d in decisions_raw:
+            recs = [
+                r for r in by_decision.get(d["decision_id"], [])
+                if r.get("client_id") in client_ids
+            ]
+            pending_rec = next((x for x in recs if x.get("status") == "pending"), None)
+            chosen = pending_rec or (recs[0] if recs else None)
+            buyer_status = chosen.get("status", "pending") if chosen else "pending"
+            decisions.append({
+                "decision_id": d["decision_id"],
+                "title": d.get("title", ""),
+                "description": d.get("description", ""),
+                "options": d.get("options", []),
+                "status": d.get("status"),
+                "buyer_status": buyer_status,
+                "deadline": d.get("deadline"),
+                "created_at": d.get("created_at"),
+                "external_link": d.get("external_link"),
+                "attachments": d.get("attachments", []),
+            })
 
     # ── Step 7: Team members on buyer's project ──
     team = []
