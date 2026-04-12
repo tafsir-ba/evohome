@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { useDataContext } from '../context/DataContext';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import {
@@ -73,6 +72,17 @@ const isImageFile = (filename) => {
   return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
 };
 
+/** One text block for display (legacy rows may have title + content). */
+const getActivityPostBody = (activity) => {
+  const t = activity.title?.trim();
+  const c = activity.content?.trim();
+  if (t && c) return `${t}\n\n${c}`;
+  return c || t || '';
+};
+
+const imageUrlLooksLikeImage = (url) =>
+  url && /\.(jpe?g|png|gif|webp|bmp|svg)(\?|#|$)/i.test(url);
+
 // Helper: get auth headers for fetch calls
 const getAuthHeaders = () => {
   const token = localStorage.getItem('auth_token');
@@ -89,18 +99,18 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
   const [deleting, setDeleting] = useState(false);
   const [replies, setReplies] = useState(activity.replies || []);
   const [loadingReplies, setLoadingReplies] = useState(false);
-  
+
   const config = TYPE_CONFIG[activity.type] || TYPE_CONFIG.message;
   const Icon = config.icon;
   const isDraft = activity.is_draft;
-  
-  // Check if the attachment is an image
-  const hasImageAttachment = activity.file_name && isImageFile(activity.file_name);
-  const imageUrl = hasImageAttachment && activity.file_url 
-    ? `${process.env.REACT_APP_BACKEND_URL}${activity.file_url}` 
-    : null;
-  
-  // Lazy-load replies when expanding
+  const postBody = getActivityPostBody(activity);
+  const fileUrlFull = activity.file_url ? `${process.env.REACT_APP_BACKEND_URL}${activity.file_url}` : null;
+  const hasImageAttachment =
+    activity.type === 'image' ||
+    (activity.file_name && isImageFile(activity.file_name)) ||
+    imageUrlLooksLikeImage(fileUrlFull);
+  const imageUrl = hasImageAttachment && fileUrlFull ? fileUrlFull : null;
+
   const fetchReplies = async () => {
     if (replies.length > 0 || !activity.reply_count) return;
     setLoadingReplies(true);
@@ -120,6 +130,30 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
     }
   };
 
+  useEffect(() => {
+    if (isAgent || !activity.reply_count) return;
+    if ((activity.replies || []).length > 0) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingReplies(true);
+      try {
+        const res = await fetch(`${API}/activities/${activity.activity_id}`, {
+          credentials: 'include',
+          headers: getAuthHeaders()
+        });
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setReplies(data.replies || []);
+        }
+      } catch (e) {
+        console.error('Failed to fetch replies:', e);
+      } finally {
+        if (!cancelled) setLoadingReplies(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAgent, activity.activity_id, activity.reply_count]);
+
   const handleExpand = () => {
     const next = !expanded;
     setExpanded(next);
@@ -134,8 +168,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
     try {
       await onReply(activity.activity_id, replyText);
       setReplyText('');
-      setShowReplyInput(false);
-      // Refresh replies after sending
+      if (isAgent) setShowReplyInput(false);
       setLoadingReplies(true);
       const res = await fetch(`${API}/activities/${activity.activity_id}`, {
         credentials: 'include',
@@ -171,6 +204,106 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
     }
   };
 
+  /* —— Buyer: simple social-style card (image → text → comments) —— */
+  if (!isAgent) {
+    return (
+      <Card
+        className="border-border rounded-xl overflow-hidden shadow-sm"
+        data-testid={`activity-card-${activity.activity_id}`}
+      >
+        <CardContent className="p-0">
+          <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">{activity.author_name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {formatDate(activity.created_at)}
+                {activity.unit_reference ? (
+                  <span className="text-muted-foreground"> · {activity.unit_reference}</span>
+                ) : null}
+              </p>
+            </div>
+          </div>
+
+          {hasImageAttachment && imageUrl && !imageError && (
+            <div className="mt-2 border-y border-border bg-muted/30">
+              <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="block" data-testid={`image-preview-${activity.activity_id}`}>
+                <img
+                  src={imageUrl}
+                  alt=""
+                  className="w-full max-h-[min(70vh,520px)] object-contain bg-muted/20"
+                  onError={() => setImageError(true)}
+                  loading="lazy"
+                />
+              </a>
+            </div>
+          )}
+
+          {activity.file_name && (!hasImageAttachment || imageError) && fileUrlFull && (
+            <div className="mx-4 mt-3 p-3 rounded-lg border border-border bg-muted/40 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm font-medium truncate">{activity.file_name}</span>
+                {activity.file_size ? (
+                  <span className="text-xs text-muted-foreground flex-shrink-0 hidden sm:inline">
+                    {(activity.file_size / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                ) : null}
+              </div>
+              <Button variant="outline" size="sm" className="flex-shrink-0" asChild>
+                <a href={fileUrlFull} target="_blank" rel="noopener noreferrer" data-testid={`download-file-${activity.activity_id}`}>
+                  <Download className="w-4 h-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Open</span>
+                </a>
+              </Button>
+            </div>
+          )}
+
+          {postBody ? (
+            <div className="px-4 py-3">
+              <p className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed">{postBody}</p>
+            </div>
+          ) : null}
+
+          <div className="border-t border-border bg-muted/15 px-4 py-3 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Comments</p>
+            {loadingReplies && replies.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading…
+              </div>
+            ) : null}
+            {replies.map((reply) => (
+              <div key={reply.reply_id} className="rounded-lg bg-background/80 border border-border/60 px-3 py-2">
+                <p className="text-sm text-foreground">{reply.content}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {reply.author_name}
+                  {reply.author_role ? ` · ${reply.author_role}` : ''} · {formatDate(reply.created_at)}
+                </p>
+              </div>
+            ))}
+            {canReply ? (
+              <div className="space-y-2 pt-1">
+                <Textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Write a comment…"
+                  rows={3}
+                  className="resize-none text-sm"
+                  data-testid={`reply-input-${activity.activity_id}`}
+                />
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={handleReply} disabled={!replyText.trim() || replying} data-testid={`send-reply-${activity.activity_id}`}>
+                    {replying ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Comment'}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className={cn(
       "border-border rounded-lg overflow-hidden hover:shadow-md transition-shadow",
@@ -201,10 +334,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
                   </span>
                 )}
               </div>
-              <h3 className="font-semibold text-foreground mt-1 leading-tight text-sm sm:text-base break-words">
-                {activity.title || 'Update'}
-              </h3>
-              <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 truncate">
+              <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 truncate">
                 {activity.author_name} · {formatDate(activity.created_at)}
               </p>
             </div>
@@ -281,27 +411,17 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
       </CardHeader>
       
       <CardContent className="pt-0 px-3 sm:px-6">
-        {/* Content preview */}
-        {activity.content && (
-          <p className={cn(
-            "text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap break-words",
-            !expanded && "line-clamp-3"
-          )}>
-            {activity.content}
-          </p>
-        )}
-        
-        {/* Image Preview - visual display for image attachments */}
+        {/* Image first (social-style), then text */}
         {hasImageAttachment && imageUrl && !imageError && (
           <div className="mt-3 rounded-lg overflow-hidden bg-muted/30">
-            <a 
-              href={imageUrl} 
-              target="_blank" 
+            <a
+              href={imageUrl}
+              target="_blank"
               rel="noopener noreferrer"
               className="block"
               data-testid={`image-preview-${activity.activity_id}`}
             >
-              <img 
+              <img
                 src={imageUrl}
                 alt={activity.file_name || 'Image attachment'}
                 className="w-full max-h-96 object-contain cursor-pointer hover:opacity-90 transition-opacity"
@@ -309,22 +429,17 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
                 loading="lazy"
               />
             </a>
-            <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
-              <span className="text-xs text-muted-foreground truncate">{activity.file_name}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                asChild
-              >
-                <a href={imageUrl} download target="_blank" rel="noopener noreferrer">
-                  <Download className="w-3 h-3 mr-1" />
-                  Download
-                </a>
-              </Button>
-            </div>
           </div>
         )}
+
+        {postBody ? (
+          <p className={cn(
+            'text-xs sm:text-sm text-foreground whitespace-pre-wrap break-words mt-3',
+            !expanded && 'line-clamp-4'
+          )}>
+            {postBody}
+          </p>
+        ) : null}
         
         {/* File attachment - for non-image files or failed image loads */}
         {activity.file_name && (!hasImageAttachment || imageError) && (
@@ -489,7 +604,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
   
   // Edit state
   const [editingActivity, setEditingActivity] = useState(null);
-  const [editFormData, setEditFormData] = useState({ title: '', content: '' });
+  const [editFormData, setEditFormData] = useState({ content: '' });
   const [saving, setSaving] = useState(false);
   
   // Delete confirmation state  
@@ -658,8 +773,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
   const handleEditActivity = (activity) => {
     setEditingActivity(activity);
     setEditFormData({
-      title: activity.title || '',
-      content: activity.content || ''
+      content: getActivityPostBody(activity),
     });
   };
 
@@ -672,7 +786,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
-        body: JSON.stringify(editFormData)
+        body: JSON.stringify({ title: '', content: editFormData.content })
       });
 
       if (res.ok) {
@@ -902,28 +1016,18 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
           <DialogHeader>
             <DialogTitle>Edit Activity</DialogTitle>
             <DialogDescription>
-              Update the title and content of this activity.
+              Edit the text of this post. Attachments stay the same.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-title">Title</Label>
-              <Input
-                id="edit-title"
-                value={editFormData.title}
-                onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                placeholder="Activity title"
-                data-testid="edit-activity-title"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-content">Content</Label>
+              <Label htmlFor="edit-content">Post</Label>
               <Textarea
                 id="edit-content"
                 value={editFormData.content}
                 onChange={(e) => setEditFormData({ ...editFormData, content: e.target.value })}
-                placeholder="Activity content"
-                rows={4}
+                placeholder="Post text"
+                rows={6}
                 data-testid="edit-activity-content"
               />
             </div>
@@ -951,8 +1055,9 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
           </DialogHeader>
           {deleteConfirm.activity && (
             <div className="p-3 bg-muted rounded-lg">
-              <p className="font-medium">{deleteConfirm.activity.title || 'Untitled'}</p>
-              <p className="text-sm text-muted-foreground truncate">{deleteConfirm.activity.content}</p>
+              <p className="text-sm text-muted-foreground line-clamp-3">
+                {getActivityPostBody(deleteConfirm.activity) || 'This post'}
+              </p>
             </div>
           )}
           <DialogFooter>

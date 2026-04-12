@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -44,7 +43,6 @@ export const CreateActivityDialog = ({
 }) => {
   const [formData, setFormData] = useState({
     type: 'message',
-    title: '',
     content: '',
     project_id: '',
     unit_id: '',
@@ -72,7 +70,7 @@ export const CreateActivityDialog = ({
       return;
     }
     if ((formData.type === 'image' || formData.type === 'file') && files.length === 0) {
-      toast.error(`Please upload ${formData.type === 'image' ? 'an image' : 'a file'}`);
+      toast.error(`Please upload ${formData.type === 'image' ? 'an image' : 'a document'}`);
       return;
     }
 
@@ -83,13 +81,11 @@ export const CreateActivityDialog = ({
       for (let i = 0; i < filesToUpload.length; i++) {
         const currentFile = filesToUpload[i];
         const form = new FormData();
-        form.append('type', formData.type);
+        const apiType = formData.type === 'file' ? 'pdf' : formData.type;
+        form.append('type', apiType);
         form.append('project_id', formData.project_id);
         form.append('client_ids', formData.client_ids.join(','));
 
-        if (formData.title && (i === 0 || filesToUpload.length === 1)) {
-          form.append('title', formData.title);
-        }
         if (formData.content && (i === 0 || filesToUpload.length === 1)) {
           form.append('content', formData.content);
         }
@@ -112,7 +108,7 @@ export const CreateActivityDialog = ({
 
       toast.success(files.length > 1 ? `${files.length} images posted` : 'Activity posted');
       onOpenChange(false);
-      setFormData({ type: 'message', title: '', content: '', project_id: '', unit_id: '', client_ids: [] });
+      setFormData({ type: 'message', content: '', project_id: '', unit_id: '', client_ids: [] });
       setFiles([]);
       if (onCreated) onCreated();
     } catch (error) {
@@ -128,7 +124,7 @@ export const CreateActivityDialog = ({
         <DialogHeader>
           <DialogTitle>New Activity Post</DialogTitle>
           <DialogDescription>
-            Send an update, document, or status to your clients.
+            One post: write your update, add a photo or file if you want, choose who receives it.
           </DialogDescription>
         </DialogHeader>
 
@@ -240,35 +236,21 @@ export const CreateActivityDialog = ({
             </div>
           )}
 
-          {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="title">Title</Label>
-            <Input
-              id="title"
-              value={formData.title}
-              onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
-              placeholder="Optional title for this post"
-              data-testid="activity-title-input"
-            />
-          </div>
-
-          {/* Content */}
+          {/* Single post body (caption / message) */}
           <div className="space-y-2">
             <Label htmlFor="content">
-              {formData.type === 'message' || formData.type === 'status' ? 'Message *' : 'Description'}
+              {formData.type === 'message' || formData.type === 'status'
+                ? 'Post'
+                : formData.type === 'image'
+                ? 'Caption (optional)'
+                : 'Note (optional)'}
             </Label>
             <Textarea
               id="content"
               value={formData.content}
               onChange={(e) => setFormData((prev) => ({ ...prev, content: e.target.value }))}
-              placeholder={
-                formData.type === 'image'
-                  ? 'Optional description for the image...'
-                  : formData.type === 'file'
-                  ? 'Optional description for the document...'
-                  : 'Write your message...'
-              }
-              rows={4}
+              placeholder="What's new with the project?"
+              rows={5}
               data-testid="activity-content-input"
             />
           </div>
