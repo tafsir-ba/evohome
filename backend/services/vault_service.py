@@ -97,8 +97,24 @@ async def list_vault_documents(agent_id: str, project_id: Optional[str] = None) 
 
 
 async def list_buyer_vault(buyer_id: str) -> List[Dict[str, Any]]:
+    # Find all client_ids linked to this buyer
+    buyer_clients = await db.clients.find(
+        {"buyer_id": buyer_id}, {"_id": 0, "client_id": 1}
+    ).to_list(100)
+    buyer_client_ids = [c["client_id"] for c in buyer_clients]
+
+    # Match by buyer_ids OR by client_ids (handles race condition where buyer registered after doc was shared)
+    query = {"access_level": "shared"}
+    if buyer_client_ids:
+        query["$or"] = [
+            {"buyer_ids": buyer_id},
+            {"client_ids": {"$in": buyer_client_ids}},
+        ]
+    else:
+        query["buyer_ids"] = buyer_id
+
     return await db.vault_documents.find(
-        {"buyer_ids": buyer_id}, {"_id": 0}
+        query, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
 
 

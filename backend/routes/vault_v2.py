@@ -20,6 +20,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+
+async def _buyer_can_access_vault(buyer_id: str, doc: dict) -> bool:
+    """Check if buyer can access vault doc via buyer_ids or client linkage."""
+    if buyer_id in doc.get("buyer_ids", []):
+        return True
+    buyer_clients = await db.clients.find(
+        {"buyer_id": buyer_id}, {"_id": 0, "client_id": 1}
+    ).to_list(100)
+    buyer_client_ids = {c["client_id"] for c in buyer_clients}
+    return bool(buyer_client_ids & set(doc.get("client_ids", [])))
+
+
+
 @router.post("/vault/upload")
 async def upload_vault_document(
     file: UploadFile = File(...),
@@ -102,7 +115,7 @@ async def get_vault_document(vault_document_id: str, user: dict = Depends(get_cu
 
     if user["role"] == "agent" and doc.get("agent_id") != user["user_id"]:
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
-    if user["role"] == "buyer" and user["user_id"] not in doc.get("buyer_ids", []):
+    if user["role"] == "buyer" and not await _buyer_can_access_vault(user["user_id"], doc):
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
 
     return doc
@@ -134,7 +147,7 @@ async def download_vault_document(vault_document_id: str, user: dict = Depends(g
 
     if user["role"] == "agent" and doc.get("agent_id") != user["user_id"]:
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
-    if user["role"] == "buyer" and user["user_id"] not in doc.get("buyer_ids", []):
+    if user["role"] == "buyer" and not await _buyer_can_access_vault(user["user_id"], doc):
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
 
     stored = doc.get("stored_filename")
