@@ -207,6 +207,9 @@ export const AuthProvider = ({ children }) => {
 
   // Set user directly (used after OAuth callback)
   const setAuthUser = useCallback((userData) => {
+    if (userData?.token) {
+      localStorage.setItem('auth_token', userData.token);
+    }
     setUser(userData);
   }, []);
 

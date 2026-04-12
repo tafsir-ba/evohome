@@ -116,8 +116,9 @@ export const AgentDocumentUpload = () => {
   };
 
   const handleFileSelect = async (selectedFile) => {
-    if (!selectedFile) return;
-    if (selectedFile.type !== 'application/pdf') {
+    const fileToUpload = selectedFile || file;
+    if (!fileToUpload) return;
+    if (fileToUpload.type !== 'application/pdf') {
       toast.error('Please upload a PDF file');
       return;
     }
@@ -125,11 +126,10 @@ export const AgentDocumentUpload = () => {
       toast.error('Please select a client first');
       return;
     }
-    setFile(selectedFile);
     setUploading(true);
     
     const formData = new FormData();
-    formData.append('file', selectedFile);
+    formData.append('file', fileToUpload);
     formData.append('client_id', selectedClient);
     formData.append('doc_type', docType);
 
@@ -356,17 +356,13 @@ export const AgentDocumentUpload = () => {
         {!isEditMode && !docData && (
           <PdfUploadZone
             file={file}
+            setFile={setFile}
             dragActive={dragActive}
+            setDragActive={setDragActive}
+            onUpload={handleFileSelect}
             uploading={uploading}
-            onFileSelect={handleFileSelect}
-            onDragEnter={() => setDragActive(true)}
-            onDragLeave={() => setDragActive(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragActive(false);
-              handleFileSelect(e.dataTransfer.files[0]);
-            }}
             disabled={!selectedClient}
+            docType={docType}
           />
         )}
 

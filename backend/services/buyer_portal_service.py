@@ -85,19 +85,30 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
         } for cr in crs]
 
     # ── Step 6: Decisions requiring buyer response ──
-    decisions_raw = await db.decisions.find(
-        {"buyer_id": buyer_id, "status": "pending"},
+    # Query via decision_recipients (linked by client_id)
+    pending_recipients = await db.decision_recipients.find(
+        {"client_id": {"$in": client_ids}, "status": "pending"},
         {"_id": 0}
-    ).sort("created_at", -1).to_list(50)
-    decisions = [{
-        "decision_id": d["decision_id"],
-        "title": d.get("title", ""),
-        "description": d.get("description", ""),
-        "options": d.get("options", []),
-        "status": d.get("status"),
-        "due_date": d.get("due_date"),
-        "created_at": d.get("created_at"),
-    } for d in decisions_raw]
+    ).to_list(50)
+    decision_ids = [r["decision_id"] for r in pending_recipients]
+    
+    decisions = []
+    if decision_ids:
+        decisions_raw = await db.decisions.find(
+            {"decision_id": {"$in": decision_ids}},
+            {"_id": 0}
+        ).sort("created_at", -1).to_list(50)
+        decisions = [{
+            "decision_id": d["decision_id"],
+            "title": d.get("title", ""),
+            "description": d.get("description", ""),
+            "options": d.get("options", []),
+            "status": d.get("status"),
+            "due_date": d.get("deadline"),
+            "created_at": d.get("created_at"),
+            "external_link": d.get("external_link"),
+            "attachments": d.get("attachments", []),
+        } for d in decisions_raw]
 
     # ── Step 7: Team members on buyer's project ──
     team = []
