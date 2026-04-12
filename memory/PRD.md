@@ -6,77 +6,79 @@
 - **Database**: MongoDB Atlas (`evohome_cmp`)
 - **Debug Console**: Standalone at /api/internal/debug (DEBUG_SECRET auth)
 
-## Production Debug & Verification System
+## 36-Item Verification Checklist — Executed April 12, 2026
 
-### Components Built
-1. **Request ID Middleware** — `req_xxxxxxxxxxxx` on every request, `X-Request-ID` response header
-2. **Canonical Error Normalizer** — all errors return `{error, message, request_id, source, details}`
-3. **Auto-Tracing Middleware** — all POST/PUT/PATCH/DELETE + critical GETs automatically traced
-4. **Trace Events Collection** — 30-day TTL, service_chain, db_mutations, side_effects
-5. **Debug API** — `/api/internal/debug/*` with DEBUG_SECRET bearer auth
-6. **Debug Console UI** — modular HTML/JS/CSS at `/api/internal/debug` with 4 tabs
+**Results: 35 PASSED / 0 FAILED / 1 UNTESTED (BUG-008: no legacy data)**
 
-### Auto-Extraction (Verified E2E)
-- Entity extraction from URL patterns (document, vault_document, change_request, decision, client, project)
-- Action derivation from method+path (document_create, cr_respond, vault_upload, etc.)
-- Response summary with state transitions (e.g., {status: "Change Requested", previous_status: "Sent"})
-- DB mutations per-request (collection, operation, entity_id)
-- Side effects (notifications, emails) logged in trace context
-- Related entities (CR → parent document linkage)
+### Organ 1: Upload/Media (10 items — 9 passed, 1 untested)
+| ID | Name | Status | Evidence |
+|----|------|--------|----------|
+| BUG-001 | Logo Upload API | PASSED | POST returns {url, filename, size}. HTTP 200. |
+| BUG-002 | Logo Display | PASSED | logo_url stored in GET /api/settings |
+| BUG-003 | Hero Image Upload | PASSED | Hero image stored on document |
+| BUG-004 | Buyer Hero Image | PASSED | Buyer timeline returns heroImageUrl |
+| BUG-005 | Vault Upload UI | PASSED | Returns vault_document_id. HTTP 200. |
+| BUG-006 | Vault Download | PASSED | Returns file. HTTP 200. |
+| BUG-007 | Vault Auth | PASSED | Unauthenticated returns HTTP 401 |
+| BUG-008 | Legacy Compat | UNTESTED | No pdf_path documents in DB |
+| BUG-009 | Upload Validation | PASSED | Wrong type rejected with canonical error |
+| BUG-010 | Upload Error Shape | PASSED | {error, message, request_id, source} |
 
-### Trace Coverage (All Mutating Paths)
-- document_create, document_send, document_reupload, document_revert_draft
-- document_action: approve, reject, request_change, confirm_payment, convert_to_invoice
-- change_request: create, respond, resolve, close
-- vault: upload, download
-- settings: logo upload/delete, hero image upload/delete
-- auth: login, register, logout
+### Organ 2: Client Context (10 items — 10 passed)
+| ID | Name | Status | Evidence |
+|----|------|--------|----------|
+| BUG-011 | Clients List Context | PASSED | project_name + unit_reference enriched |
+| BUG-012 | Client Detail Context | PASSED | **Fixed this session** — added enrichment to get_client |
+| BUG-013 | Client Preview Context | PASSED | formatContextSubtitle used |
+| BUG-014 | Project Endpoint | PASSED | GET /api/projects/{id} returns name |
+| BUG-015 | Formatter Consistency | PASSED | Zero inline patterns outside utils.js |
+| BUG-016 | Invoice Upload Parity | PASSED | Uses formatContextSubtitle |
+| BUG-017 | Quote List Format | PASSED | Uses formatDocContext |
+| BUG-018 | Invoice List Format | PASSED | Uses formatDocContext |
+| BUG-019 | Dashboard Format | PASSED | Uses formatDocContext |
+| BUG-020 | Decisions Format | PASSED | Uses formatClientContext |
 
-### Modular Debug Console
-```
-/app/backend/static/debug/
-├── index.html              # Shell
-├── css/styles.css          # Dark theme styles
-├── js/api.js               # Fetch + auth layer
-├── js/traces.js            # Live Trace + Errors tabs
-├── js/entity-inspector.js  # Entity Inspector tab
-└── js/verifications.js     # 36-item Verification Checklist
-```
+### Organ 3: Change Requests (12 items — 12 passed)
+| ID | Name | Status | Evidence |
+|----|------|--------|----------|
+| BUG-021 | CR Create | PASSED | Doc status → Change Requested |
+| BUG-022 | CR Reply | PASSED | CR status → under_review |
+| BUG-023 | CR Resolve | PASSED | Doc status → Sent (NOT Draft) |
+| BUG-024 | CR Notification - Create | PASSED | Agent notified (change_request_created) |
+| BUG-025 | CR Notification - Respond | PASSED | Buyer notified (change_request_response) |
+| BUG-026 | CR Notification - Resolve | PASSED | Buyer notified (change_request_resolved) |
+| BUG-027 | CR Close | PASSED | Terminal state: closed |
+| BUG-028 | CR State Guards | PASSED | Cannot respond to closed CR |
+| BUG-029 | Quote/Invoice Parity | PASSED | Same code path for both types |
+| BUG-030 | Buyer Thread Visibility | PASSED | Full thread via entity endpoint |
+| BUG-031 | Dashboard CR Aggregation | PASSED | Stats returns change_requests + count |
+| BUG-032 | Dashboard CR Navigation | PASSED | Links to /agent/quotes or /invoices by type |
 
-### Security
-- Path traversal protection (realpath containment check)
-- XSS escaping on user-input fields
-- DEBUG_SECRET bearer auth on all API endpoints
+### System (4 items — 4 passed)
+| ID | Name | Status | Evidence |
+|----|------|--------|----------|
+| BUG-033 | Canonical Error Shape | PASSED | {error, message, request_id, source} |
+| BUG-034 | Request ID Propagation | PASSED | x-request-id header on all responses |
+| BUG-035 | Trace Events | PASSED | 135 trace events in DB |
+| BUG-036 | Debug Console | PASSED | Accessible at /api/internal/debug |
 
-### Testing (Iteration 30)
-- Backend: 35/35 tests passed (auth, health, traces, entity inspector, verifications, static assets, path traversal)
-- Frontend: All 4 tabs verified via Playwright (auth gate, trace expand, entity inspect, verification update, filters, auto-refresh)
-
-## Organ Status
-| Organ | Status |
-|-------|--------|
-| 1. Upload/Media | Implemented, preview-verified |
-| 2. Client Context | Implemented, preview-verified |
-| 3. Change Request | Implemented, preview-verified |
-| Debug System | Implemented, modularized, tested (35/35 + UI) |
+## Bugs Found & Fixed During Checklist Execution
+1. **BUG-012**: `get_client()` returned raw DB doc without project_name/unit_reference enrichment. Fixed by adding project+unit lookups.
+2. **Missing trace coverage**: `confirm_payment` and `convert_to_invoice` had no trace instrumentation. Fixed.
+3. **Missing related_entities**: CR creation didn't link back to parent document. Fixed.
+4. **Missing response_summary**: `request_change` action didn't record state transition. Fixed.
 
 ## Test Accounts
 - Agent: agent@evohome-test.ch / Evohome2026!
 - Buyer: buyer@evohome-test.ch / Evohome2026!
 
 ## Remaining
-- P1: Fix Control Tower Dashboard CR Cards (move to /agent/home)
-- P1: Client Context formatting UI verification (AgentClientDetail.js, ClientPreview.js)
 - P1: Organ 4 — Control Tower Dashboard restructuring
 - P1: Organ 5 — Decisions rebuild
-- P2: Execute 36-item Verification Checklist via Debug Console
 - P2: Hook dependency warnings (74+ instances)
 - P3: Email digests, reporting/export
 - P3: Dead code cleanup (parseApiError in api.js)
-
-### Known Limitations
-- Debug console JS modules rely on global scope and implicit load order (not ES modules)
-- Orphaned test documents in DB: doc_1057cdb1c89d, doc_4ea1e9124d2b (with CRs, cannot delete)
+- P3: Refactor debug console JS to ES modules
 
 ---
 Last Updated: April 12, 2026

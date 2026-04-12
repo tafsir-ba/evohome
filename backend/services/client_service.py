@@ -57,7 +57,24 @@ async def create_client(
 
 
 async def get_client(client_id: str) -> Optional[Dict[str, Any]]:
-    return await db.clients.find_one({"client_id": client_id}, {"_id": 0})
+    client = await db.clients.find_one({"client_id": client_id}, {"_id": 0})
+    if not client:
+        return None
+    # Enrich with project name
+    if client.get("project_id"):
+        project = await db.projects.find_one(
+            {"project_id": client["project_id"]}, {"_id": 0, "name": 1}
+        )
+        if project:
+            client["project_name"] = project["name"]
+    # Enrich with unit reference
+    if client.get("unit_id"):
+        unit = await db.units.find_one(
+            {"unit_id": client["unit_id"]}, {"_id": 0, "unit_reference": 1}
+        )
+        if unit:
+            client["unit_reference"] = unit.get("unit_reference") or client.get("unit_reference")
+    return client
 
 
 async def list_clients_by_agent(agent_id: str) -> List[Dict[str, Any]]:
