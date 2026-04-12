@@ -458,13 +458,11 @@ export const AgentDocumentUpload = () => {
 
               {/* Actions */}
               <DocumentFormActions
-                onSave={() => handleSave(false)}
+                onSaveDraft={() => handleSave(false)}
                 onSend={() => handleSave(true)}
-                onClear={!isEditMode ? clearFile : undefined}
                 saving={saving}
                 sending={sending}
-                isEditMode={isEditMode}
-                docType={docType}
+                canSend={!!editedData.title && !!editedData.amount && !!selectedClient}
               />
             </CardContent>
           </Card>

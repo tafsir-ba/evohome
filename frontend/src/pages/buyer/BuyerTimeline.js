@@ -1382,7 +1382,11 @@ export const BuyerTimeline = () => {
               )}
               <div>
                 <h1 className="font-semibold text-foreground">
-                  {projectInfo?.unit_reference || t('buyer.yourProperty')}
+                  {projectInfo?.name 
+                    ? (projectInfo.unit_reference 
+                      ? `${projectInfo.name} — ${projectInfo.unit_reference}` 
+                      : projectInfo.name)
+                    : (projectInfo?.unit_reference || t('buyer.yourProperty'))}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {companyName}

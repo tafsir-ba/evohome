@@ -87,10 +87,11 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
     # ── Step 6: Decisions requiring buyer response ──
     # Query via decision_recipients (linked by client_id)
     pending_recipients = await db.decision_recipients.find(
-        {"client_id": {"$in": client_ids}, "status": "pending"},
+        {"client_id": {"$in": client_ids}},
         {"_id": 0}
     ).to_list(50)
-    decision_ids = [r["decision_id"] for r in pending_recipients]
+    recipient_map = {r["decision_id"]: r for r in pending_recipients}
+    decision_ids = list(recipient_map.keys())
     
     decisions = []
     if decision_ids:
@@ -104,7 +105,8 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
             "description": d.get("description", ""),
             "options": d.get("options", []),
             "status": d.get("status"),
-            "due_date": d.get("deadline"),
+            "buyer_status": recipient_map.get(d["decision_id"], {}).get("status", "pending"),
+            "deadline": d.get("deadline"),
             "created_at": d.get("created_at"),
             "external_link": d.get("external_link"),
             "attachments": d.get("attachments", []),
