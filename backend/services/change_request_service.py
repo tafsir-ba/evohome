@@ -167,9 +167,12 @@ async def respond_to_change_request(
         projection={"_id": 0},
     )
 
+    from core.trace import trace_service, trace_db_mutation, trace_side_effect
+    trace_service("services.change_request_service.respond_to_change_request")
+    trace_db_mutation("change_requests", "find_one_and_update", change_request_id)
+
     # Notify the other party
     if author_role == "agent":
-        # Notify buyer
         buyer_id = result.get("buyer_id") or result.get("created_by")
         if buyer_id and buyer_id != author_id:
             await _notify(
@@ -179,8 +182,8 @@ async def respond_to_change_request(
                 notification_type="change_request_response",
                 data={"change_request_id": change_request_id, "entity_type": result.get("entity_type"), "entity_id": result.get("entity_id")},
             )
+            trace_side_effect("notification", target=buyer_id, detail="change_request_response")
     elif author_role == "buyer":
-        # Notify agent
         agent_id = result.get("agent_id")
         if agent_id:
             await _notify(
@@ -190,6 +193,7 @@ async def respond_to_change_request(
                 notification_type="change_request_message",
                 data={"change_request_id": change_request_id, "entity_type": result.get("entity_type"), "entity_id": result.get("entity_id")},
             )
+            trace_side_effect("notification", target=agent_id, detail="change_request_message")
 
     logger.info(f"Response added to {change_request_id} by {author_id}")
     return result
@@ -236,12 +240,14 @@ async def resolve_change_request(
     if not result:
         raise ValueError(f"Change request {change_request_id} not found")
 
+    from core.trace import trace_service, trace_db_mutation, trace_side_effect
+    trace_service("services.change_request_service.resolve_change_request")
+    trace_db_mutation("change_requests", "find_one_and_update", change_request_id)
+
     # Revert entity status — ALWAYS to Sent for documents, never Draft
     collection = _get_entity_collection(result["entity_type"])
     id_field = _get_entity_id_field(result["entity_type"])
     if collection and id_field:
-        # Quote and invoice: revert to Sent (identical behavior)
-        # Decision: no status change (handled by decision service)
         revert_status = "Sent" if result["entity_type"] in ("invoice", "quote") else None
         update_fields = {"change_request_comment": None, "updated_at": now}
         if revert_status:
@@ -250,6 +256,7 @@ async def resolve_change_request(
             {id_field: result["entity_id"]},
             {"$set": update_fields}
         )
+        trace_db_mutation(collection, "update_one", result["entity_id"])
 
     # Notify buyer that CR is resolved
     buyer_id = result.get("buyer_id") or result.get("created_by")
@@ -261,6 +268,7 @@ async def resolve_change_request(
             notification_type="change_request_resolved",
             data={"change_request_id": change_request_id, "entity_type": result.get("entity_type"), "entity_id": result.get("entity_id")},
         )
+        trace_side_effect("notification", target=buyer_id, detail="change_request_resolved")
 
     logger.info(f"Change request {change_request_id} resolved by {resolved_by}")
     return result

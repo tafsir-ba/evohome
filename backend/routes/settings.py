@@ -177,9 +177,11 @@ async def upload_company_logo(
     user: dict = Depends(get_current_agent)
 ):
     """Upload company logo (Pro plan required)"""
-    from core.trace import set_trace_action, set_trace_entity, trace_db_mutation
+    from core.trace import set_trace_action, set_trace_entity, trace_db_mutation, set_trace_request_summary, trace_service
     set_trace_action("logo_upload")
     set_trace_entity("user", user['user_id'])
+    trace_service("routes.settings.upload_company_logo")
+    set_trace_request_summary({"filename": file.filename, "content_type": file.content_type})
     subscription_data = await get_subscription_status(user['user_id'])
     if subscription_data['plan_id'] not in ['pro', 'enterprise']:
         raise HTTPException(status_code=403, detail={"error": "plan_required", "message": "Logo upload requires Pro plan or higher"})
@@ -190,6 +192,7 @@ async def upload_company_logo(
         file_service.delete_file(user_doc['company_logo_stored_filename'])
 
     result = await file_service.save_logo(file, user['user_id'])
+    trace_service("services.file_service.save_logo")
 
     await db.users.update_one(
         {"user_id": user['user_id']},
@@ -199,6 +202,7 @@ async def upload_company_logo(
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
     )
+    trace_db_mutation("users", "update_one", user['user_id'])
 
     return {"url": result['url'], "filename": result['original_filename'], "size": result['file_size']}
 

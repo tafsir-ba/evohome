@@ -71,6 +71,10 @@ async def create_vault_document(
     await db.vault_documents.insert_one(doc)
     doc.pop("_id", None)
 
+    from core.trace import trace_service, trace_db_mutation, trace_side_effect
+    trace_service("services.vault_service.create_vault_document")
+    trace_db_mutation("vault_documents", "insert_one", doc_id)
+
     for bid in buyer_ids:
         await emit_notification(
             user_id=bid,
@@ -80,6 +84,7 @@ async def create_vault_document(
             link="/buyer/vault",
             metadata={"vault_document_id": doc_id},
         )
+        trace_side_effect("notification", target=bid, detail=f"vault_document shared: {title}")
 
     return doc
 

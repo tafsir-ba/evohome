@@ -33,8 +33,17 @@ async def upload_vault_document(
     user: dict = Depends(get_current_agent),
 ):
     """Upload a document to the vault."""
-    from core.trace import set_trace_action, set_trace_entity
+    from core.trace import set_trace_action, set_trace_entity, set_trace_request_summary, trace_service
+
     set_trace_action("vault_upload")
+    trace_service("routes.vault_v2.upload_vault_document")
+    set_trace_request_summary({
+        "title": title,
+        "category": category,
+        "access_level": access_level,
+        "project_id": project_id or None,
+        "client_count": len([c for c in client_ids.split(",") if c.strip()]),
+    })
     if project_id:
         project = await db.projects.find_one(
             {"project_id": project_id, "agent_id": user["user_id"]}
@@ -49,8 +58,9 @@ async def upload_vault_document(
             raise HTTPException(status_code=400, detail={"error": "not_found", "message": f"Client {cid} not found"})
 
     result = await file_service.save_vault_file(file)
+    trace_service("services.file_service.save_vault_file")
 
-    return await vault_service.create_vault_document(
+    doc = await vault_service.create_vault_document(
         agent_id=user["user_id"],
         project_id=project_id,
         client_ids=parsed_ids,
@@ -64,6 +74,9 @@ async def upload_vault_document(
         file_size=result["file_size"],
         content_type=result["content_type"],
     )
+
+    set_trace_entity("vault_document", doc.get("vault_document_id", ""))
+    return doc
 
 
 @router.get("/vault/documents")

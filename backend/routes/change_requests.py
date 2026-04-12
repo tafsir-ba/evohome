@@ -101,6 +101,11 @@ async def respond_to_change_request(
     user: dict = Depends(get_current_user),
 ):
     """Add a response to a change request."""
+    from core.trace import set_trace_action, set_trace_entity, set_trace_request_summary, trace_service
+    set_trace_action("cr_respond")
+    set_trace_entity("change_request", change_request_id)
+    set_trace_request_summary({"change_request_id": change_request_id, "message_length": len(body.message)})
+    trace_service("routes.change_requests.respond_to_change_request")
     try:
         role = user.get("role", "buyer")
         cr = await change_request_service.respond_to_change_request(
@@ -122,6 +127,11 @@ async def resolve_change_request(
     user: dict = Depends(get_current_agent),
 ):
     """Resolve a change request (agent only)."""
+    from core.trace import set_trace_action, set_trace_entity, set_trace_request_summary, trace_service
+    set_trace_action("cr_resolve")
+    set_trace_entity("change_request", change_request_id)
+    set_trace_request_summary({"change_request_id": change_request_id, "has_note": bool(body.resolution_note)})
+    trace_service("routes.change_requests.resolve_change_request")
     try:
         cr = await change_request_service.resolve_change_request(
             change_request_id=change_request_id,
@@ -139,6 +149,10 @@ async def close_change_request(
     user: dict = Depends(get_current_agent),
 ):
     """Close a change request (agent only)."""
+    from core.trace import set_trace_action, set_trace_entity, trace_service
+    set_trace_action("cr_close")
+    set_trace_entity("change_request", change_request_id)
+    trace_service("routes.change_requests.close_change_request")
     try:
         cr = await change_request_service.close_change_request(
             change_request_id=change_request_id,
