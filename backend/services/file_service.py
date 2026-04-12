@@ -27,7 +27,7 @@ SPACES_KEY = os.environ.get("SPACES_KEY", "")
 SPACES_SECRET = os.environ.get("SPACES_SECRET", "")
 SPACES_BUCKET = os.environ.get("SPACES_BUCKET", "")
 SPACES_REGION = os.environ.get("SPACES_REGION", "fra1")
-SPACES_ENDPOINT = f"https://{SPACES_REGION}.digitaloceanspaces.com"
+SPACES_ENDPOINT = os.environ.get("SPACES_ENDPOINT", f"https://{SPACES_REGION}.digitaloceanspaces.com")
 SPACES_CDN_URL = os.environ.get("SPACES_CDN_URL", f"https://{SPACES_BUCKET}.{SPACES_REGION}.digitaloceanspaces.com")
 SPACES_PREFIX = "uploads/"
 
