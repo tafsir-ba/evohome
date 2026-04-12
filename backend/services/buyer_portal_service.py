@@ -233,3 +233,54 @@ def _empty_portal() -> Dict[str, Any]:
         "construction_timeline": None,
         "unread_count": 0,
     }
+
+
+async def process_buyer_action(
+    buyer_id: str,
+    action: str,
+    document_id: str = None,
+    decision_id: str = None,
+    comment: str = None,
+    option_id: str = None,
+) -> Dict[str, Any]:
+    """
+    Single mutation handler for all buyer→agent actions.
+    Processes the action, then returns the updated portal state.
+    """
+    from services.document_service import document_action
+    from services.notification_service import create_notification
+
+    user = await db.users.find_one({"user_id": buyer_id}, {"_id": 0})
+    user_name = user.get("name", "") if user else ""
+
+    if action in ("approve", "reject", "request_change", "confirm_payment"):
+        if not document_id:
+            raise ValueError("document_id required for document actions")
+        result = await document_action(
+            document_id=document_id,
+            action=action,
+            user_id=buyer_id,
+            user_role="buyer",
+            user_name=user_name,
+            comment=comment,
+        )
+
+    elif action == "respond_decision":
+        if not decision_id:
+            raise ValueError("decision_id required")
+        await db.decisions.update_one(
+            {"decision_id": decision_id, "buyer_id": buyer_id},
+            {"$set": {"status": "responded", "response": option_id, "response_comment": comment}},
+        )
+
+    elif action == "mark_seen":
+        await db.notifications.update_many(
+            {"user_id": buyer_id, "read": False},
+            {"$set": {"read": True}},
+        )
+
+    else:
+        raise ValueError(f"Unknown action: {action}")
+
+    # Return fresh portal state after mutation
+    return await get_buyer_portal(buyer_id)

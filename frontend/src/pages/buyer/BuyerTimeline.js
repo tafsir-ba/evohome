@@ -1153,21 +1153,33 @@ export const BuyerTimeline = () => {
     fetchData();
   }, [fetchData]);
 
+  // Helper: send action through sync layer, get fresh portal state
+  const portalAction = async (actionData) => {
+    const res = await fetch(`${API}/buyer/portal/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      credentials: 'include',
+      body: JSON.stringify(actionData)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || err.detail || 'Action failed');
+    }
+    // Response is the updated portal — refresh all state
+    const portal = await res.json();
+    setEvents(portal.documents || []);
+    setProjectInfo(portal.project);
+    setVaultDocuments(portal.vault_files || []);
+    setBuyerDecisions(portal.decisions || []);
+    setUnreadCount(portal.unread_count || 0);
+    if (portal.team) setTeamMembers(portal.team);
+    return portal;
+  };
+
   // Mark activities as seen when viewing Updates tab
   useEffect(() => {
     if (activeView === 'updates') {
-      const markSeen = async () => {
-        try {
-          await fetch(`${API}/activities/mark-seen`, {
-            method: 'POST',
-            credentials: 'include'
-          });
-          setUnreadCount(0);
-        } catch (error) {
-          console.error('Failed to mark activities as seen:', error);
-        }
-      };
-      markSeen();
+      portalAction({ action: 'mark_seen' }).catch(() => {});
     }
   }, [activeView]);
 
@@ -1178,29 +1190,15 @@ export const BuyerTimeline = () => {
       setConfirmDialog({ open: true, type: action, eventId });
       return;
     }
-
     if (action === 'confirm_payment') {
       setConfirmDialog({ open: true, type: 'payment', eventId });
       return;
     }
-
     if (action === 'request_change' && comment) {
       setIsProcessing(true);
       try {
-        const res = await fetch(`${API}/documents/${eventId}/action`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-          credentials: 'include',
-          body: JSON.stringify({ action: 'request_change', comment })
-        });
-        
-        if (res.ok) {
-          toast.success('Question sent to your agent');
-          fetchData();
-        } else {
-          const err = await res.json();
-          throw new Error(err.detail || 'Failed to send question');
-        }
+        await portalAction({ action: 'request_change', document_id: eventId, comment });
+        toast.success('Question sent to your agent');
       } catch (error) {
         toast.error(error.message || 'Failed to send question');
       } finally {
@@ -1212,27 +1210,11 @@ export const BuyerTimeline = () => {
   const confirmAction = async () => {
     const { type, eventId } = confirmDialog;
     setIsProcessing(true);
-
     try {
-      const res = await fetch(`${API}/documents/${eventId}/action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        credentials: 'include',
-        body: JSON.stringify({ action: type === 'payment' ? 'confirm_payment' : type })
-      });
-
-      if (res.ok) {
-        const messages = {
-          'approve': 'Quote approved! Invoice will be generated.',
-          'reject': 'Quote declined',
-          'payment': 'Payment confirmed'
-        };
-        toast.success(messages[type] || 'Action completed');
-        fetchData();
-      } else {
-        const err = await res.json();
-        throw new Error(err.detail || 'Action failed');
-      }
+      const actionName = type === 'payment' ? 'confirm_payment' : type;
+      await portalAction({ action: actionName, document_id: eventId });
+      const messages = { 'approve': 'Quote approved! Invoice will be generated.', 'reject': 'Quote declined', 'payment': 'Payment confirmed' };
+      toast.success(messages[type] || 'Action completed');
     } catch (error) {
       toast.error(error.message || 'Action failed. Please try again.');
     } finally {
@@ -1770,19 +1752,8 @@ export const BuyerTimeline = () => {
         {activeView === 'decisions' && (
           <BuyerDecisionsView decisions={buyerDecisions} onRespond={async (decisionId, action, comment) => {
             try {
-              const res = await fetch(`${API}/decisions/${decisionId}/respond`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                credentials: 'include',
-                body: JSON.stringify({ action, comment }),
-              });
-              if (res.ok) {
-                toast.success(action === 'approved' ? 'Decision approved' : action === 'rejected' ? 'Decision declined' : 'Change request sent');
-                fetchData();
-              } else {
-                const err = await res.json();
-                toast.error(err.detail || 'Failed to respond');
-              }
+              await portalAction({ action: 'respond_decision', decision_id: decisionId, option_id: action, comment });
+              toast.success(action === 'approved' ? 'Decision approved' : action === 'rejected' ? 'Decision declined' : 'Change request sent');
             } catch {
               toast.error('Failed to respond');
             }

@@ -1,53 +1,45 @@
 # Evohome CMP — Product Requirements Document
 
 ## Architecture
-- **Backend**: FastAPI + Motor (MongoDB async) — canonical SSOT services, thin routes
+- **Backend**: FastAPI + Motor (MongoDB async)
 - **Frontend**: React 18 + TailwindCSS + Shadcn/UI
 - **Database**: MongoDB Atlas (`evohome_cmp`)
 - **File Storage**: DigitalOcean Spaces (`evohome-assets.fra1`)
-- **Debug Console**: Standalone at /api/internal/debug (DEBUG_SECRET auth)
+- **Debug Console**: `/api/internal/debug` (DEBUG_SECRET auth)
 
-## Buyer Portal Service (NEW — April 12, 2026)
-Single endpoint `GET /api/buyer/portal` replaces 8+ scattered API calls.
-Returns everything the buyer needs in one response:
-- **project**: name, unit_reference, address (all resolved from units/projects collections)
-- **branding**: company_name, logo_url (absolute Spaces URL)
-- **documents**: quotes + invoices with hero images (absolute URLs), status, items, amounts
-- **vault_files**: shared docs with direct Spaces URLs (no CORS redirect)
-- **change_requests**: CR threads with messages
-- **decisions**: pending buyer decisions
-- **team**: project team members
-- **construction_timeline**: timeline with steps
-- **unread_count**: notification count
+## Unified Document System (April 12, 2026)
+Quotes and Invoices merged into a single document system:
+- **One list page**: `AgentDocuments.js` with category filter (Quote/Invoice)
+- **One upload/edit page**: `AgentDocumentUpload.js` with type selector
+- **One detail page**: `AgentDocumentDetail.js` — renders quote or invoice actions based on `doc.type`
+- **One sidebar entry**: "Quotes / Invoices" → `/agent/documents`
+- **Change requests**: unified under document detail, accessed via notification bell
+- **7 old files deleted**: AgentQuotes, AgentInvoices, AgentQuoteDetail, AgentInvoiceDetail, AgentQuoteUpload, AgentInvoiceUpload, AgentQuoteEdit
 
-### Why This Exists
-Previously the buyer frontend made 8+ separate API calls, each with its own query, enrichment logic, and URL resolution. When agent mutations happened (upload, share, assign unit), the buyer's view broke because the stitching was fragile. The portal service computes everything server-side in one pass.
+## Sync Layer (Buyer Portal)
+Single communication layer between agent and buyer:
+- **Read**: `GET /api/buyer/portal` — returns everything (project, branding, documents, vault, CRs, decisions, team, timeline, unread count)
+- **Write**: `POST /api/buyer/portal/action` — all buyer mutations (approve, reject, request_change, confirm_payment, respond_decision, mark_seen)
+- **After every mutation**: returns fresh portal state — frontend auto-updates all views
+- **No bypass**: buyer frontend only calls portal endpoints + 3 binary file downloads
 
 ## File Storage (DigitalOcean Spaces)
-- All uploads (logo, hero, vault, PDF) stored in `evohome-assets.fra1.digitaloceanspaces.com/uploads/`
-- Files survive container restarts and deploys
-- Frontend uses direct Spaces URLs (no CORS redirect through backend)
-- Validation: MIME type OR extension match (handles macOS `application/octet-stream`)
-- HEIC/HEIF supported for Apple device photos
+- All uploads persist in `evohome-assets.fra1.digitaloceanspaces.com/uploads/`
+- HEIC/HEIF supported, validation by MIME OR extension
+- Direct Spaces URLs in frontend (no CORS redirect)
 
-## Bugs Fixed (April 12, 2026)
-- **BUG-003**: Hero image upload — HEIC rejection, file size error toast missing, auto-save draft
-- **Vault CORS**: Direct Spaces URLs instead of redirect-through-backend
-- **Vault buyer access**: Query by client_ids, not just buyer_ids (race condition fix)
-- **Rejected docs**: Removed from FINALIZED_STATUSES, agent can edit and revert to Draft
-- **Buyer profile**: Unit reference enriched from units collection
-- **Client detail**: project_name enrichment added to get_client()
-
-## Test Accounts
-- Agent (production): tafsir@evo-home.ch / evoagent123
-- Buyer (production): batafsir3@gmail.com (Google OAuth only)
+## Production
+- URL: app.evo-home.ch
+- Agent: tafsir@evo-home.ch / evoagent123
+- Buyer: batafsir3@gmail.com (Google OAuth)
+- Debug: app.evo-home.ch/api/internal/debug (DEBUG_SECRET auth)
 
 ## Remaining
-- P0: Deploy and verify all fixes on production
-- P1: Organ 4 — Control Tower Dashboard restructuring  
-- P1: Organ 5 — Decisions rebuild
-- P2: Sync pipeline (agent mutations auto-propagate to buyer portal cache)
-- P2: Hook dependency warnings (74+ instances)
+- P0: Deploy and verify on production
+- P1: Image previews in feed (not just file links)
+- P1: Decisions reflected in feed
+- P2: Agent-side sync pipeline (agent mutations auto-propagate to buyer)
+- P2: Hook dependency warnings
 - P3: Email digests, reporting/export
 
 ---

@@ -21,11 +21,6 @@ import { AgentProjects } from "./pages/agent/AgentProjects";
 import { AgentDocuments } from "./pages/agent/AgentDocuments";
 import { AgentDocumentDetail } from "./pages/agent/AgentDocumentDetail";
 import { AgentDocumentUpload } from "./pages/agent/AgentDocumentUpload";
-import { AgentQuoteDetail } from "./pages/agent/AgentQuoteDetail";
-import { AgentQuoteUpload } from "./pages/agent/AgentQuoteUpload";
-import { AgentQuoteEdit } from "./pages/agent/AgentQuoteEdit";
-import { AgentInvoiceDetail } from "./pages/agent/AgentInvoiceDetail";
-import { AgentInvoiceUpload } from "./pages/agent/AgentInvoiceUpload";
 import { AgentTimeline } from "./pages/agent/AgentTimeline";
 import { AgentFeed } from "./pages/agent/AgentFeed";
 import { AgentDecisions } from "./pages/agent/AgentDecisions";
@@ -165,47 +160,15 @@ const AppRouter = () => {
           <AgentDocumentUpload />
         </ProtectedRoute>
       } />
-      {/* Legacy routes — redirect to unified documents */}
-      <Route path="/agent/quotes" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentDocuments />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/quotes/new" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentDocumentUpload />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/quotes/:quoteId" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentQuoteDetail />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/quotes/edit/:quoteId" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentQuoteUpload />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/invoices" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentDocuments />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/invoices/new" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentDocumentUpload />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/invoices/:invoiceId" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentInvoiceDetail />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/invoices/edit/:invoiceId" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentInvoiceUpload />
-        </ProtectedRoute>
-      } />
+      {/* Legacy redirects */}
+      <Route path="/agent/quotes" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocuments /></ProtectedRoute>} />
+      <Route path="/agent/quotes/new" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentUpload /></ProtectedRoute>} />
+      <Route path="/agent/quotes/:documentId" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentDetail /></ProtectedRoute>} />
+      <Route path="/agent/quotes/edit/:documentId" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentUpload /></ProtectedRoute>} />
+      <Route path="/agent/invoices" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocuments /></ProtectedRoute>} />
+      <Route path="/agent/invoices/new" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentUpload /></ProtectedRoute>} />
+      <Route path="/agent/invoices/:documentId" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentDetail /></ProtectedRoute>} />
+      <Route path="/agent/invoices/edit/:documentId" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentUpload /></ProtectedRoute>} />
       <Route path="/agent/timeline" element={
         <ProtectedRoute allowedRoles={['agent']}>
           <AgentTimeline />
