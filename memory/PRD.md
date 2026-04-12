@@ -6,26 +6,20 @@
 - **Database**: MongoDB Atlas (`evohome_cmp`)
 - **Integrations**: OpenAI GPT-4o, Stripe (webhooks verified), Resend, Google OAuth
 
-## Organ Status (Contractual)
-| Organ | Status | Preview-Verified |
-|-------|--------|-----------------|
-| 1. Upload/Media | Implemented | Partial (backend curl + vault page screenshot) |
-| 2. Client/Project/Unit | Implemented | Yes (all pages screenshotted) |
-| 3. Change Request Thread | Implemented | Yes (full e2e via UI) |
+## Organ Status
+| Organ | Backend | Frontend | Preview-Verified | Production-Verified |
+|-------|---------|----------|-----------------|-------------------|
+| 1. Upload/Media | Canonical | Rebuilt | Yes (iteration_29) | Pending deployment |
+| 2. Client Context | Enriched | Canonical formatters | Yes (iteration_29) | Pending deployment |
+| 3. Change Request | Canonical | Verified | Yes (iteration_29) | Pending deployment |
 
-**None are production-verified. Closure requires deployment to app.evo-home.ch.**
+## Test Matrix (36 items)
+- 13 verified by user in production (BUG-001,002,009,010,017-023,035,036)
+- 23 verified by testing agent in preview (BUG-003-008,011-016,024-034) - iteration_29
+- Total: 36/36 items verified in at least one environment
 
-## Verified via UI Screenshots (Preview)
-- Invoice upload: context subtitle shows `Résidence Les Pins / Lot 3.01` below selector
-- Clients list: project + unit badges visible
-- Client detail: project name renders correctly (after GET /projects/{id} fix)
-- Quote detail: ChangeRequestPanel with Reply/Resolve buttons
-- Invoice detail: ChangeRequestPanel identical to quote (parity confirmed)
-- Agent Reply submission: toast "Response sent", status → Under Review, message visible
-- Agent Resolve: toast "Change request resolved", status → Resolved, Close button appears
-- Buyer sees resolved thread: full message history (buyer + agent) visible after resolution
-- Buyer notifications: real notifications visible in bell dropdown
-- Dashboard: 6 Change Requests aggregate count
+## What Requires Production Verification After Deployment
+All 23 items verified in preview need production re-verification on app.evo-home.ch
 
 ## Canonical Formatters (lib/utils.js)
 - `formatClientContext`: "Name — Project — Unit"
@@ -33,15 +27,18 @@
 - `formatContextSubtitle`: "Project / Unit"
 - `formatDocContext`: "Number · Client · Project · Unit"
 
-## Bug Fixed During Validation
-- Missing `GET /api/projects/{project_id}` endpoint (caused raw ID display in client detail)
-
 ## Test Accounts
 - Agent: agent@evohome-test.ch / Evohome2026! (POST /api/auth/login)
 - Buyer: buyer@evohome-test.ch / Evohome2026! (POST /api/auth/buyer/login)
 
+## Seed Data (after April 12 wipe)
+- Project: Résidence Les Pins
+- Units: Lot 3.01-4.02 (4 units)
+- Client: Test Buyer → Lot 3.01
+- Quote: doc_b5d46abd6e6c (Hero Image Test Quote, CHF 5000, with hero image)
+
 ## Remaining
-- P0: Production deployment + verification on app.evo-home.ch
+- P0: Deploy to production + verify all 23 items on app.evo-home.ch
 - P1: Organ 4 — Control Tower Dashboard restructuring
 - P1: Organ 5 — Decisions rebuild
 - P2: Hook dependency warnings
