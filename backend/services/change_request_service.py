@@ -101,10 +101,11 @@ async def create_change_request(
     await db.change_requests.insert_one(change_request)
 
     # Trace
-    from core.trace import trace_service, trace_db_mutation, trace_side_effect, set_trace_entity
+    from core.trace import trace_service, trace_db_mutation, trace_side_effect, set_trace_entity, trace_related_entity
     trace_service("services.change_request_service.create_change_request")
     trace_db_mutation("change_requests", "insert_one", cr_id)
     set_trace_entity("change_request", cr_id)
+    trace_related_entity(entity_type, entity_id)
 
     # Update entity status to 'Change Requested' + denormalized comment
     collection = _get_entity_collection(entity_type)

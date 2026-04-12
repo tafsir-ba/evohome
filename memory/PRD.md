@@ -20,12 +20,18 @@
    - Entity Inspector: search by type/ID, shows state + traces + notifications + state transitions
    - Verification Checklist: 36-item bug matrix with pass/fail tracking + notes
 
-### Auto-Extraction Features (Verified)
+### Auto-Extraction Features (Verified E2E)
 - **Entity extraction**: URL patterns auto-populate `entity_type` and `entity_id` for documents, vault_documents, change_requests, decisions, clients, projects
 - **Action derivation**: Method + URL automatically maps to human-readable action names (e.g., `document_create`, `cr_respond`, `vault_upload`)
-- **Response summary**: State transitions tracked (e.g., `{status: "Draft", type: "quote"}`)
+- **Response summary**: State transitions tracked (e.g., `{status: "Change Requested", previous_status: "Sent"}`)
 - **DB mutations**: Tracked per-request (collection, operation, entity_id)
 - **Side effects**: Notifications and emails logged in trace context
+- **Related entities**: CR creation links back to parent document via `related_entities`
+
+### Verified Trace Flows (E2E April 12)
+- `document_create` → entity=document, db_mutations=[documents.insert_one], response_summary={status, type, amount}
+- `document_send` → entity=document, db_mutations=[documents.update_one, notifications.insert_one], side_effects=[notification, email], response_summary={status: Sent, previous_status: Draft}
+- `document_action(request_change)` → entity=change_request, related_entities=[document], db_mutations=[documents.update_one, notifications.insert_one x2, change_requests.insert_one], side_effects=[notification x2, email], response_summary={status: Change Requested, previous_status: Sent}
 
 ### Modular Debug Console Architecture
 ```
@@ -38,18 +44,15 @@
 └── js/verifications.js     # Verification Checklist tab (36-item matrix)
 ```
 
+### Security
+- Path traversal protection on static asset routes (realpath validation)
+- XSS escaping on verification notes input
+- DEBUG_SECRET bearer auth on all API endpoints
+
 ### Access
 - URL: `{domain}/api/internal/debug`
 - Auth: Bearer token = `DEBUG_SECRET` env var
 - Not linked from main app. Not accessible to agents or buyers.
-
-### Files Created/Modified
-- `/app/backend/core/request_id.py`
-- `/app/backend/core/errors.py`
-- `/app/backend/core/trace.py` (auto-extraction, side_effects, response_summary)
-- `/app/backend/routes/debug.py` (serves modular static assets: HTML, JS, CSS)
-- `/app/backend/static/debug/*` (6 modular files)
-- `/app/backend/server.py` — middleware integration, error handlers, TTL indexes
 
 ## Organ Status
 | Organ | Status |
@@ -57,7 +60,7 @@
 | 1. Upload/Media | Implemented, preview-verified |
 | 2. Client Context | Implemented, preview-verified |
 | 3. Change Request | Implemented, preview-verified |
-| Debug System | Implemented, modularized, verified |
+| Debug System | Implemented, modularized, E2E verified |
 
 ## Test Accounts
 - Agent: agent@evohome-test.ch / Evohome2026!

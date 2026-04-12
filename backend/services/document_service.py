@@ -457,6 +457,8 @@ async def document_action(
         if not validate_transition(doc['type'], doc['status'], target):
             raise ValueError("Cannot request changes in current status")
         await db.documents.update_one({"document_id": document_id}, {"$set": {"status": target, "change_request_comment": comment, "updated_at": now}})
+        trace_db_mutation("documents", "update_one", document_id)
+        set_trace_response_summary({"status": target, "previous_status": doc["status"], "action": action})
         await _notify_agent_action(doc, "Change Requested", f"Changes requested for {doc['type']} {doc['document_number']}", "change_requested", user_name, {"comment": comment})
 
         # Create canonical change request

@@ -50,19 +50,25 @@ async def debug_console():
 @router.get("/internal/debug/css/{filename}")
 async def debug_css(filename: str):
     """Serve debug console CSS assets."""
-    filepath = os.path.join(DEBUG_STATIC_DIR, "css", filename)
-    if not os.path.exists(filepath) or not filename.endswith(".css"):
+    if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=404)
-    return FileResponse(filepath, media_type="text/css")
+    filepath = os.path.join(DEBUG_STATIC_DIR, "css", filename)
+    real = os.path.realpath(filepath)
+    if not real.startswith(os.path.realpath(DEBUG_STATIC_DIR)) or not os.path.exists(real):
+        raise HTTPException(status_code=404)
+    return FileResponse(real, media_type="text/css")
 
 
 @router.get("/internal/debug/js/{filename}")
 async def debug_js(filename: str):
     """Serve debug console JS assets."""
-    filepath = os.path.join(DEBUG_STATIC_DIR, "js", filename)
-    if not os.path.exists(filepath) or not filename.endswith(".js"):
+    if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=404)
-    return FileResponse(filepath, media_type="application/javascript")
+    filepath = os.path.join(DEBUG_STATIC_DIR, "js", filename)
+    real = os.path.realpath(filepath)
+    if not real.startswith(os.path.realpath(DEBUG_STATIC_DIR)) or not os.path.exists(real):
+        raise HTTPException(status_code=404)
+    return FileResponse(real, media_type="application/javascript")
 
 
 @router.get("/internal/debug/health")

@@ -1,4 +1,6 @@
 /** Debug Console — Verification Checklist tab */
+function escAttr(s) { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 async function loadVerifications(el) {
   const data = await apiFetch('/verifications');
   if (!data) { el.innerHTML = '<div class="empty">Failed to load verifications</div>'; return; }
@@ -25,7 +27,7 @@ async function loadVerifications(el) {
           <option value="passed" ${item.status === 'passed' ? 'selected' : ''}>passed</option>
           <option value="failed" ${item.status === 'failed' ? 'selected' : ''}>failed</option>
         </select>
-        <input class="notes-input" placeholder="Notes..." value="${item.notes || ''}" onchange="updateVerificationNotes('${item.item_id}', this.value)"/>
+        <input class="notes-input" placeholder="Notes..." value="${escAttr(item.notes)}" onchange="updateVerificationNotes('${escAttr(item.item_id)}', this.value)"/>
         ${item.last_verified ? `<span style="font-size:10px;color:var(--text-dim)">${new Date(item.last_verified).toLocaleDateString()}</span>` : ''}
       </div>`).join('')}</div>`;
 }
