@@ -594,7 +594,7 @@ export const AgentTeam = () => {
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         projectId={selectedProjectId}
-        onImportComplete={fetchTeamMembers}
+        onImportComplete={() => fetchTeamMembers(selectedProjectId)}
       />
     </AgentLayout>
   );
