@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from database import db
-from services.notification_service import emit_notification
+from services.notification_service import emit_notification, emit_realtime
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +85,13 @@ async def create_vault_document(
             metadata={"vault_document_id": doc_id},
         )
         trace_side_effect("notification", target=bid, detail=f"vault_document shared: {title}")
+
+    if access_level == "shared" and buyer_ids:
+        await emit_realtime(
+            buyer_ids,
+            "vault_updated",
+            {"vault_document_id": doc_id, "title": title},
+        )
 
     return doc
 
@@ -168,8 +175,32 @@ async def update_vault_document(
 
     filtered["updated_at"] = datetime.now(timezone.utc).isoformat()
 
+    was_shared = doc.get("access_level") == "shared"
+    prev_buyer_ids = list(dict.fromkeys(doc.get("buyer_ids") or []))
+
     await db.vault_documents.update_one(query, {"$set": filtered})
-    return await db.vault_documents.find_one(query, {"_id": 0})
+    updated = await db.vault_documents.find_one(query, {"_id": 0})
+    if not updated:
+        return None
+
+    if was_shared and updated.get("access_level") != "shared" and prev_buyer_ids:
+        await emit_realtime(
+            prev_buyer_ids,
+            "vault_updated",
+            {"vault_document_id": vault_document_id, "removed": True},
+        )
+    elif updated.get("access_level") == "shared":
+        notify_ids = list(dict.fromkeys(updated.get("buyer_ids") or []))
+        if notify_ids:
+            await emit_realtime(
+                notify_ids,
+                "vault_updated",
+                {
+                    "vault_document_id": vault_document_id,
+                    "title": updated.get("title", ""),
+                },
+            )
+    return updated
 
 
 async def delete_vault_document(vault_document_id: str, agent_id: str) -> Optional[str]:
@@ -178,6 +209,15 @@ async def delete_vault_document(vault_document_id: str, agent_id: str) -> Option
     doc = await db.vault_documents.find_one(query, {"_id": 0})
     if not doc:
         return None
+
+    notify_ids = list(dict.fromkeys(doc.get("buyer_ids") or []))
+    vid = doc.get("vault_document_id")
+    if doc.get("access_level") == "shared" and notify_ids and vid:
+        await emit_realtime(
+            notify_ids,
+            "vault_updated",
+            {"vault_document_id": vid, "removed": True},
+        )
 
     await db.vault_documents.delete_one(query)
     return doc.get("stored_filename")

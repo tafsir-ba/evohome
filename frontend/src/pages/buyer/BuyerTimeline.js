@@ -1090,16 +1090,6 @@ export const BuyerTimeline = () => {
   // QR Payment Modal
   const [qrModal, setQrModal] = useState({ open: false, invoice: null, qrData: null, loading: false });
 
-  // WebSocket for real-time updates
-  const handleWebSocketMessage = useCallback((message) => {
-    if (message.type === 'document_sent') {
-      // Refresh data when new document is received
-      fetchData();
-    }
-  }, []);
-  
-  const { isConnected } = useWebSocket(user?.user_id, handleWebSocketMessage);
-
   const fetchData = useCallback(async () => {
     try {
       const portalRes = await fetch(`${API}/buyer/portal`, { credentials: 'include', headers: getAuthHeaders() });
@@ -1149,6 +1139,15 @@ export const BuyerTimeline = () => {
     }
   }, []);
 
+  // WebSocket: refresh portal when quotes/invoices or vault change on the agent side
+  const handleWebSocketMessage = useCallback((message) => {
+    if (message.type === 'document_sent' || message.type === 'vault_updated') {
+      fetchData();
+    }
+  }, [fetchData]);
+
+  const { isConnected } = useWebSocket(user?.user_id, handleWebSocketMessage);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -1183,7 +1182,7 @@ export const BuyerTimeline = () => {
     }
   }, [activeView]);
 
-  // Vault documents already loaded from portal - no separate fetch needed
+  // Vault list comes from portal; WebSocket vault_updated refreshes via fetchData
 
   const handleAction = async (eventId, action, comment = null) => {
     if (action === 'approve' || action === 'reject') {
@@ -1279,6 +1278,9 @@ export const BuyerTimeline = () => {
     }
   };
 
+  const vaultAuthDownloadUrl = (document) =>
+    `${API}/vault/documents/${document.vault_document_id || document.vault_id}/download`;
+
   const handleVaultPreview = (document) => {
     // Direct Spaces URLs can't be embedded in iframe — open in new tab
     const fileUrl = document.url;
@@ -1289,7 +1291,7 @@ export const BuyerTimeline = () => {
     // Fallback for local URLs: use in-app PDF viewer
     setPdfViewer({
       open: true,
-      url: `${API}/vault/${document.vault_id}/download`,
+      url: vaultAuthDownloadUrl(document),
       filename: document.original_filename || document.name || 'document.pdf'
     });
   };
@@ -1309,7 +1311,7 @@ export const BuyerTimeline = () => {
     }
     // Fallback
     try {
-      const res = await fetch(`${API}/vault/${document.vault_id}/download`, { credentials: 'include', headers: getAuthHeaders() });
+      const res = await fetch(vaultAuthDownloadUrl(document), { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
