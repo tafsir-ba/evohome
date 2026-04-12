@@ -117,7 +117,7 @@ async def respond_to_change_request(
         )
         return cr
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail={"error": "state_error", "message": str(e), "source": "service"})
 
 
 @router.post("/change-requests/{change_request_id}/resolve")
@@ -140,7 +140,7 @@ async def resolve_change_request(
         )
         return cr
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail={"error": "state_error", "message": str(e), "source": "service"})
 
 
 @router.post("/change-requests/{change_request_id}/close")
@@ -160,4 +160,4 @@ async def close_change_request(
         )
         return cr
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail={"error": "state_error", "message": str(e), "source": "service"})

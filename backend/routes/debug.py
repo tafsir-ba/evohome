@@ -65,6 +65,7 @@ async def debug_health(_=Depends(require_debug_auth)):
 @router.get("/internal/debug/traces")
 async def list_traces(
     outcome: Optional[str] = None,
+    errors_only: bool = False,
     method: Optional[str] = None,
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
@@ -75,7 +76,9 @@ async def list_traces(
 ):
     """List trace events with filters."""
     query = {}
-    if outcome:
+    if errors_only:
+        query["outcome"] = {"$ne": "success"}
+    elif outcome:
         query["outcome"] = outcome
     if method:
         query["method"] = method.upper()

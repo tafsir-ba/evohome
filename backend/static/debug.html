@@ -68,9 +68,19 @@ function getHeaders() {
 }
 
 async function apiFetch(path, opts = {}) {
-  const res = await fetch(API_BASE + path, {headers: getHeaders(), ...opts});
-  if (res.status === 401) { sessionStorage.removeItem('debug_secret'); SECRET = ''; render(); return null; }
-  return res.json();
+  try {
+    const res = await fetch(API_BASE + path, {headers: getHeaders(), ...opts});
+    if (res.status === 401) { sessionStorage.removeItem('debug_secret'); SECRET = ''; render(); return null; }
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('Debug API error:', res.status, text);
+      return null;
+    }
+    return res.json();
+  } catch (e) {
+    console.error('Debug API fetch failed:', e);
+    return null;
+  }
 }
 
 function render() {
@@ -124,7 +134,6 @@ async function loadTab() {
 }
 
 async function loadTraces(el, mode) {
-  const params = mode === 'errors' ? '?limit=100&outcome=validation_error&outcome=auth_error&outcome=service_error&outcome=storage_error&outcome=not_found' : '?limit=100';
   const filterParams = mode !== 'errors' ? `
     <div class="filters">
       <select id="f-outcome" onchange="filterTraces()"><option value="">All outcomes</option><option value="success">success</option><option value="validation_error">validation</option><option value="auth_error">auth</option><option value="service_error">service</option><option value="storage_error">storage</option></select>
@@ -133,16 +142,13 @@ async function loadTraces(el, mode) {
       <div class="auto-refresh"><input type="checkbox" id="auto-ref" onchange="toggleAutoRefresh(this.checked)"/> <label for="auto-ref">Auto-refresh (10s)</label></div>
     </div>` : '';
   
-  // For errors mode, get all error outcomes
-  let url = '/traces?limit=100';
-  if (mode === 'errors') url = '/traces?limit=100';
+  // Server-side filtering for errors
+  let url = mode === 'errors' ? '/traces?errors_only=true&limit=100' : '/traces?limit=100';
   
   const data = await apiFetch(url);
-  if (!data) return;
+  if (!data) { el.innerHTML = '<div class="empty">Failed to load traces</div>'; return; }
   
   let traces = data.traces || [];
-  if (mode === 'errors') traces = traces.filter(t => t.outcome !== 'success');
-  
   window._traces = traces;
   
   el.innerHTML = filterParams + `<div id="traces-table"></div>`;
