@@ -103,16 +103,14 @@ def _validate(
 ):
     ext = Path(filename).suffix.lower() if filename else ""
 
-    if content_type not in allowed_mimes:
-        _upload_error(
-            "invalid_file_type",
-            f"File type '{content_type}' is not allowed. Accepted: {', '.join(sorted(allowed_mimes))}",
-        )
+    # Accept if MIME matches OR if extension is valid (browsers sometimes send wrong MIME)
+    mime_ok = content_type in allowed_mimes
+    ext_ok = ext and ext in allowed_extensions
 
-    if ext and ext not in allowed_extensions:
+    if not mime_ok and not ext_ok:
         _upload_error(
             "invalid_file_type",
-            f"Extension '{ext}' is not allowed. Accepted: {', '.join(sorted(allowed_extensions))}",
+            f"File type '{content_type}' with extension '{ext}' is not allowed. Accepted types: {', '.join(sorted(allowed_mimes))}",
         )
 
     if size > max_size:
