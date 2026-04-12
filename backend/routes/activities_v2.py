@@ -3,19 +3,21 @@ Activity Routes — Canonical Implementation.
 
 Thin route layer. No is_demo. No business logic.
 File I/O stays here. Everything else delegates to activity_service.
+
+New activity uploads use services.file_service (DigitalOcean Spaces when SPACES_* is set),
+same as vault/logos. Legacy rows may still reference /api/activities/files/... on local disk.
 """
-import uuid
 import logging
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from database import db
 from core.auth import get_current_user, get_current_agent
-from services import activity_service
+from services import activity_service, file_service
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +26,37 @@ UPLOAD_DIR = ROOT_DIR / "uploads"
 ACTIVITY_UPLOAD_DIR = UPLOAD_DIR / "activities"
 ACTIVITY_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-MAX_FILE_SIZE = 20 * 1024 * 1024
-ALLOWED_FILE_TYPES = {
-    'image': ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'],
-    'pdf': ['application/pdf'],
-}
+
+def _relative_path_from_file_url(file_url: str) -> Optional[str]:
+    """Return path under activities/ from stored file_url (supports multi-segment paths)."""
+    if not file_url:
+        return None
+    fu = file_url.strip().split("?")[0].split("#")[0]
+    marker = "/activities/files/"
+    if marker not in fu:
+        return None
+    rel = fu.split(marker, 1)[1].lstrip("/")
+    return rel or None
+
+
+def _resolve_safe_activity_path(rel: str) -> Path:
+    """Resolve a path under ACTIVITY_UPLOAD_DIR; reject traversal."""
+    if not rel or not isinstance(rel, str):
+        raise HTTPException(status_code=400, detail="Invalid file reference")
+    rel = rel.strip().replace("\\", "/")
+    if ".." in rel or rel.startswith("/"):
+        raise HTTPException(status_code=400, detail="Invalid file reference")
+    parts = [p for p in rel.split("/") if p and p != "."]
+    if not parts or ".." in parts:
+        raise HTTPException(status_code=400, detail="Invalid file reference")
+    file_path = ACTIVITY_UPLOAD_DIR.joinpath(*parts).resolve()
+    base = ACTIVITY_UPLOAD_DIR.resolve()
+    try:
+        file_path.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file reference")
+    return file_path
+
 
 router = APIRouter()
 
@@ -83,26 +111,16 @@ async def create_activity(
     if type in ("image", "pdf") and not file:
         raise HTTPException(status_code=400, detail=f"File is required for {type} activities")
 
-    # File I/O (route responsibility)
+    # Persist via file_service → Spaces when configured (else local /api/uploads/…)
     file_url = file_name = None
     file_size = None
+    stored_filename = None
     if file:
-        file_content = await file.read()
-        file_size = len(file_content)
-        if file_size > MAX_FILE_SIZE:
-            raise HTTPException(status_code=400, detail=f"File too large. Max {MAX_FILE_SIZE // (1024*1024)}MB")
-        ct = file.content_type or 'application/octet-stream'
-        if type == "image" and ct not in ALLOWED_FILE_TYPES['image']:
-            raise HTTPException(status_code=400, detail="Invalid image type")
-        if type == "pdf" and ct not in ALLOWED_FILE_TYPES['pdf']:
-            raise HTTPException(status_code=400, detail="Only PDF allowed")
-
-        fid = uuid.uuid4().hex[:12]
-        ext = Path(file.filename).suffix if file.filename else ('.jpg' if type == 'image' else '.pdf')
-        filename = f"{fid}_{file.filename or f'upload{ext}'}"
-        (ACTIVITY_UPLOAD_DIR / filename).write_bytes(file_content)
-        file_url = f"/api/activities/files/{filename}"
-        file_name = file.filename
+        meta = await file_service.save_activity_attachment(file, type)
+        file_url = meta["url"]
+        file_name = meta["original_filename"]
+        file_size = meta["file_size"]
+        stored_filename = meta["stored_filename"]
 
     return await activity_service.create_and_distribute_activity(
         author_id=user['user_id'],
@@ -116,6 +134,7 @@ async def create_activity(
         file_size=file_size,
         unit_id=unit_id,
         agent_user=user,
+        stored_filename=stored_filename,
     )
 
 
@@ -169,22 +188,24 @@ async def get_unread_count(user: dict = Depends(get_current_user)):
     return await activity_service.get_unread_count(user['user_id'], user['role'])
 
 
-@router.get("/activities/files/demo/{filename}")
+@router.get("/activities/files/demo/{filename:path}")
 async def get_demo_activity_file(filename: str, user: dict = Depends(get_current_user)):
     """Serve demo activity file attachments."""
-    file_path = ACTIVITY_UPLOAD_DIR / "demo" / filename
+    file_path = _resolve_safe_activity_path(f"demo/{filename}")
     if not file_path.exists():
+        logger.warning("demo activity file missing path=%s", file_path)
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, media_type=_media_type(file_path), filename=filename)
+    return FileResponse(file_path, media_type=_media_type(file_path), filename=file_path.name)
 
 
-@router.get("/activities/files/{filename}")
+@router.get("/activities/files/{filename:path}")
 async def get_activity_file(filename: str, user: dict = Depends(get_current_user)):
-    """Serve activity file attachments."""
-    file_path = ACTIVITY_UPLOAD_DIR / filename
+    """Serve activity file attachments (path form supports legacy subpaths in file_url)."""
+    file_path = _resolve_safe_activity_path(filename)
     if not file_path.exists():
+        logger.warning("activity file missing path=%s", file_path)
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, media_type=_media_type(file_path), filename=filename)
+    return FileResponse(file_path, media_type=_media_type(file_path), filename=file_path.name)
 
 
 @router.get("/activities/{activity_id}/attachment")
@@ -210,18 +231,43 @@ async def get_activity_attachment(activity_id: str, user: dict = Depends(get_cur
                 raise HTTPException(status_code=403, detail="Access denied")
 
     fu = (activity.get("file_url") or "").strip()
-    filename = fu.split("/")[-1] if fu else ""
-    if not filename or ".." in filename:
-        raise HTTPException(status_code=400, detail="Invalid file reference")
+    stored = activity.get("stored_filename")
 
-    file_path = (ACTIVITY_UPLOAD_DIR / filename).resolve()
-    try:
-        file_path.relative_to(ACTIVITY_UPLOAD_DIR.resolve())
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid file reference")
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, media_type=_media_type(file_path), filename=filename)
+    candidates = []
+    if isinstance(stored, str) and stored.strip():
+        candidates.append(stored.strip())
+    if fu:
+        s = file_service.stored_filename_from_public_url(fu)
+        if s and s not in candidates:
+            candidates.append(s)
+
+    for sf in candidates:
+        try:
+            body, ct = file_service.read_stored_file_bytes(sf)
+            return Response(content=body, media_type=ct)
+        except FileNotFoundError:
+            logger.warning(
+                "activity attachment missing in storage activity_id=%s stored_filename=%s",
+                activity_id,
+                sf,
+            )
+        except ValueError:
+            pass
+
+    rel = _relative_path_from_file_url(fu)
+    if rel:
+        file_path = _resolve_safe_activity_path(rel)
+        if file_path.exists():
+            return FileResponse(
+                file_path, media_type=_media_type(file_path), filename=file_path.name
+            )
+
+    logger.warning(
+        "activity attachment not found activity_id=%s file_url=%s",
+        activity_id,
+        fu,
+    )
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 @router.get("/activities/{activity_id}")

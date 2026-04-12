@@ -8,6 +8,7 @@ Recipients are explicit. Attachments inherit ownership from activity.
 import os
 import uuid
 import logging
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
@@ -162,6 +163,7 @@ async def create_and_distribute_activity(
     file_size: Optional[int],
     unit_id: Optional[str],
     agent_user: dict,
+    stored_filename: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create activity, link recipients, send notifications. Full canonical flow."""
     now = datetime.now(timezone.utc).isoformat()
@@ -182,6 +184,8 @@ async def create_and_distribute_activity(
         "created_at": now,
         "updated_at": now,
     }
+    if stored_filename:
+        doc["stored_filename"] = stored_filename
     await db.activities.insert_one(doc)
 
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "name": 1})
@@ -362,11 +366,37 @@ async def delete_activity(activity_id: str, author_id: str) -> bool:
     if not activity:
         return False
 
+    from services import file_service
+
+    sf = activity.get("stored_filename")
+    if not sf and activity.get("file_url"):
+        sf = file_service.stored_filename_from_public_url(activity["file_url"])
+    if sf:
+        try:
+            file_service.delete_file(sf)
+        except Exception as e:
+            logger.warning("delete activity file storage failed activity_id=%s: %s", activity_id, e)
+
     if activity.get('file_path') and os.path.exists(activity['file_path']):
         try:
             os.remove(activity['file_path'])
         except Exception:
             pass
+
+    # Legacy: files written only under backend/uploads/activities/ (not file_service)
+    fu = activity.get("file_url") or ""
+    if "/activities/files/" in fu:
+        rel = fu.split("/activities/files/", 1)[-1].split("?")[0]
+        legacy_dir = Path(__file__).resolve().parent.parent / "uploads" / "activities"
+        parts = [p for p in rel.replace("\\", "/").split("/") if p and p != "."]
+        if parts and ".." not in parts:
+            try:
+                target = legacy_dir.joinpath(*parts).resolve()
+                target.relative_to(legacy_dir.resolve())
+                if target.is_file():
+                    target.unlink()
+            except (OSError, ValueError):
+                pass
 
     await db.activity_replies.delete_many({"activity_id": activity_id})
     await db.activity_recipients.delete_many({"activity_id": activity_id})

@@ -48,6 +48,15 @@ import { cn } from '../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+/** API may return Spaces CDN URL or a path relative to the backend. */
+const resolveActivityFileUrl = (fileUrl) => {
+  if (!fileUrl) return null;
+  const u = String(fileUrl).trim();
+  if (u.startsWith('http://') || u.startsWith('https://')) return u;
+  const base = process.env.REACT_APP_BACKEND_URL || '';
+  return u.startsWith('/') ? `${base}${u}` : `${base}/${u}`;
+};
+
 const TYPE_CONFIG = {
   message: { icon: MessageSquare, label: 'Message', color: 'bg-blue-500' },
   image: { icon: ImageIcon, label: 'Image', color: 'bg-emerald-500' },
@@ -149,7 +158,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
   const Icon = config.icon;
   const isDraft = activity.is_draft;
   const postBody = getActivityPostBody(activity);
-  const fileUrlFull = activity.file_url ? `${process.env.REACT_APP_BACKEND_URL}${activity.file_url}` : null;
+  const fileUrlFull = resolveActivityFileUrl(activity.file_url);
   const hasImageAttachment = activityLooksLikeImageAttachment(activity, fileUrlFull);
   const loadAttachmentBlob = Boolean(hasImageAttachment && activity.file_url);
 
@@ -502,7 +511,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
                 asChild
                 data-testid={`download-file-${activity.activity_id}`}
               >
-                <a href={`${process.env.REACT_APP_BACKEND_URL}${activity.file_url}`} download target="_blank" rel="noopener noreferrer">
+                <a href={fileUrlFull || '#'} download target="_blank" rel="noopener noreferrer">
                   <Download className="w-4 h-4" />
                 </a>
               </Button>

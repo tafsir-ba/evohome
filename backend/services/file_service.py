@@ -12,8 +12,10 @@ Never persist absolute disk paths.
 import os
 import uuid
 import logging
+import mimetypes
 from pathlib import Path
-from typing import Dict, Any, Set, Optional
+from typing import Dict, Any, Set, Optional, Tuple
+from urllib.parse import urlparse
 
 import boto3
 from botocore.exceptions import ClientError
@@ -63,8 +65,16 @@ else:
 
 # ── Frozen Validation Rules ──
 
-IMAGE_MIME_TYPES: Set[str] = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
-IMAGE_EXTENSIONS: Set[str] = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+IMAGE_MIME_TYPES: Set[str] = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/heic",
+    "image/heif",
+}
+IMAGE_EXTENSIONS: Set[str] = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif"}
 
 VAULT_MIME_TYPES: Set[str] = {
     "image/jpeg", "image/png", "image/webp",
@@ -83,6 +93,7 @@ MAX_SIZE_LOGO = 2 * 1024 * 1024       # 2 MB
 MAX_SIZE_HERO = 5 * 1024 * 1024       # 5 MB
 MAX_SIZE_VAULT = 50 * 1024 * 1024     # 50 MB
 MAX_SIZE_PDF = 20 * 1024 * 1024       # 20 MB
+MAX_SIZE_ACTIVITY = 20 * 1024 * 1024  # activity feed image/PDF (matches activities route)
 
 
 # ── Canonical error ──
@@ -229,6 +240,81 @@ def get_local_path(stored_filename: str) -> Path:
 def resolve_path(stored_filename: str) -> Path:
     """Resolve stored_filename to absolute disk path. Local storage only."""
     return UPLOAD_DIR / stored_filename
+
+
+def stored_filename_from_public_url(url: str) -> Optional[str]:
+    """
+    Extract stored_filename (e.g. activities_a1b2c3d4.png) from a public CDN or /api/uploads URL.
+    Used when activity rows have file_url but no stored_filename (legacy / backfill).
+    """
+    if not url or not isinstance(url, str):
+        return None
+    u = url.strip().split("?")[0].split("#")[0]
+    if u.startswith("http://") or u.startswith("https://"):
+        path = urlparse(u).path.lstrip("/")
+    elif u.startswith("/api/uploads/"):
+        path = u[len("/api/uploads/") :].lstrip("/")
+    else:
+        return None
+    if path.startswith("uploads/"):
+        path = path[len("uploads/") :]
+    seg = path.split("/")[0] if path else ""
+    if not seg or ".." in seg:
+        return None
+    return seg
+
+
+def read_stored_file_bytes(stored_filename: str) -> Tuple[bytes, str]:
+    """Load file bytes from Spaces or local uploads/. Raises FileNotFoundError if missing."""
+    if (
+        not stored_filename
+        or ".." in stored_filename
+        or "/" in stored_filename
+        or "\\" in stored_filename
+    ):
+        raise ValueError("invalid stored_filename")
+    if USE_SPACES:
+        s3 = _get_s3()
+        key = f"{SPACES_PREFIX}{stored_filename}"
+        try:
+            r = s3.get_object(Bucket=SPACES_BUCKET, Key=key)
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("404", "NoSuchKey", "NotFound"):
+                raise FileNotFoundError(key) from e
+            raise
+        body = r["Body"].read()
+        ct = r.get("ContentType") or mimetypes.guess_type(stored_filename)[0] or "application/octet-stream"
+        return body, ct
+    path = UPLOAD_DIR / stored_filename
+    if not path.is_file():
+        raise FileNotFoundError(stored_filename)
+    ct = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+    return path.read_bytes(), ct
+
+
+async def save_activity_attachment(file: UploadFile, activity_kind: str) -> Dict[str, Any]:
+    """
+    Persist activity feed image or PDF to Spaces (or local uploads/ fallback).
+    Same durability path as logos/vault when SPACES_* is set.
+    """
+    if activity_kind == "image":
+        return await save_upload(
+            file,
+            "activities",
+            MAX_SIZE_ACTIVITY,
+            IMAGE_MIME_TYPES,
+            IMAGE_EXTENSIONS,
+        )
+    if activity_kind == "pdf":
+        return await save_upload(
+            file,
+            "activities",
+            MAX_SIZE_ACTIVITY,
+            PDF_MIME_TYPES,
+            PDF_EXTENSIONS,
+        )
+    raise ValueError("activity_kind must be image or pdf")
 
 
 def delete_file(stored_filename: str) -> bool:
