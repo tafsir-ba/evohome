@@ -23,6 +23,30 @@ Single communication layer between agent and buyer:
 - **After every mutation**: returns fresh portal state — frontend auto-updates all views
 - **No bypass**: buyer frontend only calls portal endpoints + 3 binary file downloads
 
+## Vault Real-Time Sync (April 12, 2026)
+- `vault_service.create_vault_document()` now emits `vault_shared` via WebSocket to all `buyer_ids`
+- `vault_service.update_vault_document()` emits `vault_shared` when `client_ids` or `access_level` changes
+- `BuyerTimeline.js` handles both `document_sent` and `vault_shared` WebSocket events → triggers `fetchData()`
+- Switching to Vault tab also refetches portal data (catches uploads made while on another tab)
+- Buyer vault download/preview fallback URL corrected: `/vault/documents/{vault_document_id}/download`
+- `can_access_vault_doc` in access_control.py fixed: uses `vault_document_id`, `client_ids`, `buyer_ids`
+
+## Units API Contract
+- `POST /api/projects/{project_id}/units` — Create unit
+- `GET /api/projects/{project_id}/units` — List units (enriched with `assigned_client_name`)
+- `GET /api/units/{unit_id}` — Get single unit
+- `PUT /api/units/{unit_id}` — Update unit
+- `DELETE /api/units/{unit_id}` — Delete unit (NOT nested under /projects/)
+
+## List Endpoints Query Param Audit (April 12, 2026)
+- `GET /api/clients?project_id=X` — Server-side filtering with `can_access_project` ownership check
+- `GET /api/activities?limit=&offset=&client_id=&project_id=` — All params declared
+- `GET /api/analytics?period=` — Declared
+- `GET /api/decisions?project_id=&status=&limit=&offset=` — All declared
+- `GET /api/workflows/selectors?selector_type=&project_id=` — Declared
+- `GET /api/team/directory?search=&limit=` — Declared
+- `GET /api/vault/documents?project_id=` — Declared
+
 ## File Storage (DigitalOcean Spaces)
 - All uploads persist in `evohome-assets.fra1.digitaloceanspaces.com/uploads/`
 - HEIC/HEIF supported, validation by MIME OR extension
@@ -36,27 +60,28 @@ Single communication layer between agent and buyer:
 
 ## Completed (as of April 12, 2026)
 - [x] Production database wiped (preserving tafsir@evo-home.ch only)
-- [x] Unified Document Architecture (AgentDocuments.js, AgentDocumentUpload.js, AgentDocumentDetail.js)
+- [x] Unified Document Architecture
 - [x] Unified Sync Layer (buyer_portal_service.py)
 - [x] DigitalOcean Spaces file storage migration
 - [x] HEIC / macOS octet-stream upload validation
-- [x] Vault preview CORS fix (window.open)
-- [x] Vault buyer parity (client_ids fallback)
-- [x] Editing "Rejected" documents (reverts to Draft)
+- [x] Vault preview CORS fix, buyer parity
 - [x] Buyer Auth Token Bug fix (localStorage)
 - [x] PdfUploadZone prop fixes
-- [x] Debug Console modularized
+- [x] Unit bugs: DELETE path + field name alignment
+- [x] Test file fix: `test_foundation_features.py` cleanup path
+- [x] Clients list `?project_id=` filtering
+- [x] **Vault real-time sync**: WebSocket push on create/update, tab-switch refetch, fallback URL fix, access_control fix
 
 ## Remaining
 - P0: Deploy and verify unified architecture on production
 - P1: Control Tower Dashboard restructuring
 - P1: Decisions Module completion
-- P1: Image previews in feed (not just file links)
-- P2: Agent-side sync pipeline (agent mutations auto-propagate to buyer)
-- P2: Hook dependency warnings (74+ instances)
+- P1: Image previews in feed
+- P2: Agent-side sync pipeline
+- P2: Hook dependency warnings (74+)
 - P3: Email digests, reporting/export
 - P3: Dead code cleanup in api.js
-- P3: Strip legacy /agent/quotes and /agent/invoices route aliases
+- P3: Strip legacy route aliases
 
 ---
 Last Updated: April 12, 2026

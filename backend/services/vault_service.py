@@ -86,6 +86,7 @@ async def create_vault_document(
         )
         trace_side_effect("notification", target=bid, detail=f"vault_document shared: {title}")
 
+    # Real-time push so buyer UI refreshes without page reload
     if access_level == "shared" and buyer_ids:
         await emit_realtime(
             buyer_ids,

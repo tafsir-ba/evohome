@@ -42,10 +42,13 @@ class UpdateClientRequest(BaseModel):
 # ── Routes ──
 
 @router.get("/clients")
-async def list_clients(user=Depends(get_current_agent)):
-    """List all clients for the agent."""
-    clients = await client_service.list_clients_by_agent(user['user_id'])
-    return clients
+async def list_clients(project_id: Optional[str] = None, user=Depends(get_current_agent)):
+    """List clients for the agent, optionally filtered by project."""
+    if project_id:
+        if not await can_access_project(user, project_id):
+            raise HTTPException(status_code=403, detail="Access denied to this project")
+        return await client_service.list_clients_by_project(project_id)
+    return await client_service.list_clients_by_agent(user['user_id'])
 
 
 @router.get("/clients/{client_id}")

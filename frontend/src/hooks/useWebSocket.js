@@ -89,7 +89,10 @@ export const useWebSocket = (userId, onMessage) => {
             toast.success('Payment Confirmed!', {
               description: `Invoice "${message.data.title}" has been marked as paid`
             });
-          } else if (message.type === 'vault_updated' && !message.data?.removed) {
+          } else if (
+            (message.type === 'vault_updated' || message.type === 'vault_shared') &&
+            !message.data?.removed
+          ) {
             toast.info('Document vault updated', {
               description: message.data?.title ? `"${message.data.title}"` : 'Your agent shared a file with you',
             });

@@ -1141,7 +1141,11 @@ export const BuyerTimeline = () => {
 
   // WebSocket: refresh portal when quotes/invoices or vault change on the agent side
   const handleWebSocketMessage = useCallback((message) => {
-    if (message.type === 'document_sent' || message.type === 'vault_updated') {
+    if (
+      message.type === 'document_sent' ||
+      message.type === 'vault_updated' ||
+      message.type === 'vault_shared'
+    ) {
       fetchData();
     }
   }, [fetchData]);
@@ -1180,9 +1184,10 @@ export const BuyerTimeline = () => {
     if (activeView === 'updates') {
       portalAction({ action: 'mark_seen' }).catch(() => {});
     }
-  }, [activeView]);
-
-  // Vault list comes from portal; WebSocket vault_updated refreshes via fetchData
+    if (activeView === 'vault') {
+      fetchData();
+    }
+  }, [activeView, fetchData]);
 
   const handleAction = async (eventId, action, comment = null) => {
     if (action === 'approve' || action === 'reject') {
