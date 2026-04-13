@@ -20,7 +20,6 @@ from core.auth import (
 )
 from core.rate_limit import rate_limit_check
 from core.monitoring import capture_auth_failure
-from core.config import get_config
 from services.email_service import send_notification_email, send_email_async
 
 logger = logging.getLogger("evohome.auth")
@@ -391,8 +390,6 @@ async def demo_login(
     buyer_num: int = Query(1, ge=1, le=4, description="Demo buyer slot (Sophie=1, Thomas=2, …)"),
 ):
     """Demo login — finds demo users by user_id prefix convention (demo_*)."""
-    if not get_config().is_demo_login_enabled:
-        raise HTTPException(status_code=404, detail="Not found")
     if role not in ['buyer', 'agent']:
         raise HTTPException(status_code=400, detail="Invalid role")
     if role == 'buyer':
