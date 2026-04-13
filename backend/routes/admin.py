@@ -32,12 +32,19 @@ from services.qr_service import generate_swiss_qr_code, generate_swiss_qr_code_b
 from services.ai_service import extract_document_from_pdf, OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
+SUPER_ADMIN_EMAIL = "tafsir@evo-home.ch"
 
 ROOT_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 router = APIRouter()
+
+
+def _require_super_admin(user: Dict[str, Any]) -> None:
+    email = (user.get("email") or "").strip().lower()
+    if email != SUPER_ADMIN_EMAIL:
+        raise HTTPException(status_code=403, detail="Super admin access required")
 
 
 def _clean_user_row(user: dict) -> dict:
@@ -68,7 +75,7 @@ async def diagnose_buyer_account(email: str, user: dict = Depends(get_current_ag
     Diagnose buyer account linkage issues.
     Returns detailed information about buyer account, client records, and their linkage.
     """
-    
+    _require_super_admin(user)
     # Find buyer user
     buyer_user = await db.users.find_one(
         {"email": email, "role": "buyer"},
@@ -153,7 +160,7 @@ async def fix_buyer_client_linkage(email: str, user: dict = Depends(get_current_
     Fix buyer-client linkage for a specific email.
     Links all client records with this email to the corresponding buyer account.
     """
-    
+    _require_super_admin(user)
     # Find buyer user
     buyer_user = await db.users.find_one(
         {"email": email, "role": "buyer"},
@@ -195,6 +202,7 @@ async def check_email_configuration(user: dict = Depends(get_current_agent)):
     Check email system configuration status.
     Returns configuration status and allows sending test emails.
     """
+    _require_super_admin(user)
     return {
         "resend_api_key_configured": bool(RESEND_API_KEY),
         "sender_email_configured": bool(SENDER_EMAIL),
@@ -214,6 +222,7 @@ async def send_test_email(to_email: str, user: dict = Depends(get_current_agent)
     """
     Send a test email to verify email system is working.
     """
+    _require_super_admin(user)
     if not RESEND_API_KEY:
         raise HTTPException(status_code=503, detail="RESEND_API_KEY not configured")
     if not SENDER_EMAIL:
@@ -266,6 +275,7 @@ async def list_workspace_users(
     user: dict = Depends(get_current_agent),
 ):
     """List agent users in current workspace."""
+    _require_super_admin(user)
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -290,6 +300,7 @@ async def list_workspace_users(
 @router.post("/admin/users")
 async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Depends(get_current_agent)):
     """Create an agent account inside current workspace."""
+    _require_super_admin(user)
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     if data.workspace_role == "admin" and not is_workspace_owner(user):
@@ -337,6 +348,7 @@ async def update_workspace_user_role(
     user: dict = Depends(get_current_agent),
 ):
     """Update workspace role for an agent member."""
+    _require_super_admin(user)
     if not is_workspace_owner(user):
         raise HTTPException(status_code=403, detail="Only workspace owner can change roles")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -366,6 +378,7 @@ async def update_workspace_user_role(
 @router.post("/admin/users/{member_id}/deactivate")
 async def deactivate_workspace_user(member_id: str, user: dict = Depends(get_current_agent)):
     """Deactivate a team member and revoke active sessions."""
+    _require_super_admin(user)
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -400,6 +413,7 @@ async def deactivate_workspace_user(member_id: str, user: dict = Depends(get_cur
 @router.post("/admin/users/{member_id}/reactivate")
 async def reactivate_workspace_user(member_id: str, user: dict = Depends(get_current_agent)):
     """Reactivate a team member."""
+    _require_super_admin(user)
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -430,6 +444,7 @@ async def reactivate_workspace_user(member_id: str, user: dict = Depends(get_cur
 @router.get("/admin/users/{member_id}/delete-impact")
 async def get_workspace_user_delete_impact(member_id: str, user: dict = Depends(get_current_agent)):
     """Preview linked records before hard-deleting a user."""
+    _require_super_admin(user)
     if not is_workspace_owner(user):
         raise HTTPException(status_code=403, detail="Only workspace owner can preview hard delete impact")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -454,6 +469,7 @@ async def hard_delete_workspace_user(
     user: dict = Depends(get_current_agent),
 ):
     """Hard delete team user (owner only, with impact guard)."""
+    _require_super_admin(user)
     if not is_workspace_owner(user):
         raise HTTPException(status_code=403, detail="Only workspace owner can hard delete users")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -500,6 +516,7 @@ async def list_audit_logs(
     user: dict = Depends(get_current_agent),
 ):
     """List workspace audit logs."""
+    _require_super_admin(user)
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     workspace_owner_id = get_workspace_owner_id(user)

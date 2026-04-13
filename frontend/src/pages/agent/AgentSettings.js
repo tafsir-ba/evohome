@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
 import { useSettings } from '../../context/SettingsContext';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -42,6 +43,7 @@ import { cn } from '../../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 const BASE_URL = process.env.REACT_APP_BACKEND_URL;
+const SUPER_ADMIN_EMAIL = 'tafsir@evo-home.ch';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('auth_token');
@@ -54,9 +56,10 @@ const CURRENCIES = [
   { code: 'USD', name: 'US Dollar (USD)', symbol: '$' }
 ];
 
-export const AgentSettings = () => {
+export const AgentSettings = ({ defaultTab = 'account' }) => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const { user } = useAuth();
   const { settings: globalSettings, updateSettings: updateGlobalSettings, t } = useSettings();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -91,9 +94,27 @@ export const AgentSettings = () => {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: '', role: 'member', message: '' });
   const [sendingInvite, setSendingInvite] = useState(false);
+  
+  // Platform admin tab state (super-admin only)
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminAuditLogs, setAdminAuditLogs] = useState([]);
+  const [loadingAdmin, setLoadingAdmin] = useState(false);
+  const [creatingAdminUser, setCreatingAdminUser] = useState(false);
+  const [adminForm, setAdminForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    workspace_role: 'member',
+  });
+
+  const isPlatformAdmin = (user?.email || '').toLowerCase() === SUPER_ADMIN_EMAIL;
+  const resolvedDefaultTab = defaultTab === 'admin' && isPlatformAdmin ? 'admin' : 'account';
 
   useEffect(() => {
     fetchData();
+    if (resolvedDefaultTab === 'admin') {
+      fetchAdminData();
+    }
   }, []);
 
   // Sync local settings with global when loaded
@@ -144,6 +165,154 @@ export const AgentSettings = () => {
       console.error('Failed to fetch team data:', error);
     } finally {
       setLoadingTeam(false);
+    }
+  };
+
+  const parseApiError = async (res, fallback) => {
+    try {
+      const data = await res.json();
+      return data?.detail || fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const fetchAdminData = async () => {
+    if (!isPlatformAdmin) return;
+    setLoadingAdmin(true);
+    try {
+      const [usersRes, logsRes] = await Promise.all([
+        fetch(`${API}/admin/users?include_inactive=true`, { credentials: 'include', headers: getAuthHeaders() }),
+        fetch(`${API}/admin/audit-logs?limit=50`, { credentials: 'include', headers: getAuthHeaders() }),
+      ]);
+
+      if (usersRes.ok) {
+        setAdminUsers(await usersRes.json());
+      } else {
+        throw new Error(await parseApiError(usersRes, 'Failed to load admin users'));
+      }
+
+      if (logsRes.ok) {
+        setAdminAuditLogs(await logsRes.json());
+      } else {
+        throw new Error(await parseApiError(logsRes, 'Failed to load audit logs'));
+      }
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoadingAdmin(false);
+    }
+  };
+
+  const handleCreateAdminUser = async () => {
+    if (!adminForm.name || !adminForm.email || !adminForm.password) {
+      toast.error('Name, email and password are required');
+      return;
+    }
+    setCreatingAdminUser(true);
+    try {
+      const res = await fetch(`${API}/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
+        body: JSON.stringify(adminForm),
+      });
+      if (!res.ok) {
+        throw new Error(await parseApiError(res, 'Failed to create user'));
+      }
+      toast.success('Admin user created');
+      setAdminForm({ name: '', email: '', password: '', workspace_role: 'member' });
+      fetchAdminData();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setCreatingAdminUser(false);
+    }
+  };
+
+  const handleAdminRoleChange = async (memberId, workspaceRole) => {
+    try {
+      const res = await fetch(`${API}/admin/users/${memberId}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
+        body: JSON.stringify({ workspace_role: workspaceRole }),
+      });
+      if (!res.ok) {
+        throw new Error(await parseApiError(res, 'Failed to update role'));
+      }
+      toast.success('Role updated');
+      fetchAdminData();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleAdminDeactivate = async (memberId) => {
+    if (!confirm('Deactivate this user and revoke sessions?')) return;
+    try {
+      const res = await fetch(`${API}/admin/users/${memberId}/deactivate`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error(await parseApiError(res, 'Failed to deactivate user'));
+      }
+      toast.success('User deactivated');
+      fetchAdminData();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleAdminReactivate = async (memberId) => {
+    try {
+      const res = await fetch(`${API}/admin/users/${memberId}/reactivate`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error(await parseApiError(res, 'Failed to reactivate user'));
+      }
+      toast.success('User reactivated');
+      fetchAdminData();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleHardDeleteAdminUser = async (memberId) => {
+    if (!confirm('Hard delete this user? This is irreversible.')) return;
+    try {
+      const impactRes = await fetch(`${API}/admin/users/${memberId}/delete-impact`, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (!impactRes.ok) {
+        throw new Error(await parseApiError(impactRes, 'Failed to load delete impact'));
+      }
+      const payload = await impactRes.json();
+      const impact = payload?.impact || {};
+      const hasLinkedData = !!impact.has_linked_data;
+      if (hasLinkedData) {
+        const proceed = confirm(`This user has linked data (${JSON.stringify(impact)}). Continue with force delete?`);
+        if (!proceed) return;
+      }
+
+      const delRes = await fetch(`${API}/admin/users/${memberId}?force=${hasLinkedData ? 'true' : 'false'}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (!delRes.ok) {
+        throw new Error(await parseApiError(delRes, 'Failed to hard delete user'));
+      }
+      toast.success('User hard deleted');
+      fetchAdminData();
+    } catch (error) {
+      toast.error(error.message);
     }
   };
 
@@ -410,8 +579,9 @@ export const AgentSettings = () => {
           <p className="text-muted-foreground mt-1">Manage your account preferences and billing</p>
         </div>
 
-        <Tabs defaultValue="account" className="space-y-6" onValueChange={(value) => {
+        <Tabs defaultValue={resolvedDefaultTab} className="space-y-6" onValueChange={(value) => {
           if (value === 'team') fetchTeamData();
+          if (value === 'admin') fetchAdminData();
         }}>
           <TabsList className="bg-muted/50 p-1 rounded-lg">
             <TabsTrigger value="account" className="rounded-md data-[state=active]:bg-background">
@@ -430,6 +600,12 @@ export const AgentSettings = () => {
               <CreditCard className="w-4 h-4 mr-2" />
               Billing
             </TabsTrigger>
+            {isPlatformAdmin && (
+              <TabsTrigger value="admin" className="rounded-md data-[state=active]:bg-background">
+                <Shield className="w-4 h-4 mr-2" />
+                Admin
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Account Tab */}
@@ -955,6 +1131,160 @@ export const AgentSettings = () => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {isPlatformAdmin && (
+            <TabsContent value="admin" className="space-y-6">
+              <Card className="border-border rounded-lg">
+                <CardHeader>
+                  <CardTitle className="text-lg font-outfit flex items-center gap-2">
+                    <Shield className="w-5 h-5" />
+                    Super Admin Controls
+                  </CardTitle>
+                  <CardDescription>
+                    Restricted to {SUPER_ADMIN_EMAIL}. Manage workspace users lifecycle.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Name</Label>
+                      <Input
+                        value={adminForm.name}
+                        onChange={(e) => setAdminForm((prev) => ({ ...prev, name: e.target.value }))}
+                        placeholder="User name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        value={adminForm.email}
+                        onChange={(e) => setAdminForm((prev) => ({ ...prev, email: e.target.value }))}
+                        placeholder="agent@company.com"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Temporary Password</Label>
+                      <Input
+                        type="password"
+                        value={adminForm.password}
+                        onChange={(e) => setAdminForm((prev) => ({ ...prev, password: e.target.value }))}
+                        placeholder="Minimum 8 characters"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Role</Label>
+                      <Select
+                        value={adminForm.workspace_role}
+                        onValueChange={(value) => setAdminForm((prev) => ({ ...prev, workspace_role: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="member">Member</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <Button onClick={handleCreateAdminUser} disabled={creatingAdminUser}>
+                    {creatingAdminUser ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                    Create User
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border rounded-lg">
+                <CardHeader>
+                  <CardTitle className="text-lg font-outfit">Workspace Users</CardTitle>
+                  <CardDescription>Deactivate/reactivate, role changes, and hard delete.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingAdmin ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {adminUsers.map((member) => (
+                        <div key={member.user_id} className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between border rounded-lg p-4">
+                          <div>
+                            <p className="font-medium">{member.name} {member.team_role === 'owner' ? '(Owner)' : ''}</p>
+                            <p className="text-sm text-muted-foreground">{member.email}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Status: {member.is_active === false ? 'inactive' : 'active'}
+                            </p>
+                          </div>
+                          {member.team_role !== 'owner' && (
+                            <div className="flex flex-wrap gap-2">
+                              <Select
+                                value={member.workspace_role || 'member'}
+                                onValueChange={(v) => handleAdminRoleChange(member.user_id, v)}
+                              >
+                                <SelectTrigger className="w-[130px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="member">Member</SelectItem>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {member.is_active === false ? (
+                                <Button variant="outline" onClick={() => handleAdminReactivate(member.user_id)}>
+                                  Reactivate
+                                </Button>
+                              ) : (
+                                <Button variant="outline" onClick={() => handleAdminDeactivate(member.user_id)}>
+                                  Deactivate
+                                </Button>
+                              )}
+                              <Button
+                                variant="destructive"
+                                onClick={() => handleHardDeleteAdminUser(member.user_id)}
+                              >
+                                Hard Delete
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-border rounded-lg">
+                <CardHeader>
+                  <CardTitle className="text-lg font-outfit">Audit Logs</CardTitle>
+                  <CardDescription>Recent admin and destructive operations.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingAdmin ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : adminAuditLogs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No audit logs yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {adminAuditLogs.map((log) => (
+                        <div key={log.audit_id} className="border rounded-md p-3 text-sm">
+                          <p className="font-medium">{log.action}</p>
+                          <p className="text-muted-foreground">
+                            {log.actor_user_id} -> {log.target_type}:{log.target_id}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(log.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AgentLayout>

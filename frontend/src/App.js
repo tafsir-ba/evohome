@@ -209,6 +209,11 @@ const AppRouter = () => {
           <AgentSettings />
         </ProtectedRoute>
       } />
+      <Route path="/agent/admin" element={
+        <ProtectedRoute allowedRoles={['agent']}>
+          <AgentSettings defaultTab="admin" />
+        </ProtectedRoute>
+      } />
       <Route path="/agent/analytics" element={
         <ProtectedRoute allowedRoles={['agent']}>
           <AgentAnalytics />

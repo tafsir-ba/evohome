@@ -19,7 +19,8 @@ import {
   MoreHorizontal,
   ChevronDown,
   ChevronUp,
-  CheckSquare
+  CheckSquare,
+  Shield
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
@@ -37,6 +38,8 @@ export const AgentLayout = ({ children }) => {
   const logoUrl = getLogo();
   const companyName = getCompanyName();
 
+  const isPlatformAdmin = (user?.email || '').toLowerCase() === 'tafsir@evo-home.ch';
+
   // Primary navigation items
   const navigation = [
     { name: t('nav.dashboard'), href: '/agent/home', icon: Home },
@@ -47,6 +50,7 @@ export const AgentLayout = ({ children }) => {
     { name: t('nav.feed'), href: '/agent/feed', icon: MessageSquare },
     { name: 'Decisions', href: '/agent/decisions', icon: CheckSquare },
     { name: t('nav.quotes') + ' / ' + t('nav.invoices'), href: '/agent/documents', icon: FileText },
+    ...(isPlatformAdmin ? [{ name: 'Admin', href: '/agent/admin', icon: Shield }] : []),
     { name: t('nav.settings'), href: '/agent/settings', icon: Settings },
   ];
 
