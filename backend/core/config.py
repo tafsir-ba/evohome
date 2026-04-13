@@ -45,6 +45,7 @@ class Config:
     
     # Critical - App will not start without these
     MONGO_URL: str
+    MONGO_URL_DEMO: str
     DB_NAME: str
     DB_NAME_DEMO: str  # Separate demo database
     JWT_SECRET: str
@@ -76,6 +77,9 @@ class Config:
         self.MONGO_URL = os.environ.get('MONGO_URL', '')
         if not self.MONGO_URL:
             errors.append("MONGO_URL is required but not set")
+
+        # Demo MongoDB URI (required for demo deployment hard isolation)
+        self.MONGO_URL_DEMO = os.environ.get('MONGO_URL_DEMO', '')
         
         self.DB_NAME = os.environ.get('DB_NAME', '')
         if not self.DB_NAME:
@@ -144,6 +148,12 @@ class Config:
         # JWT_SECRET minimum length
         if len(self.JWT_SECRET) < 32:
             errors.append(f"JWT_SECRET must be at least 32 characters (current: {len(self.JWT_SECRET)})")
+
+        # Demo/prod DB isolation guardrails
+        if self.DEMO_MODE and self.DB_NAME_DEMO == self.DB_NAME:
+            errors.append("DB_NAME_DEMO must be different from DB_NAME when DEMO_MODE is enabled")
+        if self.DEMO_MODE and not self.MONGO_URL_DEMO:
+            errors.append("MONGO_URL_DEMO is required when DEMO_MODE is enabled")
         
         # CORS wildcard check in production
         if self.ENVIRONMENT == 'production':
@@ -206,6 +216,12 @@ class Config:
         if self.DEMO_MODE:
             return self.DB_NAME_DEMO
         return self.DB_NAME
+
+    def get_mongo_url(self) -> str:
+        """Get Mongo URI for current deployment mode."""
+        if self.DEMO_MODE:
+            return self.MONGO_URL_DEMO
+        return self.MONGO_URL
     
     @property
     def is_demo_deployment(self) -> bool:

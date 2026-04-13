@@ -20,6 +20,7 @@ from core.auth import (
 )
 from core.rate_limit import rate_limit_check
 from core.monitoring import capture_auth_failure
+from core.config import get_config
 from services.email_service import send_notification_email, send_email_async
 
 logger = logging.getLogger("evohome.auth")
@@ -386,13 +387,17 @@ async def reset_password(request: ResetPasswordRequest):
 @router.post("/auth/demo/{role}")
 async def demo_login(role: str, response: Response, buyer_num: int = 1):
     """Demo login — finds demo users by user_id prefix convention (demo_*)."""
+    if not get_config().is_demo_deployment:
+        raise HTTPException(status_code=404, detail="Not found")
     if role not in ['buyer', 'agent']:
         raise HTTPException(status_code=400, detail="Invalid role")
     if role == 'buyer':
-        buyer_id = f"demo_buyer_00{buyer_num}" if buyer_num in [1, 2] else "demo_buyer_001"
+        buyer_id = f"demo_buyer_00{buyer_num}" if buyer_num in [1, 2, 3, 4] else "demo_buyer_001"
         demo_user = await db.users.find_one({"user_id": buyer_id, "role": "buyer"}, {"_id": 0, "password_hash": 0})
     else:
-        demo_user = await db.users.find_one({"user_id": {"$regex": "^demo_"}, "role": role}, {"_id": 0, "password_hash": 0})
+        demo_user = await db.users.find_one({"user_id": "demo_agent_001", "role": role}, {"_id": 0, "password_hash": 0})
+        if not demo_user:
+            demo_user = await db.users.find_one({"user_id": {"$regex": "^demo_"}, "role": role}, {"_id": 0, "password_hash": 0})
     if not demo_user:
         raise HTTPException(status_code=404, detail="Demo not initialized. Please seed demo data first.")
     token = create_access_token(demo_user['user_id'], role)
