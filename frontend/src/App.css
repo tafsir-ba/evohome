@@ -54,11 +54,23 @@
 }
 
 /* Google Translate runtime chrome cleanup */
+html,
 body {
   top: 0 !important;
+  margin-top: 0 !important;
 }
 
+.skiptranslate,
+.goog-te-banner-frame,
 .goog-te-banner-frame.skiptranslate,
-iframe.goog-te-banner-frame {
+iframe.goog-te-banner-frame,
+#goog-gt-tt,
+.goog-tooltip,
+.goog-tooltip:hover {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+body > .skiptranslate {
   display: none !important;
 }

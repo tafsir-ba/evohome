@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext';
 
 const SCRIPT_ID = 'google-translate-script';
@@ -16,13 +17,31 @@ const setGoogleTranslateCookie = (targetLang) => {
 
 export const GoogleTranslateAuto = () => {
   const { language } = useSettings();
+  const location = useLocation();
   const initializedRef = useRef(false);
   const retryRef = useRef(null);
+  const reapplyTimeoutRef = useRef(null);
+  const applyLanguageRef = useRef(() => {});
+  const lastApplyRef = useRef(0);
 
   useEffect(() => {
+    const stripGoogleBannerChrome = () => {
+      try {
+        document.body.style.top = '0px';
+        document.documentElement.style.top = '0px';
+        const banner = document.querySelector('.goog-te-banner-frame');
+        if (banner) banner.remove();
+        const skip = document.querySelector('iframe.goog-te-banner-frame');
+        if (skip) skip.remove();
+      } catch {
+        // ignore cleanup errors
+      }
+    };
+
     const applyLanguage = (targetLang) => {
       const normalized = targetLang === 'fr' ? 'fr' : 'en';
       setGoogleTranslateCookie(normalized);
+      stripGoogleBannerChrome();
 
       if (retryRef.current) {
         window.clearInterval(retryRef.current);
@@ -35,6 +54,7 @@ export const GoogleTranslateAuto = () => {
         if (combo) {
           combo.value = normalized;
           combo.dispatchEvent(new Event('change'));
+          lastApplyRef.current = Date.now();
           return true;
         }
         return false;
@@ -51,6 +71,7 @@ export const GoogleTranslateAuto = () => {
         }
       }, 400);
     };
+    applyLanguageRef.current = applyLanguage;
 
     const initGoogleTranslate = () => {
       if (initializedRef.current) return;
@@ -81,11 +102,30 @@ export const GoogleTranslateAuto = () => {
       initGoogleTranslate();
     }
 
+    const observer = new MutationObserver(() => {
+      stripGoogleBannerChrome();
+      // React route/content changes can happen after translation initializes.
+      // Re-apply French translation on major DOM updates.
+      if (language !== 'fr') return;
+      const now = Date.now();
+      if (now - lastApplyRef.current < 500) return;
+      if (reapplyTimeoutRef.current) window.clearTimeout(reapplyTimeoutRef.current);
+      reapplyTimeoutRef.current = window.setTimeout(() => {
+        applyLanguageRef.current(language);
+      }, 250);
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+
     return () => {
       if (retryRef.current) {
         window.clearInterval(retryRef.current);
         retryRef.current = null;
       }
+      if (reapplyTimeoutRef.current) {
+        window.clearTimeout(reapplyTimeoutRef.current);
+        reapplyTimeoutRef.current = null;
+      }
+      observer.disconnect();
     };
   }, []);
 
@@ -97,9 +137,41 @@ export const GoogleTranslateAuto = () => {
     if (combo) {
       combo.value = normalized;
       combo.dispatchEvent(new Event('change'));
+      lastApplyRef.current = Date.now();
     }
   }, [language]);
 
-  return <div id="google_translate_element" style={{ display: 'none' }} aria-hidden="true" />;
+  useEffect(() => {
+    // Ensure newly rendered route content is translated too.
+    if (reapplyTimeoutRef.current) {
+      window.clearTimeout(reapplyTimeoutRef.current);
+    }
+    reapplyTimeoutRef.current = window.setTimeout(() => {
+      applyLanguageRef.current(language);
+    }, 300);
+
+    return () => {
+      if (reapplyTimeoutRef.current) {
+        window.clearTimeout(reapplyTimeoutRef.current);
+        reapplyTimeoutRef.current = null;
+      }
+    };
+  }, [language, location.pathname, location.search]);
+
+  return (
+    <div
+      id="google_translate_element"
+      style={{
+        position: 'fixed',
+        left: '-9999px',
+        top: 0,
+        width: '1px',
+        height: '1px',
+        opacity: 0,
+        pointerEvents: 'none',
+      }}
+      aria-hidden="true"
+    />
+  );
 };
 
