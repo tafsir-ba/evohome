@@ -119,12 +119,28 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
     vault_docs = _sort_vault_docs(vault_docs)
     vault_files = [_format_vault_doc(v) for v in vault_docs]
 
-    # ── Step 5: Change requests on buyer's documents ──
+    # ── Step 5: Change requests on buyer-visible documents + decisions ──
     doc_ids = [d["document_id"] for d in docs]
+    recipient_rows_for_cr = await db.decision_recipients.find(
+        {"client_id": {"$in": peer_client_ids}},
+        {"_id": 0, "decision_id": 1},
+    ).to_list(500)
+    decision_ids_for_cr = list({r.get("decision_id") for r in recipient_rows_for_cr if r.get("decision_id")})
     change_requests = []
+    cr_entity_filters: List[Dict[str, Any]] = []
     if doc_ids:
+        cr_entity_filters.append({
+            "entity_type": {"$in": ["quote", "invoice", "document"]},
+            "entity_id": {"$in": doc_ids},
+        })
+    if decision_ids_for_cr:
+        cr_entity_filters.append({
+            "entity_type": "decision",
+            "entity_id": {"$in": decision_ids_for_cr},
+        })
+    if cr_entity_filters:
         crs = await db.change_requests.find(
-            {"entity_id": {"$in": doc_ids}},
+            {"$or": cr_entity_filters},
             {"_id": 0}
         ).sort("created_at", -1).to_list(200)
         change_requests = [{

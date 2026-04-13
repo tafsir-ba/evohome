@@ -373,22 +373,31 @@ const BuyerUpdateFeedCard = ({ activity, highlight = false }) => {
   );
 };
 
-const DecisionFeedCard = ({ decision, onRespond, highlighted = false }) => {
+const DecisionFeedCard = ({
+  decision,
+  onRespond,
+  highlighted = false,
+  preferredChangeRequestId = null,
+  onPreferredMiss = null,
+}) => {
   const [expanded, setExpanded] = useState(Boolean(highlighted));
   const [comment, setComment] = useState('');
   const [responding, setResponding] = useState(false);
+  const [threadReloadTick, setThreadReloadTick] = useState(0);
   const isPending = decision?.buyer_status === 'pending';
   const isOverdue = decision?.deadline && decision?.status === 'pending' && new Date(decision.deadline) < new Date();
 
   useEffect(() => {
-    if (highlighted) setExpanded(true);
-  }, [highlighted]);
+    if (highlighted || preferredChangeRequestId) setExpanded(true);
+  }, [highlighted, preferredChangeRequestId]);
 
   const handleRespond = async (action) => {
     setResponding(true);
     try {
       await onRespond(decision.decision_id, action, action === 'request_change' ? comment : null);
       if (action === 'request_change') setComment('');
+      // Ensure freshly-created/updated thread appears immediately.
+      setThreadReloadTick((v) => v + 1);
     } finally {
       setResponding(false);
     }
@@ -477,6 +486,14 @@ const DecisionFeedCard = ({ decision, onRespond, highlighted = false }) => {
                 ))}
               </div>
             )}
+
+            <ChangeRequestThread
+              key={`decision-thread-${decision.decision_id}-${threadReloadTick}`}
+              entityType="decision"
+              entityId={decision.decision_id}
+              preferredChangeRequestId={preferredChangeRequestId}
+              onPreferredMiss={preferredChangeRequestId ? onPreferredMiss : undefined}
+            />
 
             {isPending && (
               <div className="space-y-2">
@@ -1923,6 +1940,12 @@ export const BuyerTimeline = () => {
             }
           }}
           highlighted={decisionIdFromUrl === item.payload?.decision_id}
+          preferredChangeRequestId={
+            decisionIdFromUrl === item.payload?.decision_id
+              ? changeRequestIdFromUrl
+              : null
+          }
+          onPreferredMiss={clearChangeRequestParam}
         />
       );
     }

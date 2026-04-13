@@ -4,13 +4,12 @@ Access control for change request APIs — mirrors document/decision ownership r
 from typing import Any, Dict
 
 from database import db
+from services.recipient_scope_service import get_buyer_scope
 
 
-async def _buyer_client_ids(buyer_user_id: str):
-    clients = await db.clients.find(
-        {"buyer_id": buyer_user_id}, {"_id": 0, "client_id": 1}
-    ).to_list(100)
-    return [c["client_id"] for c in clients]
+async def _buyer_scope_client_ids(buyer_user_id: str):
+    scope = await get_buyer_scope(buyer_user_id, include_unit_peers=True)
+    return scope.get("peer_client_ids", [])
 
 
 async def user_can_access_entity(user: Dict[str, Any], entity_type: str, entity_id: str) -> bool:
@@ -24,7 +23,7 @@ async def user_can_access_entity(user: Dict[str, Any], entity_type: str, entity_
             return False
         if role == "agent":
             return doc.get("agent_id") == uid
-        cids = await _buyer_client_ids(uid)
+        cids = await _buyer_scope_client_ids(uid)
         return doc.get("client_id") in cids
 
     if entity_type == "decision":
@@ -39,7 +38,7 @@ async def user_can_access_entity(user: Dict[str, Any], entity_type: str, entity_
         ).to_list(200)
         if not recs:
             return False
-        cids = await _buyer_client_ids(uid)
+        cids = await _buyer_scope_client_ids(uid)
         rec_cids = {r["client_id"] for r in recs}
         return bool(rec_cids.intersection(cids))
 
