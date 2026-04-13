@@ -15,6 +15,7 @@ from io import BytesIO
 from fastapi import APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Form, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field, EmailStr
+import bcrypt
 
 from database import db
 from core.auth import get_current_user, get_current_agent, get_current_buyer, verify_token
@@ -49,6 +50,8 @@ def _require_super_admin(user: Dict[str, Any]) -> None:
 
 def _clean_user_row(user: dict) -> dict:
     row = dict(user)
+    # insert_one mutates the document with BSON _id; never return it in JSON APIs.
+    row.pop("_id", None)
     for k in ("password_hash", "password_reset_token", "password_reset_expires"):
         row.pop(k, None)
     return row
@@ -322,11 +325,14 @@ async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Dep
         "name": data.name,
         "password_hash": password_hash,
         "role": "agent",
+        "picture": None,
         "workspace_owner_id": workspace_owner_id,
         "workspace_role": data.workspace_role,
         "is_active": True,
         "created_at": now,
         "created_by": user.get("user_id"),
+        "subscription_plan": "free",
+        "subscription_status": "active",
     }
     await db.users.insert_one(user_doc)
     await log_audit_event(
