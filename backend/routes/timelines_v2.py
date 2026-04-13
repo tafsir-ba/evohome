@@ -6,18 +6,163 @@ Covers: timeline CRUD, step management, templates.
 """
 import logging
 from typing import Optional, List
+import os
+import json
+import re
+import uuid
+import tempfile
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Query
 from pydantic import BaseModel, Field
+import openai
+import fitz
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project
+from core.access_control import can_access_project, get_workspace_owner_id
 from database import db
 from services import timeline_service, step_service
 from services.realtime_service import send_milestone_notification
+from services.ai_service import OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+SWISS_DEFAULT_PHASES = [
+    {"name": "Planning & Permits", "description": "Finalize plans, permits, and execution schedule.", "planned_date": "Month 1-2"},
+    {"name": "Site Preparation", "description": "Mobilization, setup, demolition and preparatory work.", "planned_date": "Month 2-3"},
+    {"name": "Structural Works (Gros Oeuvre)", "description": "Foundations, slabs, load-bearing structure and masonry.", "planned_date": "Month 3-7"},
+    {"name": "Building Envelope", "description": "Roofing, facade, windows and weatherproofing.", "planned_date": "Month 6-9"},
+    {"name": "Technical Installations (CVCSE)", "description": "Heating, ventilation, plumbing and electrical systems.", "planned_date": "Month 8-11"},
+    {"name": "Interior Finishes", "description": "Partitions, flooring, painting, joinery and fixtures.", "planned_date": "Month 10-13"},
+    {"name": "Commissioning & Handover", "description": "Testing, inspections, punch list and final delivery.", "planned_date": "Month 13-14"},
+]
+
+
+def _normalize_phases(phases: List[dict]) -> List[dict]:
+    cleaned = []
+    for p in phases or []:
+        name = str(p.get("name") or "").strip()
+        if not name:
+            continue
+        cleaned.append({
+            "name": name,
+            "description": str(p.get("description") or "").strip(),
+            "planned_date": str(p.get("planned_date") or "").strip(),
+        })
+
+    # enforce 6-7 key steps for MVP UX
+    if len(cleaned) > 7:
+        cleaned = cleaned[:7]
+    if len(cleaned) < 6:
+        existing = {c["name"].lower() for c in cleaned}
+        for default in SWISS_DEFAULT_PHASES:
+            if default["name"].lower() not in existing:
+                cleaned.append(default)
+            if len(cleaned) >= 7:
+                break
+    return cleaned[:7]
+
+
+async def _extract_text_from_document(path: str) -> str:
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".pdf":
+        doc = fitz.open(path)
+        try:
+            parts = []
+            for i in range(min(len(doc), 30)):
+                parts.append(doc[i].get_text())
+            return "\n".join(parts).strip()
+        finally:
+            doc.close()
+
+    if ext in {".png", ".jpg", ".jpeg", ".webp"} and OPENAI_API_KEY:
+        with open(path, "rb") as f:
+            b64 = __import__("base64").b64encode(f.read()).decode("utf-8")
+        mime = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+        }[ext]
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Extract all planning/timeline text from this construction document image."},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "high"}},
+                ],
+            }],
+            max_tokens=1800,
+        )
+        return (response.choices[0].message.content or "").strip()
+
+    if ext in {".xlsx", ".xls"}:
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(path, data_only=True)
+            lines = []
+            for ws in wb.worksheets[:3]:
+                for row in ws.iter_rows(max_row=300, values_only=True):
+                    text = " | ".join([str(c) for c in row if c is not None]).strip()
+                    if text:
+                        lines.append(text)
+            return "\n".join(lines)
+        except Exception:
+            return ""
+
+    return ""
+
+
+async def _extract_swiss_timeline_phases(text: str) -> dict:
+    if not OPENAI_API_KEY:
+        return {
+            "phases": SWISS_DEFAULT_PHASES[:7],
+            "project_duration": "Approx. 12-18 months",
+            "confidence": "low",
+            "notes": "AI key not configured, using Swiss default phase model.",
+        }
+
+    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+    prompt = """You are a Swiss construction planning assistant.
+Given the document text, produce a simplified timeline with exactly 6 or 7 key phases aligned with common Swiss construction norms.
+
+Rules:
+- Output exactly 6 or 7 phases.
+- Keep each phase concise and business-friendly.
+- Include rough date labels as text (e.g. "Q2 2026", "Month 1-2", "Spring 2027") if available.
+- If dates are missing, infer realistic relative periods.
+- Use French/English neutral professional naming suitable for Swiss real-estate clients.
+
+Return ONLY JSON:
+{
+  "phases": [{"name":"", "description":"", "planned_date":""}],
+  "project_duration":"string",
+  "confidence":"high|medium|low",
+  "notes":"string"
+}
+"""
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": text[:12000] or "No text extracted; return a Swiss-standard 6-7 phase plan."},
+        ],
+        max_tokens=1400,
+    )
+    raw = response.choices[0].message.content or ""
+    match = re.search(r"\{[\s\S]*\}", raw)
+    if not match:
+        raise ValueError("AI did not return JSON")
+    parsed = json.loads(match.group())
+    parsed["phases"] = _normalize_phases(parsed.get("phases", []))
+    if len(parsed["phases"]) < 6:
+        parsed["phases"] = SWISS_DEFAULT_PHASES[:7]
+        parsed["confidence"] = "low"
+    return parsed
 
 
 # ── Request schemas ──
@@ -125,6 +270,151 @@ async def delete_timeline(timeline_id: str, user=Depends(get_current_agent)):
 
     await timeline_service.delete_timeline_cascade(timeline_id)
     return {"message": "Timeline deleted"}
+
+
+@router.post("/timeline/extract")
+async def extract_timeline_from_document(
+    file: UploadFile = File(...),
+    project_id: str = Form(...),
+    user=Depends(get_current_agent),
+):
+    """Extract simplified 6-7 phase timeline from document."""
+    if not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied to this project")
+    scope_agent_id = get_workspace_owner_id(user)
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    allowed = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xlsx", ".xls"}
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Use PDF, image, or Excel.")
+
+    temp_path = ""
+    try:
+        content = await file.read()
+        fd, temp_path = tempfile.mkstemp(prefix="timeline_extract_", suffix=ext)
+        os.close(fd)
+        with open(temp_path, "wb") as f:
+            f.write(content)
+
+        extracted_text = await _extract_text_from_document(temp_path)
+        timeline_data = await _extract_swiss_timeline_phases(extracted_text)
+        phases = _normalize_phases(timeline_data.get("phases", []))
+
+        extraction_id = f"tlx_{uuid.uuid4().hex[:12]}"
+        extraction_doc = {
+            "extraction_id": extraction_id,
+            "agent_id": scope_agent_id,
+            "project_id": project_id,
+            "source_filename": file.filename,
+            "status": "pending_review",
+            "extracted_data": {
+                "phases": phases,
+                "project_duration": timeline_data.get("project_duration"),
+                "confidence": timeline_data.get("confidence", "low"),
+                "notes": timeline_data.get("notes", ""),
+            },
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.timeline_extractions.insert_one(extraction_doc)
+        extraction_doc.pop("_id", None)
+        return extraction_doc
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Timeline extraction failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+
+@router.get("/timeline/extractions")
+async def list_timeline_extractions(
+    status: Optional[str] = Query(None),
+    user=Depends(get_current_agent),
+):
+    query = {"agent_id": get_workspace_owner_id(user)}
+    if status:
+        query["status"] = status
+    rows = await db.timeline_extractions.find(query, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
+    return rows
+
+
+@router.get("/timeline/extractions/{extraction_id}")
+async def get_timeline_extraction(extraction_id: str, user=Depends(get_current_agent)):
+    row = await db.timeline_extractions.find_one(
+        {"extraction_id": extraction_id, "agent_id": get_workspace_owner_id(user)},
+        {"_id": 0},
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Extraction not found")
+    return row
+
+
+@router.post("/timeline/extractions/{extraction_id}/approve")
+async def approve_timeline_extraction(
+    extraction_id: str,
+    project_id: str = Form(...),
+    phases: str = Form(...),
+    user=Depends(get_current_agent),
+):
+    """Approve extracted timeline and create project timeline steps."""
+    if not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied to this project")
+
+    row = await db.timeline_extractions.find_one(
+        {"extraction_id": extraction_id, "agent_id": get_workspace_owner_id(user)},
+        {"_id": 0},
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Extraction not found")
+
+    existing = await timeline_service.get_timeline_by_project(project_id)
+    if existing:
+        raise HTTPException(status_code=400, detail="Project already has a timeline. Delete it before approving a new extraction.")
+
+    try:
+        phase_rows = json.loads(phases)
+        normalized = _normalize_phases(phase_rows)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid phases payload")
+
+    steps_data = [
+        {
+            "title": p.get("name") or f"Step {i+1}",
+            "description": p.get("description", ""),
+            "planned_date": p.get("planned_date", ""),
+            "order": i + 1,
+            "status": "pending",
+        }
+        for i, p in enumerate(normalized)
+    ]
+    created = await timeline_service.create_timeline_with_steps(
+        project_id=project_id,
+        agent_id=get_workspace_owner_id(user),
+        name="Project Timeline",
+        steps_data=steps_data,
+    )
+    await db.timeline_extractions.update_one(
+        {"extraction_id": extraction_id},
+        {
+            "$set": {
+                "status": "approved",
+                "approved_at": datetime.now(timezone.utc).isoformat(),
+                "approved_timeline_id": created["timeline"]["timeline_id"],
+                "approved_phases": normalized,
+            }
+        },
+    )
+    return {
+        "message": "Timeline approved and created",
+        "extraction_id": extraction_id,
+        "timeline_id": created["timeline"]["timeline_id"],
+        "steps_count": len(created["steps"]),
+    }
 
 
 # ── Step management ──
