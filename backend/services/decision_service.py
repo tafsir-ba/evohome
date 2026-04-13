@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 
 from database import db
 from services.notification_service import emit_realtime
+from services.recipient_scope_service import expand_client_ids_to_unit_peers
 
 logger = logging.getLogger(__name__)
 
@@ -511,17 +512,7 @@ async def list_buyer_decisions(buyer_id: str) -> List[Dict[str, Any]]:
         query, {"_id": 0, "client_id": 1, "project_id": 1}
     ).to_list(50)
     client_ids = [c["client_id"] for c in clients if c.get("client_id")]
-    unit_rows = await db.clients.find(
-        query, {"_id": 0, "unit_id": 1}
-    ).to_list(200)
-    unit_ids = [r.get("unit_id") for r in unit_rows if r.get("unit_id")]
-    peer_client_ids = set(client_ids)
-    if unit_ids:
-        peers = await db.clients.find(
-            {"unit_id": {"$in": unit_ids}}, {"_id": 0, "client_id": 1}
-        ).to_list(2000)
-        peer_client_ids.update(p.get("client_id") for p in peers if p.get("client_id"))
-    scope_client_ids = list(peer_client_ids)
+    scope_client_ids = await expand_client_ids_to_unit_peers(client_ids)
 
     if not scope_client_ids:
         return []

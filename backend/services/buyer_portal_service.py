@@ -8,6 +8,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from database import db
 from services import file_service
+from services.recipient_scope_service import get_buyer_scope
 from services.decision_service import sync_missing_decision_recipients_for_client_ids
 
 logger = logging.getLogger(__name__)
@@ -28,27 +29,7 @@ async def _get_buyer_client_scope(buyer_id: str) -> Dict[str, Any]:
     Resolve buyer client scope including same-unit peer client records.
     This keeps multi-owner unit views consistent across legacy + new rows.
     """
-    clients = await db.clients.find(
-        {"buyer_id": buyer_id}, {"_id": 0}
-    ).to_list(500)
-    if not clients:
-        return {"clients": [], "client_ids": [], "peer_client_ids": []}
-
-    client_ids = list({c.get("client_id") for c in clients if c.get("client_id")})
-    unit_ids = list({c.get("unit_id") for c in clients if c.get("unit_id")})
-
-    peer_client_ids = set(client_ids)
-    if unit_ids:
-        peers = await db.clients.find(
-            {"unit_id": {"$in": unit_ids}}, {"_id": 0, "client_id": 1}
-        ).to_list(2000)
-        peer_client_ids.update(c.get("client_id") for c in peers if c.get("client_id"))
-
-    return {
-        "clients": clients,
-        "client_ids": client_ids,
-        "peer_client_ids": list(peer_client_ids),
-    }
+    return await get_buyer_scope(buyer_id, include_unit_peers=True)
 
 
 async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:

@@ -14,6 +14,7 @@ from typing import Optional, List, Dict, Any
 
 from database import db
 from services.notification_service import emit_notification, emit_email, emit_realtime
+from services.recipient_scope_service import get_buyer_scope, expand_client_ids_to_unit_peers
 
 logger = logging.getLogger(__name__)
 
@@ -49,35 +50,21 @@ async def _get_buyer_access_scope(buyer_id: str) -> Dict[str, Any]:
     This guarantees multi-owner units see the same activity stream, including
     legacy posts that were originally sent to only one owner client_id.
     """
-    buyer_clients = await db.clients.find(
-        {"buyer_id": buyer_id},
-        {"_id": 0, "client_id": 1, "unit_id": 1},
-    ).to_list(500)
-    if not buyer_clients:
+    scope = await get_buyer_scope(buyer_id, include_unit_peers=True)
+    buyer_client_ids = scope.get("client_ids", [])
+    peer_client_ids = scope.get("peer_client_ids", [])
+    if not buyer_client_ids:
         return {"buyer_client_ids": [], "peer_client_ids": [], "activity_ids": []}
 
-    buyer_client_ids = list({c.get("client_id") for c in buyer_clients if c.get("client_id")})
-    unit_ids = list({c.get("unit_id") for c in buyer_clients if c.get("unit_id")})
-
-    peer_client_ids = set(buyer_client_ids)
-    if unit_ids:
-        unit_peers = await db.clients.find(
-            {"unit_id": {"$in": unit_ids}},
-            {"_id": 0, "client_id": 1},
-        ).to_list(2000)
-        peer_client_ids.update(
-            c.get("client_id") for c in unit_peers if c.get("client_id")
-        )
-
     recipients = await db.activity_recipients.find(
-        {"client_id": {"$in": list(peer_client_ids)}},
+        {"client_id": {"$in": peer_client_ids}},
         {"_id": 0, "activity_id": 1},
     ).to_list(5000)
     activity_ids = list({r.get("activity_id") for r in recipients if r.get("activity_id")})
 
     return {
         "buyer_client_ids": buyer_client_ids,
-        "peer_client_ids": list(peer_client_ids),
+        "peer_client_ids": peer_client_ids,
         "activity_ids": activity_ids,
     }
 
@@ -86,25 +73,7 @@ async def _expand_recipient_client_ids(client_ids: List[str]) -> List[str]:
     """
     Expand selected recipients to include all co-owners on the same unit(s).
     """
-    base_ids = list({cid for cid in client_ids if cid})
-    if not base_ids:
-        return []
-
-    selected_clients = await db.clients.find(
-        {"client_id": {"$in": base_ids}},
-        {"_id": 0, "unit_id": 1},
-    ).to_list(len(base_ids))
-    unit_ids = list({c.get("unit_id") for c in selected_clients if c.get("unit_id")})
-    if not unit_ids:
-        return base_ids
-
-    peers = await db.clients.find(
-        {"unit_id": {"$in": unit_ids}},
-        {"_id": 0, "client_id": 1},
-    ).to_list(2000)
-    expanded = set(base_ids)
-    expanded.update(c.get("client_id") for c in peers if c.get("client_id"))
-    return list(expanded)
+    return await expand_client_ids_to_unit_peers(client_ids or [])
 
 
 async def enrich_activity(activity: dict, include_replies: bool = False) -> dict:
