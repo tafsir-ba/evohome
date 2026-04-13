@@ -304,6 +304,18 @@ const getActivityBody = (activity) => {
   return content || title || '';
 };
 
+const normalizeTimelineStatus = (rawStatus) => {
+  const normalized = String(rawStatus || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, '_');
+
+  if (['approved', 'completed', 'done', 'closed'].includes(normalized)) return 'completed';
+  if (['in_progress', 'inprogress', 'active', 'started', 'ongoing'].includes(normalized)) return 'in_progress';
+  if (['pending', 'not_started', 'todo', 'queued'].includes(normalized)) return 'pending';
+  return normalized || 'pending';
+};
+
 const BuyerUpdateFeedCard = ({ activity, highlight = false }) => {
   const fileUrl = resolveFeedFileUrl(activity.file_url);
   const postBody = getActivityBody(activity);
@@ -1389,7 +1401,7 @@ export const BuyerTimeline = () => {
             setStages(portal.construction_timeline.steps.map(step => ({
               step_id: step.step_id,
               title: step.title,
-              status: step.status === 'approved' ? 'completed' : step.status,
+              status: normalizeTimelineStatus(step.status),
               description: step.description,
               planned_date: step.planned_date,
               completed_at: step.completed_at,
@@ -1739,10 +1751,22 @@ export const BuyerTimeline = () => {
     }
   };
 
-  const currentPhase = stages.find(s => s.status === 'in_progress')?.name || 
-                       (stages.every(s => s.status === 'completed') ? 'Complete' : 'Not started');
+  const currentPhase = useMemo(() => {
+    if (!stages.length) return 'Not started';
 
-  const pendingCount = events.filter(e => e.actionRequired).length;
+    const inProgress = stages.find((s) => normalizeTimelineStatus(s.status) === 'in_progress');
+    if (inProgress?.title) return inProgress.title;
+
+    const pending = stages.find((s) => normalizeTimelineStatus(s.status) === 'pending');
+    if (pending?.title) return pending.title;
+
+    const allCompleted = stages.every((s) => normalizeTimelineStatus(s.status) === 'completed');
+    return allCompleted ? 'Complete' : 'Not started';
+  }, [stages]);
+
+  const actionableDocuments = events.filter((e) => Boolean(e.actionRequired));
+  const actionableDecisions = buyerDecisions.filter((d) => d?.buyer_status === 'pending');
+  const pendingCount = actionableDocuments.length + actionableDecisions.length;
 
   const filteredEvents = events.filter(event => {
     if (!searchQuery.trim()) return true;
@@ -2039,24 +2063,29 @@ export const BuyerTimeline = () => {
             {pendingCount > 0 && (
               <button
                 onClick={() => {
-                  // Find first actionable event and scroll to it
-                  const firstActionable = filteredEvents.find(e => 
-                    (e.type === 'quote' && e.status === 'Sent') ||
-                    (e.type === 'invoice' && e.status === 'Sent')
-                  );
-                  if (firstActionable) {
-                    const el = document.querySelector(`[data-testid="timeline-event-${firstActionable.id}"]`);
-                    if (el) {
-                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
-                      setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
-                    }
+                  // Find first pending action across documents and decisions, then jump to it.
+                  const actionableFeedItems = socialFeedItems.filter((item) => {
+                    if (item.kind === 'decision') return item.payload?.buyer_status === 'pending';
+                    if (item.kind === 'quote' || item.kind === 'invoice') return Boolean(item.payload?.actionRequired);
+                    return false;
+                  });
+                  if (!actionableFeedItems.length) return;
+
+                  const first = actionableFeedItems[0];
+                  const selector = first.kind === 'decision'
+                    ? `[data-testid="feed-card-decision-${first.payload?.decision_id}"]`
+                    : `[data-testid="timeline-event-${first.payload?.id}"]`;
+                  const el = document.querySelector(selector);
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+                    setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
                   }
                 }}
                 className="text-xs px-2 py-0.5 rounded-full bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors cursor-pointer"
                 data-testid="action-needed-badge"
               >
-                {pendingCount} action{pendingCount > 1 ? 's' : ''} needed
+                {pendingCount} pending action{pendingCount > 1 ? 's' : ''}
               </button>
             )}
           </div>

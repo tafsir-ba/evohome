@@ -14,6 +14,31 @@ from services.decision_service import sync_missing_decision_recipients_for_clien
 logger = logging.getLogger(__name__)
 
 
+def _pick_buyer_decision_status(
+    recipient_rows: List[Dict[str, Any]],
+    own_client_ids: List[str],
+) -> str:
+    """
+    Compute buyer-facing status for a decision in multi-client/multi-owner contexts.
+    Prefer the current buyer's own recipient rows; never let unrelated peer-pending rows
+    mask an already completed action.
+    """
+    own_set = set(str(cid) for cid in (own_client_ids or []) if cid)
+    own_rows = [r for r in recipient_rows if str(r.get("client_id")) in own_set]
+    rows = own_rows or recipient_rows
+    if not rows:
+        return "pending"
+
+    explicit_order = ("approved", "rejected", "request_change")
+    for status in explicit_order:
+        if any((r.get("status") or "pending") == status for r in rows):
+            return status
+
+    if any((r.get("status") or "pending") == "pending" for r in rows):
+        return "pending"
+    return "pending"
+
+
 def _sort_vault_docs(docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Architect plans are pinned first, then newest."""
     def _key(doc: Dict[str, Any]):
@@ -177,9 +202,7 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
                 r for r in by_decision.get(d["decision_id"], [])
                 if r.get("client_id") in peer_client_ids
             ]
-            pending_rec = next((x for x in recs if x.get("status") == "pending"), None)
-            chosen = pending_rec or (recs[0] if recs else None)
-            buyer_status = chosen.get("status", "pending") if chosen else "pending"
+            buyer_status = _pick_buyer_decision_status(recs, client_ids)
             decisions.append({
                 "decision_id": d["decision_id"],
                 "title": d.get("title", ""),
@@ -377,10 +400,20 @@ async def process_buyer_action(
         if not buyer_cids:
             raise ValueError("No client record found for this buyer")
 
+        # Prefer a still-pending recipient row to avoid no-op updates on already-answered rows.
         rec = await db.decision_recipients.find_one(
-            {"decision_id": decision_id, "client_id": {"$in": buyer_cids}},
+            {
+                "decision_id": decision_id,
+                "client_id": {"$in": buyer_cids},
+                "status": "pending",
+            },
             {"_id": 0, "client_id": 1},
         )
+        if not rec:
+            rec = await db.decision_recipients.find_one(
+                {"decision_id": decision_id, "client_id": {"$in": buyer_cids}},
+                {"_id": 0, "client_id": 1},
+            )
         if not rec:
             raise ValueError("You are not a recipient for this decision")
 
