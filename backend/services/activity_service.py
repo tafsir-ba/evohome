@@ -42,6 +42,46 @@ async def get_buyer_context(buyer_id: str) -> Optional[Dict[str, Any]]:
     }
 
 
+async def _get_buyer_access_scope(buyer_id: str) -> Dict[str, Any]:
+    """
+    Resolve all buyer-linked clients and same-unit peer clients.
+
+    This guarantees multi-owner units see the same activity stream, including
+    legacy posts that were originally sent to only one owner client_id.
+    """
+    buyer_clients = await db.clients.find(
+        {"buyer_id": buyer_id},
+        {"_id": 0, "client_id": 1, "unit_id": 1},
+    ).to_list(500)
+    if not buyer_clients:
+        return {"buyer_client_ids": [], "peer_client_ids": [], "activity_ids": []}
+
+    buyer_client_ids = list({c.get("client_id") for c in buyer_clients if c.get("client_id")})
+    unit_ids = list({c.get("unit_id") for c in buyer_clients if c.get("unit_id")})
+
+    peer_client_ids = set(buyer_client_ids)
+    if unit_ids:
+        unit_peers = await db.clients.find(
+            {"unit_id": {"$in": unit_ids}},
+            {"_id": 0, "client_id": 1},
+        ).to_list(2000)
+        peer_client_ids.update(
+            c.get("client_id") for c in unit_peers if c.get("client_id")
+        )
+
+    recipients = await db.activity_recipients.find(
+        {"client_id": {"$in": list(peer_client_ids)}},
+        {"_id": 0, "activity_id": 1},
+    ).to_list(5000)
+    activity_ids = list({r.get("activity_id") for r in recipients if r.get("activity_id")})
+
+    return {
+        "buyer_client_ids": buyer_client_ids,
+        "peer_client_ids": list(peer_client_ids),
+        "activity_ids": activity_ids,
+    }
+
+
 async def enrich_activity(activity: dict, include_replies: bool = False) -> dict:
     """Enrich a SINGLE activity. Used for detail views only.
     For list views, use batch_enrich_activities() instead."""
@@ -302,18 +342,12 @@ async def _list_agent_activities(
 
 
 async def _list_buyer_activities(buyer_id, activity_type, limit, offset):
-    ctx = await get_buyer_context(buyer_id)
-    if not ctx:
+    scope = await _get_buyer_access_scope(buyer_id)
+    activity_ids = scope.get("activity_ids", [])
+    if not activity_ids:
         return {"activities": [], "total": 0, "limit": limit, "offset": offset}
 
-    recs = await db.activity_recipients.find(
-        {"client_id": ctx['client_id']}, {"_id": 0, "activity_id": 1}
-    ).to_list(1000)
-    ids = [r['activity_id'] for r in recs]
-    if not ids:
-        return {"activities": [], "total": 0, "limit": limit, "offset": offset}
-
-    query = {"activity_id": {"$in": ids}}
+    query = {"activity_id": {"$in": activity_ids}}
     if activity_type:
         query["type"] = activity_type
 
@@ -336,12 +370,13 @@ async def get_activity_detail(activity_id: str) -> Optional[Dict[str, Any]]:
 
 
 async def can_buyer_access_activity(buyer_id: str, activity_id: str) -> bool:
-    """Check buyer has access via recipient linkage."""
-    ctx = await get_buyer_context(buyer_id)
-    if not ctx:
+    """Check buyer has access via own or same-unit recipient linkage."""
+    scope = await _get_buyer_access_scope(buyer_id)
+    if not scope.get("peer_client_ids"):
         return False
     return bool(await db.activity_recipients.find_one({
-        "activity_id": activity_id, "client_id": ctx['client_id'],
+        "activity_id": activity_id,
+        "client_id": {"$in": scope["peer_client_ids"]},
     }))
 
 
@@ -538,13 +573,8 @@ async def get_unread_count(user_id: str, role: str, agent_scope_id: Optional[str
     last_seen = tracking.get('last_seen_at') if tracking else None
 
     if role == 'buyer':
-        ctx = await get_buyer_context(user_id)
-        if not ctx:
-            return {"unread_count": 0, "last_seen_at": last_seen}
-        recs = await db.activity_recipients.find(
-            {"client_id": ctx['client_id']}, {"_id": 0, "activity_id": 1}
-        ).to_list(1000)
-        ids = [r['activity_id'] for r in recs]
+        scope = await _get_buyer_access_scope(user_id)
+        ids = scope.get("activity_ids", [])
         if not ids:
             return {"unread_count": 0, "last_seen_at": last_seen}
         query = {"activity_id": {"$in": ids}}
