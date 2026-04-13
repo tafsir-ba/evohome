@@ -16,6 +16,24 @@ from services.notification_service import emit_realtime
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_contact_person(contact_person: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not contact_person or not isinstance(contact_person, dict):
+        return None
+
+    cleaned = {
+        "contact_id": str(contact_person.get("contact_id") or "").strip(),
+        "source": str(contact_person.get("source") or "").strip(),
+        "name": str(contact_person.get("name") or "").strip(),
+        "company_name": str(contact_person.get("company_name") or "").strip(),
+        "role": str(contact_person.get("role") or "").strip(),
+        "email": str(contact_person.get("email") or "").strip(),
+        "phone": str(contact_person.get("phone") or "").strip(),
+    }
+    if not cleaned["name"] and not cleaned["email"] and not cleaned["phone"]:
+        return None
+    return cleaned
+
+
 async def _buyer_user_ids_from_client_ids(client_ids: List[str]) -> List[str]:
     """Resolve distinct buyer user_ids for the given client records."""
     out: List[str] = []
@@ -151,6 +169,7 @@ async def create_decision(
     coverage_type: str = "project",
     unit_ids: Optional[List[str]] = None,
     client_ids: Optional[List[str]] = None,
+    contact_person: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Create a new decision."""
     decision_id = f"dec_{uuid.uuid4().hex[:12]}"
@@ -170,6 +189,7 @@ async def create_decision(
             "unit_ids": unit_ids or [],
             "client_ids": client_ids or [],
         },
+        "contact_person": _sanitize_contact_person(contact_person),
         "status": "draft",
         "created_at": now,
         "updated_at": now,
@@ -245,8 +265,10 @@ async def update_decision(
     if decision["status"] not in ("draft", "Change Requested"):
         raise ValueError("Can only edit draft or change-requested decisions")
 
-    allowed = {"title", "description", "deadline", "attachments", "external_link", "coverage"}
+    allowed = {"title", "description", "deadline", "attachments", "external_link", "coverage", "contact_person"}
     filtered = {k: v for k, v in updates.items() if k in allowed}
+    if "contact_person" in filtered:
+        filtered["contact_person"] = _sanitize_contact_person(filtered.get("contact_person"))
     filtered["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     await db.decisions.update_one(

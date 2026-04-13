@@ -23,14 +23,16 @@ import { cn, formatContextSubtitle } from '../../lib/utils';
 const BASE_URL = process.env.REACT_APP_BACKEND_URL;
 const API = BASE_URL + '/api';
 
-const CATEGORIES = ['contracts', 'plans', 'permits', 'reports', 'other'];
+const CATEGORIES = ['architect_plans', 'contracts', 'plans', 'permits', 'reports', 'other'];
 const CATEGORY_LABELS = {
+  architect_plans: 'Architect Plans',
   contracts: 'Contracts', plans: 'Plans', permits: 'Permits',
   reports: 'Reports', other: 'Other',
 };
 
 const getCategoryIcon = (category) => {
   switch (category) {
+    case 'architect_plans': return FileImage;
     case 'contracts': return FileText;
     case 'plans': return FileImage;
     case 'reports': return FileSpreadsheet;
@@ -148,7 +150,7 @@ export const AgentVault = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
       formData.append('title', uploadForm.title);
-      formData.append('category', uploadForm.category);
+      formData.append('category', uploadForm.doc_type === 'architect_plan' ? 'architect_plans' : uploadForm.category);
       formData.append('project_id', uploadForm.project_id === 'none' ? '' : (uploadForm.project_id || ''));
       formData.append('description', uploadForm.description || '');
       formData.append('access_level', uploadForm.access_level);
@@ -227,6 +229,7 @@ export const AgentVault = () => {
       description: doc.description || '',
       access_level: doc.access_level || 'private',
       client_ids: doc.client_ids || [],
+      doc_type: doc.doc_type || 'general',
     });
   };
 
@@ -238,11 +241,12 @@ export const AgentVault = () => {
     try {
       const body = {
         title: editForm.title,
-        category: editForm.category,
+        category: editForm.doc_type === 'architect_plan' ? 'architect_plans' : editForm.category,
         project_id: editForm.project_id === 'none' ? '' : editForm.project_id,
         description: editForm.description,
         access_level: editForm.access_level,
         client_ids: editForm.access_level === 'shared' ? editForm.client_ids : [],
+        doc_type: editForm.doc_type || 'general',
       };
       const res = await authFetch(`${API}/vault/documents/${editDoc.vault_document_id}`, {
         method: 'PUT',
@@ -330,8 +334,15 @@ export const AgentVault = () => {
     return matchesCategory && matchesSearch;
   });
 
+  const sortedFilteredDocs = [...filteredDocs].sort((a, b) => {
+    const aIsArchitect = a.doc_type === 'architect_plan' || a.category === 'architect_plans';
+    const bIsArchitect = b.doc_type === 'architect_plan' || b.category === 'architect_plans';
+    if (aIsArchitect !== bIsArchitect) return aIsArchitect ? -1 : 1;
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  });
+
   const groupedDocs = CATEGORIES.reduce((acc, cat) => {
-    acc[cat] = filteredDocs.filter(d => d.category === cat);
+    acc[cat] = sortedFilteredDocs.filter(d => d.category === cat);
     return acc;
   }, {});
 
@@ -420,12 +431,12 @@ export const AgentVault = () => {
               <CardTitle className="text-lg font-outfit flex items-center gap-2">
                 {(() => { const Icon = getCategoryIcon(selectedCategory); return <Icon className="w-5 h-5" />; })()}
                 {CATEGORY_LABELS[selectedCategory]}
-                <Badge variant="secondary" className="ml-2">{filteredDocs.length}</Badge>
+                <Badge variant="secondary" className="ml-2">{sortedFilteredDocs.length}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {filteredDocs.length > 0 ? (
-                <DocumentGrid documents={filteredDocs} onPreview={handlePreview} onEdit={openEdit} onDelete={setDeleteDoc} onDownload={handleDownload} getProjectName={getProjectName} getSharedWithNames={getSharedWithNames} />
+              {sortedFilteredDocs.length > 0 ? (
+                <DocumentGrid documents={sortedFilteredDocs} onPreview={handlePreview} onEdit={openEdit} onDelete={setDeleteDoc} onDownload={handleDownload} getProjectName={getProjectName} getSharedWithNames={getSharedWithNames} />
               ) : (<EmptyState onUpload={() => setUploadModalOpen(true)} category={CATEGORY_LABELS[selectedCategory]} />)}
             </CardContent>
           </Card>
@@ -473,6 +484,15 @@ export const AgentVault = () => {
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Button type="button" variant={uploadForm.doc_type === 'general' ? 'default' : 'outline'} size="sm" onClick={() => setUploadForm(prev => ({ ...prev, doc_type: 'general' }))} className="flex-1">General</Button>
                     <Button type="button" variant={uploadForm.doc_type === 'action_required' ? 'default' : 'outline'} size="sm" onClick={() => setUploadForm(prev => ({ ...prev, doc_type: 'action_required' }))} className="flex-1 text-amber-600 border-amber-300">Action Required</Button>
+                    <Button
+                      type="button"
+                      variant={uploadForm.doc_type === 'architect_plan' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setUploadForm(prev => ({ ...prev, doc_type: 'architect_plan', category: 'architect_plans' }))}
+                      className="flex-1 text-blue-600 border-blue-300"
+                    >
+                      Architect Plan
+                    </Button>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -538,6 +558,38 @@ export const AgentVault = () => {
                     {projects.map(p => (<SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Document Type</Label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  type="button"
+                  variant={editForm.doc_type === 'general' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setEditForm(prev => ({ ...prev, doc_type: 'general' }))}
+                  className="flex-1"
+                >
+                  General
+                </Button>
+                <Button
+                  type="button"
+                  variant={editForm.doc_type === 'action_required' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setEditForm(prev => ({ ...prev, doc_type: 'action_required' }))}
+                  className="flex-1 text-amber-600 border-amber-300"
+                >
+                  Action Required
+                </Button>
+                <Button
+                  type="button"
+                  variant={editForm.doc_type === 'architect_plan' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setEditForm(prev => ({ ...prev, doc_type: 'architect_plan', category: 'architect_plans' }))}
+                  className="flex-1 text-blue-600 border-blue-300"
+                >
+                  Architect Plan
+                </Button>
               </div>
             </div>
             <div className="space-y-2">
@@ -654,6 +706,7 @@ const DocumentGrid = ({ documents, onPreview, onEdit, onDelete, onDownload, getP
               <div className="flex items-center gap-2">
                 <h4 className="font-medium text-sm truncate">{doc.title}</h4>
                 {doc.doc_type === 'action_required' && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 shrink-0">Action</Badge>}
+                {doc.doc_type === 'architect_plan' && <Badge variant="outline" className="text-xs text-blue-600 border-blue-300 shrink-0">Architect Plan</Badge>}
               </div>
               {doc.description && <p className="text-xs text-muted-foreground truncate mt-0.5">{doc.description}</p>}
               <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">

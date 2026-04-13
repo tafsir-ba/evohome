@@ -20,6 +20,7 @@ from core.auth import (
 )
 from core.rate_limit import rate_limit_check
 from core.monitoring import capture_auth_failure
+from services.email_service import send_notification_email, send_email_async
 
 logger = logging.getLogger("evohome.auth")
 
@@ -133,6 +134,11 @@ async def register_agent(data: AgentRegister, response: Response, request: Reque
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
+    await send_notification_email("welcome_onboarding", data.email, {
+        "name": data.name,
+        "role": "agent",
+        "project_name": "your workspace",
+    })
     token = create_access_token(user_id, "agent")
     _set_session_cookie(response, token)
     return {"user_id": user_id, "email": data.email, "name": data.name, "role": "agent", "token": token}
@@ -181,6 +187,11 @@ async def register_buyer(data: BuyerRegister, response: Response):
         client = await db.clients.find_one({"invitation_code": data.invitation_code}, {"_id": 0})
         if client and not client.get('buyer_id'):
             await db.clients.update_one({"client_id": client['client_id']}, {"$set": {"buyer_id": user_id}})
+    await send_notification_email("welcome_onboarding", data.email, {
+        "name": data.name,
+        "role": "buyer",
+        "project_name": "your buyer dashboard",
+    })
     logger.info(f"Buyer registered: {data.email} (user_id: {user_id})")
     token = create_access_token(user_id, "buyer")
     _set_session_cookie(response, token)
@@ -350,7 +361,6 @@ async def forgot_password(request: ForgotPasswordRequest, req: Request):
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     subject = "Reset your Evohome password"
     html_content = f'<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><h2 style="color:#2563EB">Reset Your Password</h2><p>Hi {user.get("name","there")},</p><p>Click below to create a new password:</p><p style="text-align:center;margin:30px 0"><a href="{reset_link}" style="background:#2563EB;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block">Reset Password</a></p><p style="color:#666;font-size:14px">This link expires in 1 hour.</p></div>'
-    from services.email_service import send_email_async
     await send_email_async(email, subject, html_content)
     return {"message": "If an account exists with this email, you will receive a reset link."}
 

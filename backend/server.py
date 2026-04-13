@@ -81,6 +81,7 @@ async def lifespan(app: FastAPI):
         await db.counters.create_index("counter_key", unique=True)
         await db.audit_logs.create_index("audit_id", unique=True)
         await db.timeline_extractions.create_index("extraction_id", unique=True)
+        await db.email_send_locks.create_index("lock_key", unique=True)
         logger.info("Single-field indexes created/verified")
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
@@ -127,6 +128,8 @@ async def lifespan(app: FastAPI):
         # Vault: agent vault list
         await db.vault_documents.create_index([("agent_id", 1)])
         await db.timeline_extractions.create_index([("agent_id", 1), ("created_at", -1)])
+        await db.email_send_locks.create_index([("email", 1), ("category", 1), ("sent_ts", -1)])
+        await db.email_send_locks.create_index("expires_at", expireAfterSeconds=0)
         # Audit logs: workspace history and actor timelines
         await db.audit_logs.create_index([("workspace_owner_id", 1), ("created_at", -1)])
         await db.audit_logs.create_index([("actor_user_id", 1), ("created_at", -1)])

@@ -6,8 +6,9 @@ import os
 import uuid
 import asyncio
 import logging
+import hashlib
 import resend
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import Request
 
 from database import db
@@ -21,6 +22,65 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL') or os.environ.get('APP_URL', '')
 
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
+
+
+NON_CRITICAL_COOLDOWN_HOURS = 72
+NON_CRITICAL_TEMPLATES = {
+    "feed_update",
+    "milestone_completed",
+    "new_message",
+    "welcome_onboarding",
+}
+
+
+def _email_entity_scope(data: dict) -> str:
+    for k in ("document_id", "project_id", "timeline_id", "client_id", "user_id"):
+        if data.get(k):
+            return f"{k}:{data.get(k)}"
+    return "global"
+
+
+def _dedupe_lock_key(template_type: str, to_email: str, data: dict) -> str:
+    scope = _email_entity_scope(data or {})
+    raw = f"{template_type}|{to_email.lower().strip()}|{scope}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+async def _should_throttle_noncritical(to_email: str) -> bool:
+    cutoff = datetime.now(timezone.utc).timestamp() - (NON_CRITICAL_COOLDOWN_HOURS * 3600)
+    recent = await db.email_send_locks.find_one(
+        {
+            "email": to_email.lower().strip(),
+            "category": "noncritical",
+            "sent_ts": {"$gte": cutoff},
+        },
+        {"_id": 0, "lock_key": 1},
+    )
+    return recent is not None
+
+
+async def _already_sent_deduped(lock_key: str) -> bool:
+    existing = await db.email_send_locks.find_one({"lock_key": lock_key}, {"_id": 0, "lock_key": 1})
+    return existing is not None
+
+
+async def _store_send_lock(lock_key: str, template_type: str, to_email: str, category: str):
+    now = datetime.now(timezone.utc)
+    await db.email_send_locks.update_one(
+        {"lock_key": lock_key},
+        {
+            "$set": {
+                "lock_key": lock_key,
+                "template_type": template_type,
+                "email": to_email.lower().strip(),
+                "category": category,
+                "sent_at": now.isoformat(),
+                "sent_ts": now.timestamp(),
+                "expires_at": now + timedelta(days=30),
+            }
+        },
+        upsert=True,
+    )
 
 
 async def send_email_async(to_email: str, subject: str, html_content: str, request: Request = None) -> dict:
@@ -129,6 +189,13 @@ def get_email_template(template_type: str, data: dict) -> tuple[str, str]:
         progress_percent = data.get('progress_percent', 0)
         html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0; background-color: #f5f5f5;"><div style="max-width: 600px; margin: 0 auto; padding: 20px;"><div style="background-color: #16a34a; color: #FFFFFF; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;"><h1 style="margin: 0; color: #FFFFFF; font-size: 24px;">Milestone Completed</h1></div><div style="background-color: #FFFFFF; padding: 32px; border: 1px solid #e5e7eb; border-top: none;"><p style="margin-top: 0;">Hi {data.get('buyer_name', 'there')},</p><p>Great news! A construction milestone for your property has been completed.</p><div style="background-color: #f0fdf4; padding: 20px; border-radius: 8px; margin: 24px 0; border: 1px solid #bbf7d0;"><h3 style="margin-top: 0; color: #166534;">{data.get('milestone_name', 'Milestone')}</h3><p style="color: #666666; margin-bottom: 12px;">{data.get('milestone_description', '')}</p><p style="font-size: 14px; color: #166534; margin: 0;"><strong>Project:</strong> {data.get('project_name', 'N/A')} - <strong>Unit:</strong> {data.get('unit_reference', 'N/A')}</p></div><div style="margin: 24px 0;"><p style="margin-bottom: 8px; font-weight: 600;">Overall Progress: {progress_percent}%</p><div style="background-color: #e5e7eb; border-radius: 9999px; height: 12px; overflow: hidden;"><div style="background-color: #16a34a; height: 100%; width: {progress_percent}%; border-radius: 9999px;"></div></div></div><p>Log in to view the full construction timeline and details.</p><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 24px auto;"><tr><td style="border-radius: 6px; background-color: #2563EB;"><a href="{frontend_url}/buyer/dashboard" target="_blank" style="{cta_button_style}">{cta_text}</a></td></tr></table><hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;"><p style="font-size: 14px; color: #666666; margin-bottom: 0;">{agent_signature}</p></div><div style="padding: 16px; text-align: center; color: #9ca3af; font-size: 12px;"><p style="margin: 0;">Evohome - Real Estate Management</p></div></div></body></html>"""
 
+    elif template_type == "welcome_onboarding":
+        role_label = (data.get("role") or "user").capitalize()
+        project_hint = data.get("project_name") or "your workspace"
+        subject = f"Welcome to Evohome - Start in 2 minutes"
+        cta_text = "Open Evohome"
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0; background-color: #f5f5f5;"><div style="max-width: 600px; margin: 0 auto; padding: 20px;"><div style="background-color: #2563EB; color: #FFFFFF; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;"><h1 style="margin: 0; color: #FFFFFF; font-size: 24px;">Welcome to Evohome</h1></div><div style="background-color: #FFFFFF; padding: 32px; border: 1px solid #e5e7eb; border-top: none;"><p style="margin-top: 0;">Hi {data.get('name', 'there')},</p><p>Your {role_label} account is ready. To get value fast, open the app and check <strong>{project_hint}</strong>.</p><ul style="color:#555;"><li>Review pending actions</li><li>Check latest timeline/doc updates</li><li>Complete your first setup step</li></ul><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 24px auto;"><tr><td style="border-radius: 6px; background-color: #2563EB;"><a href="{frontend_url}/login" target="_blank" style="{cta_button_style}">{cta_text}</a></td></tr></table><p style="font-size: 13px; color: #666;">We keep emails minimal: you will only receive essential action reminders.</p><hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;"><p style="font-size: 14px; color: #666666; margin-bottom: 0;">{agent_signature}</p></div><div style="padding: 16px; text-align: center; color: #9ca3af; font-size: 12px;"><p style="margin: 0;">Powered by Evohome</p></div></div></body></html>"""
+
     else:
         subject = "Notification from Evohome"
         cta_text = "View in Platform"
@@ -139,5 +206,17 @@ def get_email_template(template_type: str, data: dict) -> tuple[str, str]:
 
 async def send_notification_email(template_type: str, to_email: str, data: dict) -> dict:
     """Send a notification email using a template"""
+    if template_type in NON_CRITICAL_TEMPLATES:
+        lock_key = _dedupe_lock_key(template_type, to_email, data or {})
+        if await _already_sent_deduped(lock_key):
+            return {"status": "skipped", "reason": "duplicate_notification_email"}
+        if await _should_throttle_noncritical(to_email):
+            return {"status": "skipped", "reason": "noncritical_cooldown_active"}
+
     subject, html = get_email_template(template_type, data)
-    return await send_email_async(to_email, subject, html)
+    result = await send_email_async(to_email, subject, html)
+    if result and result.get("status") == "success":
+        category = "noncritical" if template_type in NON_CRITICAL_TEMPLATES else "critical"
+        lock_key = _dedupe_lock_key(template_type, to_email, data or {})
+        await _store_send_lock(lock_key, template_type, to_email, category)
+    return result

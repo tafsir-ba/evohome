@@ -60,8 +60,8 @@ export const AgentDocumentDetail = () => {
       const res = await fetch(`${API}/documents/${id}/send`, { method: 'POST', credentials: 'include', headers: getAuthHeaders() });
       const data = await res.json();
       if (res.ok) {
-        if (data.delivery?.email_sent) toast.success(`Sent to ${data.recipient?.name || 'buyer'}. Email delivered.`);
-        else toast.success('Sent to buyer');
+        if (data.delivery?.email_sent) toast.success('Sent to unit recipients. Email delivered.');
+        else toast.success('Sent to unit recipients');
         fetchDoc();
       } else toast.error(data.message || data.detail || 'Failed to send');
     } catch { toast.error('Failed to send'); }
@@ -157,7 +157,7 @@ export const AgentDocumentDetail = () => {
             )}
             {canSend && (
               <Button className="bg-primary hover:bg-primary/90 rounded-lg w-full sm:w-auto" onClick={handleSend} disabled={sendLoading} data-testid="send-doc-btn">
-                <Send className="w-4 h-4 mr-2" /> {sendLoading ? 'Sending...' : `Send ${typeLabel}`}
+                <Send className="w-4 h-4 mr-2" /> {sendLoading ? 'Sending...' : `Send ${typeLabel} to Unit`}
               </Button>
             )}
             {isInvoice && doc.status !== 'Paid' && doc.status !== 'Draft' && (
@@ -267,6 +267,18 @@ export const AgentDocumentDetail = () => {
               <Card className="border-[#E2E8F0] rounded-sm">
                 <CardHeader className="border-b border-[#E2E8F0]"><CardTitle className="text-sm font-medium">Unit Reference</CardTitle></CardHeader>
                 <CardContent className="p-4"><p className="font-medium text-foreground">{doc.unit_reference}</p></CardContent>
+              </Card>
+            )}
+            {(doc.recipient_client_ids?.length || doc.approver_client_ids?.length) && (
+              <Card className="border-[#E2E8F0] rounded-sm">
+                <CardHeader className="border-b border-[#E2E8F0]"><CardTitle className="text-sm font-medium">Recipients & Approval</CardTitle></CardHeader>
+                <CardContent className="p-4 space-y-1 text-sm text-muted-foreground">
+                  <p>Recipients: {doc.recipient_client_ids?.length || 0}</p>
+                  <p>Approvers: {doc.approver_client_ids?.length || 0}</p>
+                  <p>
+                    Progress: {doc.approvals_received_client_ids?.length || 0} / {doc.approval_required_count || 1}
+                  </p>
+                </CardContent>
               </Card>
             )}
             <Card className="border-[#E2E8F0] rounded-sm">

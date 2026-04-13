@@ -43,7 +43,10 @@ import {
   File,
   FileSpreadsheet,
   CheckSquare,
-  Paperclip
+  Paperclip,
+  UserCircle,
+  Mail,
+  Phone
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -284,6 +287,15 @@ const resolveFeedFileUrl = (fileUrl) => {
   return `${process.env.REACT_APP_BACKEND_URL}${fileUrl}`;
 };
 
+const sortVaultDocuments = (docs = []) => {
+  return [...docs].sort((a, b) => {
+    const aArch = a.is_architect_plan || a.doc_type === 'architect_plan' || a.category === 'architect_plans';
+    const bArch = b.is_architect_plan || b.doc_type === 'architect_plan' || b.category === 'architect_plans';
+    if (aArch !== bArch) return aArch ? -1 : 1;
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  });
+};
+
 const getActivityBody = (activity) => {
   const title = activity?.title?.trim();
   const content = activity?.content?.trim();
@@ -409,6 +421,28 @@ const DecisionFeedCard = ({ decision, onRespond, highlighted = false }) => {
         {expanded && (
           <div className="mt-4 pt-4 border-t space-y-3">
             {decision.description && <p className="text-sm whitespace-pre-wrap">{decision.description}</p>}
+            {decision.contact_person && (
+              <div className="p-3 rounded-lg border bg-muted/20">
+                <div className="flex items-start gap-2">
+                  <UserCircle className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact person</p>
+                    <p className="text-sm font-medium">{decision.contact_person.name || 'Contact'}</p>
+                    {(decision.contact_person.company_name || decision.contact_person.role) && (
+                      <p className="text-xs text-muted-foreground">
+                        {[decision.contact_person.role, decision.contact_person.company_name].filter(Boolean).join(' - ')}
+                      </p>
+                    )}
+                    {decision.contact_person.email && (
+                      <p className="text-xs mt-1 flex items-center gap-1"><Mail className="w-3 h-3" />{decision.contact_person.email}</p>
+                    )}
+                    {decision.contact_person.phone && (
+                      <p className="text-xs mt-1 flex items-center gap-1"><Phone className="w-3 h-3" />{decision.contact_person.phone}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             {decision.external_link && (
               <a href={decision.external_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
                 <ExternalLink className="w-4 h-4" />
@@ -1017,8 +1051,13 @@ const ConstructionPhaseCard = ({ stages }) => {
 
 // Vault Document Card for Buyers
 const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
+  const categoryLabel = String(document.category || 'other')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
   const getCategoryColor = (category) => {
     const colors = {
+      'Architect Plans': 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
       'Contracts': 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
       'Plans': 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
       'Permits': 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
@@ -1058,11 +1097,17 @@ const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const isArchitectPlan = document.is_architect_plan || document.doc_type === 'architect_plan' || document.category === 'architect_plans';
+  const isPdf = document.content_type?.includes('pdf') || (document.original_filename || '').toLowerCase().endsWith('.pdf');
+  const isImage = document.content_type?.includes('image') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes((document.original_filename || '').split('.').pop()?.toLowerCase());
+  const previewUrl = document.url || `${API}/vault/documents/${document.vault_document_id || document.vault_id}/download`;
+
   return (
     <Card 
       className={cn(
         "overflow-hidden transition-all duration-200 hover:shadow-md mb-3",
-        document.doc_type === 'action_required' && "ring-1 ring-amber-500/30"
+        document.doc_type === 'action_required' && "ring-1 ring-amber-500/30",
+        isArchitectPlan && "ring-1 ring-blue-500/30"
       )}
       data-testid={`vault-doc-${document.vault_id}`}
     >
@@ -1089,14 +1134,19 @@ const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className={cn(
                     "inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase tracking-wider",
-                    getCategoryColor(document.category)
+                    getCategoryColor(categoryLabel)
                   )}>
-                    {document.category}
+                    {categoryLabel}
                   </span>
                   <span className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground">
                     {getDocTypeIcon(document.doc_type)}
                     <span className="hidden xs:inline">{document.doc_type === 'action_required' ? 'Action Required' : 'General'}</span>
                   </span>
+                  {isArchitectPlan && (
+                    <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                      Architect Plan
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1104,6 +1154,24 @@ const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
             {/* Notes */}
             {document.notes && (
               <p className="text-xs sm:text-sm text-muted-foreground mt-2 line-clamp-2">{document.notes}</p>
+            )}
+
+            {isArchitectPlan && (isPdf || isImage) && (
+              <div className="mt-3 rounded-lg border border-border overflow-hidden bg-muted/20">
+                {isImage ? (
+                  <img
+                    src={previewUrl}
+                    alt={document.title || 'Architect plan'}
+                    className="w-full h-[62vh] object-contain bg-black/5"
+                  />
+                ) : (
+                  <iframe
+                    src={previewUrl}
+                    title={document.title || 'Architect plan preview'}
+                    className="w-full h-[62vh] border-0"
+                  />
+                )}
+              </div>
             )}
             
             {/* Meta & Actions */}
@@ -1126,7 +1194,7 @@ const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
                   data-testid={`preview-vault-doc-${document.vault_id}`}
                 >
                   <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                  View
+                  {isArchitectPlan ? 'Fullscreen' : 'View'}
                 </Button>
                 <Button
                   variant="outline"
@@ -1342,7 +1410,7 @@ export const BuyerTimeline = () => {
         setBuyerDecisions(portal.decisions || []);
         
         // Vault
-        setVaultDocuments(portal.vault_files || []);
+        setVaultDocuments(sortVaultDocuments(portal.vault_files || []));
       }
     } catch (error) {
       console.error('Failed to fetch portal data:', error);
@@ -1386,7 +1454,7 @@ export const BuyerTimeline = () => {
     const portal = await res.json();
     setEvents(portal.documents || []);
     setProjectInfo(portal.project);
-    setVaultDocuments(portal.vault_files || []);
+    setVaultDocuments(sortVaultDocuments(portal.vault_files || []));
     setBuyerDecisions(portal.decisions || []);
     setUnreadCount(portal.unread_count || 0);
     setTeamMembers(portal.team || []);

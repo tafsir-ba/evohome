@@ -13,6 +13,16 @@ from services.decision_service import sync_missing_decision_recipients_for_clien
 logger = logging.getLogger(__name__)
 
 
+def _sort_vault_docs(docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Architect plans are pinned first, then newest."""
+    def _key(doc: Dict[str, Any]):
+        is_architect = doc.get("doc_type") == "architect_plan" or doc.get("category") == "architect_plans"
+        created = doc.get("created_at") or ""
+        return (1 if is_architect else 0, created)
+
+    return sorted(docs, key=_key, reverse=True)
+
+
 async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
     """
     Returns the buyer's complete portal state in one response.
@@ -67,6 +77,7 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
         {"client_ids": {"$in": client_ids}},
     ]}
     vault_docs = await db.vault_documents.find(vault_query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    vault_docs = _sort_vault_docs(vault_docs)
     vault_files = [_format_vault_doc(v) for v in vault_docs]
 
     # ── Step 5: Change requests on buyer's documents ──
@@ -243,6 +254,9 @@ def _format_vault_doc(v: Dict[str, Any]) -> Dict[str, Any]:
         "title": v.get("title", ""),
         "category": v.get("category", ""),
         "doc_type": v.get("doc_type", ""),
+        "is_architect_plan": (
+            v.get("doc_type") == "architect_plan" or v.get("category") == "architect_plans"
+        ),
         "content_type": v.get("content_type", ""),
         "file_size": v.get("file_size", 0),
         "original_filename": v.get("original_filename", ""),

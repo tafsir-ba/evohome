@@ -23,6 +23,19 @@ VALID_DOC_TYPES = {"quote", "invoice"}
 FINALIZED_STATUSES = {"Approved", "Paid"}
 
 
+def _coerce_client_ids(values: Optional[List[str]]) -> List[str]:
+    if not values:
+        return []
+    seen = set()
+    out: List[str] = []
+    for v in values:
+        cid = str(v or "").strip()
+        if cid and cid not in seen:
+            seen.add(cid)
+            out.append(cid)
+    return out
+
+
 # ── Core CRUD ──
 
 async def _next_document_number(agent_id: str, doc_type: str) -> str:
@@ -64,6 +77,8 @@ async def create_document(
     pdf_filename: Optional[str] = None,
     pdf_stored_filename: Optional[str] = None,
     ai_extraction_confidence: Optional[str] = None,
+    approver_client_ids: Optional[List[str]] = None,
+    approval_required_count: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Create a document. Returns the created document dict."""
     client = await db.clients.find_one(
@@ -82,9 +97,9 @@ async def create_document(
     parsed_due = _parse_due_date(due_date, doc_type)
 
     # Resolve unit_reference from unit_id if client has one
+    unit_id = client.get('unit_id')
     unit_reference = client.get('unit_reference', 'General')
     if not unit_reference or unit_reference == 'General':
-        unit_id = client.get('unit_id')
         if unit_id:
             unit = await db.units.find_one({"unit_id": unit_id}, {"_id": 0, "unit_reference": 1})
             if unit:
@@ -98,6 +113,10 @@ async def create_document(
         if project:
             project_name = project.get('name')
 
+    draft_approvers = _coerce_client_ids(approver_client_ids or [client_id]) or [client_id]
+    draft_required = int(approval_required_count or 1)
+    draft_required = max(1, min(draft_required, len(draft_approvers)))
+
     doc = {
         "document_id": doc_id,
         "document_number": doc_number,
@@ -108,7 +127,12 @@ async def create_document(
         "buyer_id": client.get('buyer_id'),
         "project_id": project_id,
         "project_name": project_name,
+        "unit_id": unit_id,
         "unit_reference": unit_reference,
+        "recipient_client_ids": [client_id],
+        "approver_client_ids": draft_approvers,
+        "approval_required_count": draft_required,
+        "approvals_received_client_ids": [],
         "title": title,
         "amount": float(amount),
         "items": items,
@@ -151,7 +175,10 @@ async def get_document(document_id: str, user_id: str, role: str) -> Optional[Di
         query["agent_id"] = user_id
     else:
         client_ids = await _get_buyer_client_ids(user_id)
-        query["client_id"] = {"$in": client_ids}
+        query["$or"] = [
+            {"client_id": {"$in": client_ids}},
+            {"recipient_client_ids": {"$in": client_ids}},
+        ]
 
     doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
@@ -172,7 +199,10 @@ async def list_documents(
         query["agent_id"] = user_id
     else:
         client_ids = await _get_buyer_client_ids(user_id)
-        query["client_id"] = {"$in": client_ids}
+        query["$or"] = [
+            {"client_id": {"$in": client_ids}},
+            {"recipient_client_ids": {"$in": client_ids}},
+        ]
 
     if doc_type:
         query["type"] = doc_type
@@ -223,6 +253,11 @@ async def update_document(document_id: str, agent_id: str, updates: Dict[str, An
     for k in ('title', 'amount', 'supplier_name', 'notes', 'summary', 'hero_image_url'):
         if k in updates and updates[k] is not None:
             update_data[k] = updates[k]
+
+    if 'approver_client_ids' in updates and updates['approver_client_ids'] is not None:
+        update_data['approver_client_ids'] = _coerce_client_ids(updates.get('approver_client_ids'))
+    if 'approval_required_count' in updates and updates['approval_required_count'] is not None:
+        update_data['approval_required_count'] = int(updates.get('approval_required_count') or 1)
 
     if 'items' in updates and updates['items'] is not None:
         update_data['items'] = updates['items']
@@ -321,8 +356,15 @@ async def revert_to_draft(document_id: str, agent_id: str) -> Optional[str]:
 
 # ── Status machine ──
 
-async def send_document(document_id: str, agent_id: str, agent_user: dict) -> Dict[str, Any]:
-    """Transition document to Sent + notify buyer."""
+async def send_document(
+    document_id: str,
+    agent_id: str,
+    agent_user: dict,
+    approver_client_ids: Optional[List[str]] = None,
+    approval_required_count: Optional[int] = None,
+    approval_mode: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Transition document to Sent + notify recipients (unit-scoped)."""
     query = {"document_id": document_id, "agent_id": agent_id}
     doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
@@ -331,16 +373,61 @@ async def send_document(document_id: str, agent_id: str, agent_user: dict) -> Di
     client = await db.clients.find_one({"client_id": doc.get('client_id')}, {"_id": 0})
     if not client:
         raise ValueError("Client not found")
-    if not client.get('email'):
-        raise ValueError("Client has no email address")
     if not validate_transition(doc['type'], doc['status'], 'Sent'):
         raise ValueError(f"Cannot send document from status: {doc['status']}")
 
+    recipient_rows: List[Dict[str, Any]] = []
+    if doc.get("unit_id"):
+        recipient_rows = await db.clients.find(
+            {
+                "agent_id": agent_id,
+                "project_id": doc.get("project_id"),
+                "unit_id": doc.get("unit_id"),
+            },
+            {"_id": 0},
+        ).to_list(200)
+    if not recipient_rows:
+        recipient_rows = [client]
+
+    recipient_rows = [r for r in recipient_rows if r.get("client_id")]
+    recipient_client_ids = _coerce_client_ids([r.get("client_id") for r in recipient_rows])
+    if not recipient_client_ids:
+        raise ValueError("No recipients found for this document")
+
+    chosen_approvers = _coerce_client_ids(approver_client_ids or doc.get("approver_client_ids") or [])
+    if chosen_approvers:
+        invalid = [cid for cid in chosen_approvers if cid not in recipient_client_ids]
+        if invalid:
+            raise ValueError("Approvers must be selected from recipients")
+        approvers = chosen_approvers
+    else:
+        approvers = recipient_client_ids
+
+    mode = (approval_mode or "custom").lower()
+    if mode == "all":
+        required = len(approvers)
+    elif mode == "any":
+        required = 1
+    else:
+        required = int(approval_required_count or doc.get("approval_required_count") or 1)
+    if required < 1 or required > len(approvers):
+        raise ValueError(f"approval_required_count must be between 1 and {len(approvers)}")
+
     now = datetime.now(timezone.utc).isoformat()
     prev_status = doc["status"]
-    await db.documents.update_one(query, {
-        "$set": {"status": "Sent", "sent_at": now, "change_request_comment": None, "updated_at": now}
-    })
+    await db.documents.update_one(
+        query,
+        {"$set": {
+            "status": "Sent",
+            "sent_at": now,
+            "change_request_comment": None,
+            "updated_at": now,
+            "recipient_client_ids": recipient_client_ids,
+            "approver_client_ids": approvers,
+            "approval_required_count": required,
+            "approvals_received_client_ids": [],
+        }},
+    )
     if prev_status == "Change Requested" and doc["type"] in ("quote", "invoice"):
         from services.change_request_service import resolve_open_change_requests_after_sent_document
         await resolve_open_change_requests_after_sent_document(
@@ -358,69 +445,82 @@ async def send_document(document_id: str, agent_id: str, agent_user: dict) -> Di
 
     project = await db.projects.find_one({"project_id": doc.get('project_id')}, {"_id": 0})
     delivery = {"notification_created": False, "websocket_sent": False, "email_sent": False, "email_error": None}
+    agent_settings = agent_user.get('settings', {})
+    agent_profile = agent_user.get('profile', {})
+    notification_sent = 0
+    realtime_sent = 0
+    email_sent = 0
+    warned = []
 
-    buyer_id = doc.get('buyer_id') or client.get('buyer_id')
-    if buyer_id:
-        try:
-            from core.notification_routing import buyer_query
-            await emit_notification(
-                user_id=buyer_id,
-                title=f"New {doc['type'].title()} Received",
-                message=f"You have a new {doc['type']} for {doc['title']} - CHF {doc['amount']:,.2f}",
-                notification_type="document_sent",
-                link=buyer_query("documents", document_id=document_id),
-                metadata={
-                    "document_id": document_id,
-                    "project_id": doc.get("project_id"),
-                    "client_id": doc.get("client_id"),
-                },
-            )
-            delivery["notification_created"] = True
-        except Exception as e:
-            logger.warning(f"Notification failed: {e}")
+    for recipient in recipient_rows:
+        buyer_id = recipient.get('buyer_id')
+        if buyer_id:
+            try:
+                from core.notification_routing import buyer_query
+                await emit_notification(
+                    user_id=buyer_id,
+                    title=f"New {doc['type'].title()} Received",
+                    message=f"You have a new {doc['type']} for {doc['title']} - CHF {doc['amount']:,.2f}",
+                    notification_type="document_sent",
+                    link=buyer_query("documents", document_id=document_id),
+                    metadata={
+                        "document_id": document_id,
+                        "project_id": doc.get("project_id"),
+                        "client_id": recipient.get("client_id"),
+                    },
+                )
+                notification_sent += 1
+            except Exception as e:
+                warned.append(f"notification:{recipient.get('client_id')}:{str(e)[:40]}")
+            try:
+                await emit_realtime([buyer_id], "document_sent", {
+                    "document_id": document_id, "type": doc['type'],
+                    "title": doc['title'], "amount": doc['amount'],
+                })
+                realtime_sent += 1
+            except Exception:
+                pass
 
-        try:
-            await emit_realtime([buyer_id], "document_sent", {
-                "document_id": document_id, "type": doc['type'],
-                "title": doc['title'], "amount": doc['amount'],
+        if recipient.get('email'):
+            result = await emit_email("document_sent", recipient['email'], {
+                "doc_type": doc['type'],
+                "buyer_name": recipient.get('name', 'there'),
+                "agent_name": agent_profile.get('display_name') or agent_user.get('name', 'Your agent'),
+                "company_name": agent_settings.get('company_name', 'the agency'),
+                "agent_email": agent_profile.get('contact_email', ''),
+                "agent_phone": agent_profile.get('contact_phone', ''),
+                "title": doc.get('title', 'Document'),
+                "summary": doc.get('summary', ''),
+                "currency": doc.get('currency', 'CHF'),
+                "amount": doc.get('amount', 0),
+                "project_name": project.get('name', 'N/A') if project else 'N/A',
+                "unit_reference": doc.get('unit_reference', 'N/A'),
+                "document_id": document_id,
             })
-            delivery["websocket_sent"] = True
-        except Exception as e:
-            logger.warning(f"Realtime failed: {e}")
+            if isinstance(result, dict) and result.get("status") == "success":
+                email_sent += 1
+            elif result is not None:
+                warned.append(f"email:{recipient.get('email')}")
 
-    if client.get('email'):
-        agent_settings = agent_user.get('settings', {})
-        agent_profile = agent_user.get('profile', {})
-        result = await emit_email("document_sent", client['email'], {
-            "doc_type": doc['type'],
-            "buyer_name": client.get('name', 'there'),
-            "agent_name": agent_profile.get('display_name') or agent_user.get('name', 'Your agent'),
-            "company_name": agent_settings.get('company_name', 'the agency'),
-            "agent_email": agent_profile.get('contact_email', ''),
-            "agent_phone": agent_profile.get('contact_phone', ''),
-            "title": doc.get('title', 'Document'),
-            "summary": doc.get('summary', ''),
-            "currency": doc.get('currency', 'CHF'),
-            "amount": doc.get('amount', 0),
-            "project_name": project.get('name', 'N/A') if project else 'N/A',
-            "unit_reference": doc.get('unit_reference', 'N/A'),
-        })
-        if isinstance(result, dict):
-            delivery["email_sent"] = result.get("status") == "success"
-            if not delivery["email_sent"]:
-                delivery["email_error"] = result.get("error") or result.get("reason", "Unknown")
-        elif result is not None:
-            delivery["email_sent"] = True
+    delivery["notification_created"] = notification_sent > 0
+    delivery["websocket_sent"] = realtime_sent > 0
+    delivery["email_sent"] = email_sent > 0
 
     return {
         "message": "Document sent successfully",
         "status": "Sent",
         "document_id": document_id,
-        "recipient": {"name": client.get('name'), "email": client.get('email')},
+        "recipient": {
+            "count": len(recipient_client_ids),
+            "client_ids": recipient_client_ids,
+        },
+        "approval": {
+            "approver_client_ids": approvers,
+            "approval_required_count": required,
+            "approval_received_count": 0,
+        },
         "delivery": delivery,
-        "warnings": [] if delivery["email_sent"] else [
-            f"Email may not have been delivered: {delivery['email_error'] or 'Unknown'}"
-        ],
+        "warnings": warned,
     }
 
 
@@ -467,7 +567,13 @@ async def document_action(
         query = {"document_id": document_id, "agent_id": user_id}
     else:
         client_ids = await _get_buyer_client_ids(user_id)
-        query = {"document_id": document_id, "client_id": {"$in": client_ids}}
+        query = {
+            "document_id": document_id,
+            "$or": [
+                {"client_id": {"$in": client_ids}},
+                {"recipient_client_ids": {"$in": client_ids}},
+            ],
+        }
 
     doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
@@ -482,21 +588,67 @@ async def document_action(
     except Exception:
         pass
 
+    buyer_client_ids: List[str] = []
+    acting_client_id: Optional[str] = None
+    if user_role == 'buyer':
+        buyer_client_ids = await _get_buyer_client_ids(user_id)
+        acting_client_id = next((cid for cid in buyer_client_ids if cid == doc.get("client_id")), None)
+        if not acting_client_id:
+            recipients = _coerce_client_ids(doc.get("recipient_client_ids") or [])
+            acting_client_id = next((cid for cid in buyer_client_ids if cid in recipients), None)
+
     if action == 'approve' and doc['type'] == 'quote' and user_role == 'buyer':
         if not validate_transition('quote', doc['status'], 'Approved'):
             raise ValueError("Cannot approve quote in current status")
-        await db.documents.update_one({"document_id": document_id}, {"$set": {"status": "Approved", "updated_at": now}})
+        approvers = _coerce_client_ids(doc.get("approver_client_ids") or doc.get("recipient_client_ids") or [doc.get("client_id")])
+        required_count = int(doc.get("approval_required_count") or 1)
+        if not acting_client_id or acting_client_id not in approvers:
+            raise ValueError("You are not authorized to approve this quote")
+        approvals = _coerce_client_ids(doc.get("approvals_received_client_ids") or [])
+        if acting_client_id not in approvals:
+            approvals.append(acting_client_id)
+
+        if len(approvals) >= required_count:
+            await db.documents.update_one(
+                {"document_id": document_id},
+                {"$set": {"status": "Approved", "updated_at": now, "approvals_received_client_ids": approvals}},
+            )
+            new_status = "Approved"
+        else:
+            await db.documents.update_one(
+                {"document_id": document_id},
+                {"$set": {"updated_at": now, "approvals_received_client_ids": approvals}},
+            )
+            new_status = "Sent"
         try:
             trace_db_mutation("documents", "update_one", document_id)
-            set_trace_response_summary({"status": "Approved", "previous_status": doc["status"], "action": action})
+            set_trace_response_summary({"status": new_status, "previous_status": doc["status"], "action": action})
         except Exception:
             pass
-        await _notify_agent_action(doc, "Quote Approved", f"{user_name} approved quote {doc['document_number']}", "quote_approved", user_name)
-        return {"message": "Quote approved", "status": "Approved"}
+        await _notify_agent_action(
+            doc,
+            "Quote Approval Progress" if new_status != "Approved" else "Quote Approved",
+            f"{user_name} approved quote {doc['document_number']}",
+            "quote_approved",
+            user_name,
+            {
+                "required_count": required_count,
+                "approval_count": len(approvals),
+            },
+        )
+        return {
+            "message": "Quote approved" if new_status == "Approved" else "Approval recorded",
+            "status": new_status,
+            "approval_count": len(approvals),
+            "approval_required_count": required_count,
+        }
 
     if action == 'reject' and doc['type'] == 'quote' and user_role == 'buyer':
         if not validate_transition('quote', doc['status'], 'Rejected'):
             raise ValueError("Cannot reject quote in current status")
+        approvers = _coerce_client_ids(doc.get("approver_client_ids") or doc.get("recipient_client_ids") or [doc.get("client_id")])
+        if not acting_client_id or acting_client_id not in approvers:
+            raise ValueError("You are not authorized to reject this quote")
         await db.documents.update_one({"document_id": document_id}, {"$set": {"status": "Rejected", "updated_at": now}})
         try:
             trace_db_mutation("documents", "update_one", document_id)
@@ -536,11 +688,34 @@ async def document_action(
     if action == 'confirm_payment' and doc['type'] == 'invoice' and user_role == 'buyer':
         if not validate_transition('invoice', doc['status'], 'Paid'):
             raise ValueError("Cannot confirm payment in current status")
-        await db.documents.update_one({"document_id": document_id}, {"$set": {"status": "Paid", "paid_date": now, "updated_at": now}})
+        approvers = _coerce_client_ids(doc.get("approver_client_ids") or doc.get("recipient_client_ids") or [doc.get("client_id")])
+        required_count = int(doc.get("approval_required_count") or 1)
+        if not acting_client_id or acting_client_id not in approvers:
+            raise ValueError("You are not authorized to confirm this payment")
+        approvals = _coerce_client_ids(doc.get("approvals_received_client_ids") or [])
+        if acting_client_id not in approvals:
+            approvals.append(acting_client_id)
+        if len(approvals) >= required_count:
+            await db.documents.update_one(
+                {"document_id": document_id},
+                {"$set": {"status": "Paid", "paid_date": now, "updated_at": now, "approvals_received_client_ids": approvals}},
+            )
+            new_status = "Paid"
+        else:
+            await db.documents.update_one(
+                {"document_id": document_id},
+                {"$set": {"updated_at": now, "approvals_received_client_ids": approvals}},
+            )
+            new_status = "Sent"
         trace_db_mutation("documents", "update_one", document_id)
-        set_trace_response_summary({"status": "Paid", "previous_status": doc["status"], "action": action})
+        set_trace_response_summary({"status": new_status, "previous_status": doc["status"], "action": action})
         await _notify_agent_action(doc, "Payment Confirmed", f"Payment confirmed for invoice {doc['document_number']}", "payment_confirmed", user_name)
-        return {"message": "Payment confirmed", "status": "Paid"}
+        return {
+            "message": "Payment confirmed" if new_status == "Paid" else "Payment confirmation recorded",
+            "status": new_status,
+            "approval_count": len(approvals),
+            "approval_required_count": required_count,
+        }
 
     if action == 'convert_to_invoice' and doc['type'] == 'quote' and user_role == 'agent':
         if doc['status'] != 'Approved':
@@ -618,7 +793,13 @@ async def get_document_timeline(user_id: str, role: str) -> Dict[str, Any]:
             return {"documents": [], "project_info": None}
 
         docs = await db.documents.find(
-            {"client_id": {"$in": client_ids}, "status": {"$ne": "Draft"}},
+            {
+                "status": {"$ne": "Draft"},
+                "$or": [
+                    {"client_id": {"$in": client_ids}},
+                    {"recipient_client_ids": {"$in": client_ids}},
+                ],
+            },
             {"_id": 0}
         ).sort("created_at", -1).to_list(100)
 
@@ -729,7 +910,12 @@ async def _convert_quote_to_invoice(quote, agent_id, now):
         "client_id": quote['client_id'],
         "buyer_id": quote.get('buyer_id'),
         "project_id": quote['project_id'],
+        "unit_id": quote.get('unit_id'),
         "unit_reference": quote.get('unit_reference', 'General'),
+        "recipient_client_ids": quote.get('recipient_client_ids') or [quote['client_id']],
+        "approver_client_ids": quote.get('approver_client_ids') or [quote['client_id']],
+        "approval_required_count": quote.get('approval_required_count', 1),
+        "approvals_received_client_ids": [],
         "title": quote['title'],
         "amount": quote['amount'],
         "items": quote.get('items', []),

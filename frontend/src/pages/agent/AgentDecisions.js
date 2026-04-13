@@ -40,6 +40,9 @@ import {
   Trash2,
   Pencil,
   Upload,
+  UserCircle,
+  Phone,
+  Mail,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
@@ -75,9 +78,14 @@ export const AgentDecisions = () => {
     description: '',
     deadline: '',
     external_link: '',
+    recipient_mode: 'all',
+    single_client_id: '',
     client_ids: [],
+    contact_person: null,
   });
   const [clients, setClients] = useState([]);
+  const [supplierContacts, setSupplierContacts] = useState([]);
+  const [teamContacts, setTeamContacts] = useState([]);
   const [saving, setSaving] = useState(false);
   const [sendingId, setSendingId] = useState(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
@@ -134,12 +142,26 @@ export const AgentDecisions = () => {
   }, [decisionIdFromUrl, loading, decisions, setSearchParams]);
 
   const fetchProjectClients = async (projectId) => {
-    if (!projectId) { setClients([]); return; }
+    if (!projectId) { setClients([]); setSupplierContacts([]); return; }
     try {
-      const res = await fetch(`${API}/projects/${projectId}/context`, { credentials: 'include', headers: getAuthHeaders() });
-      if (res.ok) {
-        const data = await res.json();
+      const [contextRes, suppliersRes, teamRes] = await Promise.all([
+        fetch(`${API}/projects/${projectId}/context`, { credentials: 'include', headers: getAuthHeaders() }),
+        fetch(`${API}/projects/${projectId}/team`, { credentials: 'include', headers: getAuthHeaders() }),
+        fetch(`${API}/team/members`, { credentials: 'include', headers: getAuthHeaders() }),
+      ]);
+      if (contextRes.ok) {
+        const data = await contextRes.json();
         setClients(data.clients || []);
+      }
+      if (suppliersRes.ok) {
+        setSupplierContacts(await suppliersRes.json());
+      } else {
+        setSupplierContacts([]);
+      }
+      if (teamRes.ok) {
+        setTeamContacts(await teamRes.json());
+      } else {
+        setTeamContacts([]);
       }
     } catch (error) {
       console.error('Failed to fetch clients:', error);
@@ -151,22 +173,57 @@ export const AgentDecisions = () => {
       toast.error('Project and title are required');
       return;
     }
+    if (form.recipient_mode === 'single' && !form.single_client_id) {
+      toast.error('Please select one recipient');
+      return;
+    }
+    if (form.recipient_mode === 'custom' && form.client_ids.length === 0) {
+      toast.error('Please select at least one recipient');
+      return;
+    }
     setSaving(true);
     try {
+      const payload = {
+        project_id: form.project_id,
+        title: form.title,
+        description: form.description,
+        deadline: form.deadline || null,
+        external_link: form.external_link || null,
+        client_ids:
+          form.recipient_mode === 'single'
+            ? [form.single_client_id]
+            : (form.recipient_mode === 'custom' ? form.client_ids : undefined),
+        coverage_type: form.recipient_mode === 'all' ? 'project' : 'clients',
+        contact_person: form.contact_person ? {
+          source: form.contact_person.source,
+          contact_id: form.contact_person.contact_id,
+          name: form.contact_person.name,
+          company_name: form.contact_person.company_name,
+          role: form.contact_person.role,
+          email: form.contact_person.email,
+          phone: form.contact_person.phone,
+        } : null,
+      };
       const res = await fetch(`${API}/decisions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
-        body: JSON.stringify({
-          ...form,
-          client_ids: form.client_ids.length > 0 ? form.client_ids : undefined,
-          coverage_type: form.client_ids.length > 0 ? 'clients' : 'project',
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         toast.success('Decision created');
         setCreateOpen(false);
-        setForm({ project_id: '', title: '', description: '', deadline: '', external_link: '', client_ids: [] });
+        setForm({
+          project_id: '',
+          title: '',
+          description: '',
+          deadline: '',
+          external_link: '',
+          recipient_mode: 'all',
+          single_client_id: '',
+          client_ids: [],
+          contact_person: null,
+        });
         fetchDecisions();
       } else {
         const err = await res.json();
@@ -394,21 +451,151 @@ export const AgentDecisions = () => {
             </div>
             {form.project_id && clients.length > 0 && (
               <div className="space-y-2">
-                <Label>Recipients (leave empty for entire project)</Label>
-                <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
-                  {clients.map(c => (
-                    <div key={c.client_id} className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={form.client_ids.includes(c.client_id)}
-                        onCheckedChange={checked => setForm(f => ({
-                          ...f,
-                          client_ids: checked ? [...f.client_ids, c.client_id] : f.client_ids.filter(id => id !== c.client_id)
-                        }))}
-                      />
-                      <label className="text-sm">{formatClientContext(c)}</label>
+                <Label>Recipients</Label>
+                <Select
+                  value={form.recipient_mode}
+                  onValueChange={(v) => setForm((f) => ({
+                    ...f,
+                    recipient_mode: v,
+                    single_client_id: '',
+                    client_ids: [],
+                  }))}
+                >
+                  <SelectTrigger data-testid="decision-recipient-mode-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All recipients in this project</SelectItem>
+                    <SelectItem value="single">One recipient only</SelectItem>
+                    <SelectItem value="custom">Custom recipients</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {form.recipient_mode === 'single' && (
+                  <Select
+                    value={form.single_client_id}
+                    onValueChange={(v) => setForm((f) => ({ ...f, single_client_id: v }))}
+                  >
+                    <SelectTrigger data-testid="decision-single-recipient-select">
+                      <SelectValue placeholder="Select one client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map(c => (
+                        <SelectItem key={c.client_id} value={c.client_id}>{formatClientContext(c)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {form.recipient_mode === 'custom' && (
+                  <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                    <div className="pb-2 border-b">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setForm((f) => ({ ...f, client_ids: clients.map((c) => c.client_id) }))}
+                      >
+                        Select all
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setForm((f) => ({ ...f, client_ids: [] }))}
+                      >
+                        Clear
+                      </Button>
                     </div>
-                  ))}
-                </div>
+                    {clients.map(c => (
+                      <div key={c.client_id} className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={form.client_ids.includes(c.client_id)}
+                          onCheckedChange={checked => setForm(f => ({
+                            ...f,
+                            client_ids: checked ? [...f.client_ids, c.client_id] : f.client_ids.filter(id => id !== c.client_id)
+                          }))}
+                        />
+                        <label className="text-sm">{formatClientContext(c)}</label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {form.project_id && (
+              <div className="space-y-2">
+                <Label>Contact person (optional)</Label>
+                <Select
+                  value={form.contact_person?.value || 'none'}
+                  onValueChange={(value) => {
+                    if (value === 'none') {
+                      setForm((f) => ({ ...f, contact_person: null }));
+                      return;
+                    }
+                    const [source, id] = value.split(':');
+                    if (source === 'supplier') {
+                      const c = supplierContacts.find((m) => m.member_id === id);
+                      if (c) {
+                        setForm((f) => ({
+                          ...f,
+                          contact_person: {
+                            value,
+                            source: 'supplier_directory',
+                            contact_id: c.member_id,
+                            name: c.contact_name || c.company_name,
+                            company_name: c.company_name || '',
+                            role: c.role || '',
+                            email: c.email || '',
+                            phone: c.phone || '',
+                          },
+                        }));
+                      }
+                    } else if (source === 'team') {
+                      const m = teamContacts.find((u) => u.user_id === id);
+                      if (m) {
+                        setForm((f) => ({
+                          ...f,
+                          contact_person: {
+                            value,
+                            source: 'workspace_team',
+                            contact_id: m.user_id,
+                            name: m.name || m.email,
+                            company_name: '',
+                            role: m.workspace_role || m.team_role || 'member',
+                            email: m.email || '',
+                            phone: '',
+                          },
+                        }));
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger data-testid="decision-contact-person-select">
+                    <SelectValue placeholder="Choose a contact person" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No contact person</SelectItem>
+                    {supplierContacts.length > 0 && supplierContacts.map(c => (
+                      <SelectItem key={`supplier:${c.member_id}`} value={`supplier:${c.member_id}`}>
+                        {(c.contact_name || c.company_name)} {c.company_name ? `(${c.company_name})` : ''}
+                      </SelectItem>
+                    ))}
+                    {teamContacts.length > 0 && teamContacts.map(m => (
+                      <SelectItem key={`team:${m.user_id}`} value={`team:${m.user_id}`}>
+                        {m.name || m.email} (Team)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.contact_person && (
+                  <div className="text-xs text-muted-foreground">
+                    {form.contact_person.name}
+                    {form.contact_person.email ? ` - ${form.contact_person.email}` : ''}
+                    {form.contact_person.phone ? ` - ${form.contact_person.phone}` : ''}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -505,6 +692,34 @@ const DecisionDetail = ({
             <a href={decision.external_link} target="_blank" rel="noopener noreferrer" className="text-sm text-primary flex items-center gap-1 hover:underline">
               <ExternalLink className="w-4 h-4" />{decision.external_link}
             </a>
+          </div>
+        )}
+
+        {/* Contact Person */}
+        {decision.contact_person && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Contact Person</p>
+            <div className="p-3 border rounded-lg bg-muted/20">
+              <div className="flex items-start gap-2">
+                <UserCircle className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium">{decision.contact_person.name || 'Contact'}</p>
+                  {(decision.contact_person.company_name || decision.contact_person.role) && (
+                    <p className="text-xs text-muted-foreground">
+                      {[decision.contact_person.role, decision.contact_person.company_name].filter(Boolean).join(' - ')}
+                    </p>
+                  )}
+                  <div className="mt-1 space-y-0.5">
+                    {decision.contact_person.email && (
+                      <p className="text-xs flex items-center gap-1"><Mail className="w-3 h-3" />{decision.contact_person.email}</p>
+                    )}
+                    {decision.contact_person.phone && (
+                      <p className="text-xs flex items-center gap-1"><Phone className="w-3 h-3" />{decision.contact_person.phone}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

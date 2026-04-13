@@ -27,6 +27,7 @@ class CreateDecisionBody(BaseModel):
     unit_ids: Optional[List[str]] = None
     client_ids: Optional[List[str]] = None
     attachments: Optional[List[dict]] = None
+    contact_person: Optional[dict] = None
 
 
 class UpdateDecisionBody(BaseModel):
@@ -38,6 +39,7 @@ class UpdateDecisionBody(BaseModel):
     unit_ids: Optional[List[str]] = None
     client_ids: Optional[List[str]] = None
     attachments: Optional[List[dict]] = None
+    contact_person: Optional[dict] = None
 
 
 class BuyerRespondBody(BaseModel):
@@ -62,6 +64,7 @@ async def create_decision(body: CreateDecisionBody, user: dict = Depends(get_cur
             coverage_type=body.coverage_type,
             unit_ids=body.unit_ids,
             client_ids=body.client_ids,
+            contact_person=body.contact_person,
         )
         return decision
     except Exception as e:

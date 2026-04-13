@@ -114,6 +114,8 @@ async def create_document_from_preview(request: Request, user: dict = Depends(ge
             pdf_filename=body.get("pdf_filename"),
             pdf_stored_filename=body.get("pdf_stored_filename"),
             ai_extraction_confidence=body.get("ai_extraction_confidence", "low"),
+            approver_client_ids=body.get("approver_client_ids"),
+            approval_required_count=body.get("approval_required_count"),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -366,9 +368,22 @@ async def get_document_qr_code(document_id: str, user: dict = Depends(get_curren
 
 
 @router.post("/documents/{document_id}/send")
-async def send_document(document_id: str, user: dict = Depends(get_current_agent)):
+async def send_document(document_id: str, request: Request, user: dict = Depends(get_current_agent)):
     try:
-        return await document_service.send_document(document_id, get_workspace_owner_id(user), user)
+        send_config = {}
+        try:
+            if request.headers.get("content-type", "").startswith("application/json"):
+                send_config = await request.json()
+        except Exception:
+            send_config = {}
+        return await document_service.send_document(
+            document_id,
+            get_workspace_owner_id(user),
+            user,
+            approver_client_ids=send_config.get("approver_client_ids"),
+            approval_required_count=send_config.get("approval_required_count"),
+            approval_mode=send_config.get("approval_mode"),
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

@@ -14,7 +14,17 @@ from services.notification_service import emit_notification, emit_realtime
 
 logger = logging.getLogger(__name__)
 
-VAULT_CATEGORIES = ["contracts", "plans", "permits", "reports", "other"]
+VAULT_CATEGORIES = ["architect_plans", "contracts", "plans", "permits", "reports", "other"]
+
+
+def _sort_vault_docs(docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Pin architect plans first, then newest documents."""
+    def _key(doc: Dict[str, Any]):
+        is_architect = doc.get("doc_type") == "architect_plan" or doc.get("category") == "architect_plans"
+        created = doc.get("created_at") or ""
+        return (1 if is_architect else 0, created)
+
+    return sorted(docs, key=_key, reverse=True)
 
 
 async def create_vault_document(
@@ -41,8 +51,10 @@ async def create_vault_document(
     if access_level not in ("private", "shared"):
         access_level = "private"
 
-    if doc_type not in ("general", "action_required"):
+    if doc_type not in ("general", "action_required", "architect_plan"):
         doc_type = "general"
+    if doc_type == "architect_plan":
+        category = "architect_plans"
 
     buyer_ids = []
     for cid in client_ids:
@@ -104,7 +116,7 @@ async def list_vault_documents(agent_id: str, project_id: Optional[str] = None) 
     if project_id:
         query["project_id"] = project_id
     docs = await db.vault_documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
-    return _enrich_urls(docs)
+    return _enrich_urls(_sort_vault_docs(docs))
 
 
 async def list_buyer_vault(buyer_id: str) -> List[Dict[str, Any]]:
@@ -127,7 +139,7 @@ async def list_buyer_vault(buyer_id: str) -> List[Dict[str, Any]]:
     docs = await db.vault_documents.find(
         query, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
-    return _enrich_urls(docs)
+    return _enrich_urls(_sort_vault_docs(docs))
 
 
 def _enrich_urls(docs):
@@ -166,6 +178,12 @@ async def update_vault_document(
     # Validate access_level
     if "access_level" in filtered and filtered["access_level"] not in ("private", "shared"):
         filtered["access_level"] = "private"
+
+    # Validate doc_type and keep architect plans pinned in dedicated category
+    if "doc_type" in filtered and filtered["doc_type"] not in ("general", "action_required", "architect_plan"):
+        filtered["doc_type"] = "general"
+    if filtered.get("doc_type") == "architect_plan":
+        filtered["category"] = "architect_plans"
 
     # Re-resolve buyer_ids when client_ids change
     if "client_ids" in filtered:

@@ -59,11 +59,36 @@ export const AgentDocumentUpload = () => {
     due_date: '',
     line_items: []
   });
+  const [unitRecipients, setUnitRecipients] = useState([]);
+  const [approverClientIds, setApproverClientIds] = useState([]);
+  const [approvalMode, setApprovalMode] = useState('any');
+  const [approvalRequiredCount, setApprovalRequiredCount] = useState(1);
 
   useEffect(() => {
     fetchClients();
     if (isEditMode) fetchExistingDoc();
   }, [documentId]);
+
+  useEffect(() => {
+    const selected = clients.find((c) => c.client_id === selectedClient);
+    if (!selected) {
+      setUnitRecipients([]);
+      setApproverClientIds([]);
+      setApprovalRequiredCount(1);
+      return;
+    }
+    const hasUnit = !!selected.unit_id;
+    const recipients = hasUnit
+      ? clients.filter((c) => c.project_id === selected.project_id && c.unit_id === selected.unit_id)
+      : [selected];
+    setUnitRecipients(recipients);
+    const ids = recipients.map((r) => r.client_id);
+    setApproverClientIds((prev) => {
+      const kept = prev.filter((id) => ids.includes(id));
+      return kept.length > 0 ? kept : ids;
+    });
+    setApprovalRequiredCount((prev) => Math.max(1, Math.min(prev, ids.length || 1)));
+  }, [clients, selectedClient]);
 
   useEffect(() => {
     if (docData?.is_preview) {
@@ -81,6 +106,9 @@ export const AgentDocumentUpload = () => {
         setDocData(data);
         setDocType(data.type || 'quote');
         setSelectedClient(data.client_id || '');
+        setApproverClientIds(data.approver_client_ids || []);
+        setApprovalRequiredCount(data.approval_required_count || 1);
+        setApprovalMode(data.approval_required_count > 1 ? 'custom' : 'any');
         setEditedData({
           title: data.title || '',
           description: data.description || data.summary || '',
@@ -201,7 +229,13 @@ export const AgentDocumentUpload = () => {
             due_date: editedData.due_date || undefined,
             pdf_filename: docData.pdf_filename,
             pdf_stored_filename: docData.pdf_stored_filename,
-            ai_extraction_confidence: docData.ai_extraction_confidence
+            ai_extraction_confidence: docData.ai_extraction_confidence,
+            approver_client_ids: approverClientIds,
+            approval_required_count: approvalMode === 'all'
+              ? approverClientIds.length
+              : approvalMode === 'any'
+                ? 1
+                : approvalRequiredCount
           })
         });
         if (!createRes.ok) {
@@ -225,7 +259,13 @@ export const AgentDocumentUpload = () => {
             notes: editedData.notes,
             summary: editedData.summary,
             due_date: editedData.due_date || undefined,
-            items: editedData.line_items?.length > 0 ? editedData.line_items : undefined
+            items: editedData.line_items?.length > 0 ? editedData.line_items : undefined,
+            approver_client_ids: approverClientIds,
+            approval_required_count: approvalMode === 'all'
+              ? approverClientIds.length
+              : approvalMode === 'any'
+                ? 1
+                : approvalRequiredCount
           })
         });
         if (!updateRes.ok) throw new Error('Failed to save document');
@@ -233,10 +273,21 @@ export const AgentDocumentUpload = () => {
 
       if (andSend) {
         const sendRes = await fetch(`${API}/documents/${docId}/send`, {
-          method: 'POST', credentials: 'include', headers: getAuthHeaders()
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({
+            approver_client_ids: approverClientIds,
+            approval_mode: approvalMode,
+            approval_required_count: approvalMode === 'all'
+              ? approverClientIds.length
+              : approvalMode === 'any'
+                ? 1
+                : approvalRequiredCount,
+          }),
         });
         if (sendRes.ok) {
-          toast.success(`${docType === 'invoice' ? 'Invoice' : 'Quote'} sent to buyer`);
+          toast.success(`${docType === 'invoice' ? 'Invoice' : 'Quote'} sent to unit recipients`);
           navigate('/agent/documents');
         } else throw new Error('Failed to send');
       } else {
@@ -277,7 +328,13 @@ export const AgentDocumentUpload = () => {
           due_date: editedData.due_date || undefined,
           pdf_filename: docData.pdf_filename,
           pdf_stored_filename: docData.pdf_stored_filename,
-          ai_extraction_confidence: docData.ai_extraction_confidence
+          ai_extraction_confidence: docData.ai_extraction_confidence,
+          approver_client_ids: approverClientIds,
+          approval_required_count: approvalMode === 'all'
+            ? approverClientIds.length
+            : approvalMode === 'any'
+              ? 1
+              : approvalRequiredCount,
         })
       });
       if (!createRes.ok) return null;
@@ -442,6 +499,60 @@ export const AgentDocumentUpload = () => {
                 onAutoSave={autoSaveDraft}
               />
 
+              {/* Unit Recipients and Approval */}
+              {selectedClient && unitRecipients.length > 0 && (
+                <div className="space-y-3 rounded-lg border p-4">
+                  <Label>Recipients and approvals</Label>
+                  <p className="text-xs text-muted-foreground">
+                    This {typeLabel.toLowerCase()} will be sent to all owners on this unit ({unitRecipients.length} recipient{unitRecipients.length > 1 ? 's' : ''}).
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {unitRecipients.map((recipient) => (
+                      <label key={recipient.client_id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={approverClientIds.includes(recipient.client_id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setApproverClientIds((prev) => [...prev, recipient.client_id]);
+                            } else {
+                              setApproverClientIds((prev) => prev.filter((id) => id !== recipient.client_id));
+                            }
+                          }}
+                        />
+                        <span>{recipient.name} ({recipient.email})</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label>Approval rule</Label>
+                      <select
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        value={approvalMode}
+                        onChange={(e) => setApprovalMode(e.target.value)}
+                      >
+                        <option value="any">Any 1 approval</option>
+                        <option value="all">All selected approvers</option>
+                        <option value="custom">Custom number</option>
+                      </select>
+                    </div>
+                    {approvalMode === 'custom' && (
+                      <div className="space-y-1">
+                        <Label>Required approvals</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={Math.max(1, approverClientIds.length)}
+                          value={approvalRequiredCount}
+                          onChange={(e) => setApprovalRequiredCount(Number(e.target.value || 1))}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Total */}
               <div className="p-4 bg-muted rounded-lg">
                 <div className="flex items-center justify-between">
@@ -462,7 +573,17 @@ export const AgentDocumentUpload = () => {
                 onSend={() => handleSave(true)}
                 saving={saving}
                 sending={sending}
-                canSend={!!editedData.title && !!editedData.amount && !!selectedClient}
+                sendLabel={`Send ${typeLabel} to Unit`}
+                canSend={
+                  !!editedData.title &&
+                  !!editedData.amount &&
+                  !!selectedClient &&
+                  approverClientIds.length > 0 &&
+                  (
+                    approvalMode !== 'custom' ||
+                    (approvalRequiredCount >= 1 && approvalRequiredCount <= approverClientIds.length)
+                  )
+                }
               />
             </CardContent>
           </Card>

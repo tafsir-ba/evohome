@@ -221,6 +221,12 @@ async def accept_team_invitation(token: str, response: Response):
         {"invitation_id": invitation['invitation_id']},
         {"$set": {"status": "accepted", "accepted_at": datetime.now(timezone.utc).isoformat(), "accepted_by": user_id}},
     )
+    await send_notification_email("welcome_onboarding", email, {
+        "name": existing_user.get("name", ""),
+        "role": "agent",
+        "project_name": "your shared workspace",
+        "agent_name": invitation.get("invited_by_name", "Your workspace owner"),
+    })
 
     jwt_token = create_access_token(user_id, "agent")
 
@@ -278,6 +284,12 @@ async def register_invited_user(
         {"invitation_id": invitation['invitation_id']},
         {"$set": {"status": "accepted", "accepted_at": datetime.now(timezone.utc).isoformat(), "accepted_by": user_id}},
     )
+    await send_notification_email("welcome_onboarding", email, {
+        "name": name,
+        "role": "agent",
+        "project_name": "your shared workspace",
+        "agent_name": invitation.get("invited_by_name", "Your workspace owner"),
+    })
 
     jwt_token = create_access_token(user_id, "agent")
 
