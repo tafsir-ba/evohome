@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { toast } from 'sonner';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { NotificationCenter } from '../../components/NotificationCenter';
-import { PdfViewer } from '../../components/PdfViewer';
 import { 
   Home, 
   LogOut, 
@@ -752,30 +751,28 @@ const TimelineCard = ({
                 />
               )}
 
-              {/* Document Actions */}
+              {/* Document Actions — same source-pdf endpoint for View (new tab) and Download (save). */}
               <div className="flex gap-2">
-                {event.hasSourcePdf && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPreviewPdf(event.id, event.title);
-                    }}
-                    data-testid={`preview-pdf-${event.id}`}
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Document
-                  </Button>
-                )}
                 <Button
                   variant="outline"
                   size="sm"
                   className="flex-1"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDownloadPdf(event.id);
+                    onPreviewPdf(event.id, event.title);
+                  }}
+                  data-testid={`preview-pdf-${event.id}`}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  View Document
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDownloadPdf(event.id, event.title);
                   }}
                   data-testid={`download-pdf-${event.id}`}
                 >
@@ -1389,8 +1386,6 @@ export const BuyerTimeline = () => {
   const [vaultDocuments, setVaultDocuments] = useState([]);
   const [buyerDecisions, setBuyerDecisions] = useState([]);
   
-  // PDF Viewer state
-  const [pdfViewer, setPdfViewer] = useState({ open: false, url: '', filename: '' });
 
   // Get agent branding
   const logoUrl = getLogo();
@@ -1658,42 +1653,44 @@ export const BuyerTimeline = () => {
     }
   };
 
-  const handleDownloadPdf = async (documentId) => {
+  const openBuyerSourcePdfSameAsDownload = async (documentId, documentTitle, { asDownload }) => {
+    const base = (documentTitle || `document_${documentId}`).replace(/[/\\?%*:|"<>]/g, '_').slice(0, 180);
     try {
-      // Use source-pdf endpoint to download the original uploaded PDF
-      const res = await fetch(`${API}/documents/${documentId}/source-pdf`, { credentials: 'include', headers: getAuthHeaders() });
-      
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
+      const res = await fetch(`${API}/documents/${documentId}/source-pdf`, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        toast.error(asDownload ? 'Failed to download PDF' : 'Failed to open document');
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      if (asDownload) {
         const a = document.createElement('a');
         a.href = url;
-        a.download = `document_${documentId}.pdf`;
-        // Required for Safari and mobile browsers
+        a.download = `${base}.pdf`;
         a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
-        // Cleanup
         setTimeout(() => {
           document.body.removeChild(a);
           window.URL.revokeObjectURL(url);
         }, 100);
       } else {
-        throw new Error('Download failed');
+        window.open(url, '_blank', 'noopener,noreferrer');
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 120000);
       }
-    } catch (error) {
-      toast.error('Failed to download PDF');
+    } catch {
+      toast.error(asDownload ? 'Failed to download PDF' : 'Failed to open document');
     }
   };
 
-  const handlePreviewPdf = (documentId, documentTitle) => {
-    // Open the PDF in the in-app viewer
-    setPdfViewer({
-      open: true,
-      url: `${API}/documents/${documentId}/source-pdf`,
-      filename: documentTitle ? `${documentTitle}.pdf` : `document_${documentId}.pdf`
-    });
-  };
+  const handleDownloadPdf = (documentId, documentTitle) =>
+    openBuyerSourcePdfSameAsDownload(documentId, documentTitle, { asDownload: true });
+
+  const handlePreviewPdf = (documentId, documentTitle) =>
+    openBuyerSourcePdfSameAsDownload(documentId, documentTitle, { asDownload: false });
 
   const handleShowQrPayment = async (invoice) => {
     setQrModal({ open: true, invoice, qrData: null, loading: true });
@@ -2219,13 +2216,6 @@ export const BuyerTimeline = () => {
         loading={qrModal.loading}
       />
 
-      {/* PDF Viewer Modal */}
-      <PdfViewer
-        isOpen={pdfViewer.open}
-        onClose={() => setPdfViewer({ open: false, url: '', filename: '' })}
-        url={pdfViewer.url}
-        filename={pdfViewer.filename}
-      />
     </div>
   );
 };
