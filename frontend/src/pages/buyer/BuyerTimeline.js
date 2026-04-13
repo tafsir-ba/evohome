@@ -1080,6 +1080,9 @@ const ConstructionPhaseCard = ({ stages }) => {
 
 // Vault Document Card for Buyers
 const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
+  const [vaultInlineBlobUrl, setVaultInlineBlobUrl] = useState(null);
+  const vaultInlineBlobRef = useRef(null);
+
   const categoryLabel = String(document.category || 'other')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -1129,7 +1132,58 @@ const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
   const isArchitectPlan = document.is_architect_plan || document.doc_type === 'architect_plan' || document.category === 'architect_plans';
   const isPdf = document.content_type?.includes('pdf') || (document.original_filename || '').toLowerCase().endsWith('.pdf');
   const isImage = document.content_type?.includes('image') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes((document.original_filename || '').split('.').pop()?.toLowerCase());
-  const previewUrl = document.url || `${API}/vault/documents/${document.vault_document_id || document.vault_id}/download`;
+
+  const publicVaultUrl = [document.url, document.file_url].find((u) => u && String(u).startsWith('http')) || null;
+
+  useEffect(() => {
+    if (!isArchitectPlan || (!isPdf && !isImage)) {
+      setVaultInlineBlobUrl(null);
+      return undefined;
+    }
+    if (publicVaultUrl) {
+      setVaultInlineBlobUrl(null);
+      return undefined;
+    }
+    let cancelled = false;
+    vaultInlineBlobRef.current = null;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${API}/vault/documents/${document.vault_document_id || document.vault_id}/download`,
+          { credentials: 'include', headers: getAuthHeaders() }
+        );
+        if (!res.ok || cancelled) return;
+        const blob = await res.blob();
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        vaultInlineBlobRef.current = url;
+        setVaultInlineBlobUrl(url);
+      } catch {
+        if (!cancelled) setVaultInlineBlobUrl(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (vaultInlineBlobRef.current) {
+        URL.revokeObjectURL(vaultInlineBlobRef.current);
+        vaultInlineBlobRef.current = null;
+      }
+      setVaultInlineBlobUrl(null);
+    };
+  }, [
+    isArchitectPlan,
+    isPdf,
+    isImage,
+    publicVaultUrl,
+    document.vault_document_id,
+    document.vault_id,
+  ]);
+
+  const architectDisplaySrc = publicVaultUrl || vaultInlineBlobUrl;
 
   return (
     <Card 
@@ -1187,18 +1241,24 @@ const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
 
             {isArchitectPlan && (isPdf || isImage) && (
               <div className="mt-3 rounded-lg border border-border overflow-hidden bg-muted/20">
-                {isImage ? (
-                  <img
-                    src={previewUrl}
-                    alt={document.title || 'Architect plan'}
-                    className="w-full h-[62vh] object-contain bg-black/5"
-                  />
+                {architectDisplaySrc ? (
+                  isImage ? (
+                    <img
+                      src={architectDisplaySrc}
+                      alt={document.title || 'Architect plan'}
+                      className="w-full h-[62vh] object-contain bg-black/5"
+                    />
+                  ) : (
+                    <iframe
+                      src={`${architectDisplaySrc}#toolbar=0&navpanes=0`}
+                      title={document.title || 'Architect plan preview'}
+                      className="w-full h-[62vh] border-0"
+                    />
+                  )
                 ) : (
-                  <iframe
-                    src={previewUrl}
-                    title={document.title || 'Architect plan preview'}
-                    className="w-full h-[62vh] border-0"
-                  />
+                  <div className="w-full h-[62vh] flex items-center justify-center text-sm text-muted-foreground bg-muted/30">
+                    Loading preview…
+                  </div>
                 )}
               </div>
             )}
@@ -1715,19 +1775,53 @@ export const BuyerTimeline = () => {
   const vaultAuthDownloadUrl = (document) =>
     `${API}/vault/documents/${document.vault_document_id || document.vault_id}/download`;
 
-  const handleVaultPreview = (document) => {
-    // Direct Spaces URLs can't be embedded in iframe — open in new tab
-    const fileUrl = document.url;
-    if (fileUrl && fileUrl.startsWith('http')) {
-      window.open(fileUrl, '_blank');
+  /**
+   * Open vault file in a new tab for preview (same bytes as Download).
+   * Portal vault rows omit public CDN `url` for private Spaces; authenticated
+   * `/download` must be fetched with Bearer + cookies — iframes cannot send
+   * Authorization, so we blob-fetch then navigate the tab to a blob: URL.
+   */
+  const handleVaultPreview = async (document) => {
+    const direct = document.url || document.file_url;
+    if (direct && direct.startsWith('http')) {
+      window.open(direct, '_blank', 'noopener,noreferrer');
       return;
     }
-    // Fallback for local URLs: use in-app PDF viewer
-    setPdfViewer({
-      open: true,
-      url: vaultAuthDownloadUrl(document),
-      filename: document.original_filename || document.name || 'document.pdf'
-    });
+
+    const previewTab = window.open('', '_blank', 'noopener,noreferrer');
+    if (previewTab) {
+      try {
+        previewTab.document.write(
+          '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Loading…</title></head><body style="margin:0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fafafa;color:#52525b">Loading preview…</body></html>'
+        );
+        previewTab.document.close();
+      } catch {
+        /* ignore — tab may still receive blob navigation */
+      }
+    }
+
+    try {
+      const res = await fetch(vaultAuthDownloadUrl(document), {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        previewTab?.close();
+        toast.error('Could not open document');
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      if (previewTab && !previewTab.closed) {
+        previewTab.location.href = blobUrl;
+      } else {
+        window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      }
+      window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 120000);
+    } catch {
+      previewTab?.close();
+      toast.error('Could not open document');
+    }
   };
 
   const handleVaultDownload = async (document) => {
