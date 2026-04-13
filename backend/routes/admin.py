@@ -301,7 +301,8 @@ async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Dep
     """Create an agent account inside current workspace."""
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
-    if data.workspace_role == "admin" and not is_workspace_owner(user):
+    actor_email = (user.get("email") or "").strip().lower()
+    if data.workspace_role == "admin" and not is_workspace_owner(user) and actor_email != SUPER_ADMIN_EMAIL:
         raise HTTPException(status_code=403, detail="Only workspace owner can create admin users")
 
     workspace_owner_id = get_workspace_owner_id(user)

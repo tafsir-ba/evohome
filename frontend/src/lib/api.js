@@ -32,15 +32,36 @@ export const authFetch = async (url, options = {}) => {
 };
 
 /**
+ * Pick human-readable message from API JSON (canonical shape or legacy FastAPI).
+ */
+function pickErrorMessage(data) {
+  if (!data || typeof data !== 'object') return null;
+  if (typeof data.message === 'string' && data.message.trim()) return data.message.trim();
+  const d = data.detail;
+  if (typeof d === 'string' && d.trim()) return d.trim();
+  if (Array.isArray(d) && d.length) {
+    return d
+      .map((e) => `${(e.loc || []).join('.')}: ${e.msg || 'invalid'}`)
+      .filter(Boolean)
+      .join('; ');
+  }
+  if (d && typeof d === 'object' && typeof d.message === 'string' && d.message.trim()) {
+    return d.message.trim();
+  }
+  return null;
+}
+
+/**
  * Extract canonical error from a failed response.
  * Returns { error, message, request_id, source } or a fallback.
  */
 export const parseApiError = async (response) => {
   try {
     const data = await response.json();
+    const message = pickErrorMessage(data) || `HTTP ${response.status}`;
     return {
       error: data.error || 'request_failed',
-      message: data.message || data.detail || 'An error occurred',
+      message,
       request_id: data.request_id || response._requestId || null,
       source: data.source || 'unknown',
     };

@@ -40,6 +40,7 @@ import {
   Phone
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { parseApiError } from '../../lib/api';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 const BASE_URL = process.env.REACT_APP_BACKEND_URL;
@@ -168,15 +169,6 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
     }
   };
 
-  const parseApiError = async (res, fallback) => {
-    try {
-      const data = await res.json();
-      return data?.detail || fallback;
-    } catch {
-      return fallback;
-    }
-  };
-
   const fetchAdminData = async () => {
     if (!isPlatformAdmin) return;
     setLoadingAdmin(true);
@@ -189,13 +181,13 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
       if (usersRes.ok) {
         setAdminUsers(await usersRes.json());
       } else {
-        throw new Error(await parseApiError(usersRes, 'Failed to load admin users'));
+        throw new Error((await parseApiError(usersRes)).message || 'Failed to load admin users');
       }
 
       if (logsRes.ok) {
         setAdminAuditLogs(await logsRes.json());
       } else {
-        throw new Error(await parseApiError(logsRes, 'Failed to load audit logs'));
+        throw new Error((await parseApiError(logsRes)).message || 'Failed to load audit logs');
       }
     } catch (error) {
       toast.error(error.message);
@@ -218,7 +210,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
         body: JSON.stringify(adminForm),
       });
       if (!res.ok) {
-        throw new Error(await parseApiError(res, 'Failed to create user'));
+        throw new Error((await parseApiError(res)).message || 'Failed to create user');
       }
       toast.success('Admin user created');
       setAdminForm({ name: '', email: '', password: '', workspace_role: 'member' });
@@ -239,7 +231,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
         body: JSON.stringify({ workspace_role: workspaceRole }),
       });
       if (!res.ok) {
-        throw new Error(await parseApiError(res, 'Failed to update role'));
+        throw new Error((await parseApiError(res)).message || 'Failed to update role');
       }
       toast.success('Role updated');
       fetchAdminData();
@@ -257,7 +249,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
         headers: getAuthHeaders(),
       });
       if (!res.ok) {
-        throw new Error(await parseApiError(res, 'Failed to deactivate user'));
+        throw new Error((await parseApiError(res)).message || 'Failed to deactivate user');
       }
       toast.success('User deactivated');
       fetchAdminData();
@@ -274,7 +266,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
         headers: getAuthHeaders(),
       });
       if (!res.ok) {
-        throw new Error(await parseApiError(res, 'Failed to reactivate user'));
+        throw new Error((await parseApiError(res)).message || 'Failed to reactivate user');
       }
       toast.success('User reactivated');
       fetchAdminData();
@@ -291,7 +283,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
         headers: getAuthHeaders(),
       });
       if (!impactRes.ok) {
-        throw new Error(await parseApiError(impactRes, 'Failed to load delete impact'));
+        throw new Error((await parseApiError(impactRes)).message || 'Failed to load delete impact');
       }
       const payload = await impactRes.json();
       const impact = payload?.impact || {};
@@ -307,7 +299,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
         headers: getAuthHeaders(),
       });
       if (!delRes.ok) {
-        throw new Error(await parseApiError(delRes, 'Failed to hard delete user'));
+        throw new Error((await parseApiError(delRes)).message || 'Failed to hard delete user');
       }
       toast.success('User hard deleted');
       fetchAdminData();
@@ -338,7 +330,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
         fetchTeamData();
       } else {
         const error = await res.json();
-        throw new Error(error.detail || 'Failed to send invitation');
+        throw new Error(error.message || error.detail || 'Failed to send invitation');
       }
     } catch (error) {
       toast.error(error.message);
@@ -381,7 +373,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
         fetchTeamData();
       } else {
         const error = await res.json();
-        throw new Error(error.detail || 'Failed to remove member');
+        throw new Error(error.message || error.detail || 'Failed to remove member');
       }
     } catch (error) {
       toast.error(error.message);
@@ -463,7 +455,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
         toast.success('Logo uploaded successfully');
       } else {
         const error = await res.json();
-        throw new Error(error.detail || 'Failed to upload logo');
+        throw new Error(error.message || error.detail || 'Failed to upload logo');
       }
     } catch (error) {
       toast.error(error.message);

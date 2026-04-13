@@ -7,6 +7,7 @@ import logging
 import bcrypt
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from typing import Optional
 
 from database import db
 
@@ -16,7 +17,19 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-# Minimal PDF for demo vault keys (synthetic; real drawings are not bundled).
+# Bundled architect preview (PNG) for demo vault — committed under backend/assets/demo/.
+DEMO_ARCHITECT_FLOOR_PLAN_PATH = ROOT_DIR / "assets" / "demo" / "architect_floor_plan.png"
+
+# Bundled construction photo for demo activity feed (image activity) — same folder.
+DEMO_CONSTRUCTION_FEED_PHOTO_PATH = ROOT_DIR / "assets" / "demo" / "construction_site_progress.png"
+
+# 1×1 PNG fallback if the bundled feed photo is missing (valid minimal file).
+_DEMO_FEED_PHOTO_FALLBACK = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000a49444154789c63000100000500001d0d4e1200000049454e44ae426082"
+)
+
+# Minimal PDF for other demo vault keys (synthetic).
 _DEMO_VAULT_PDF = (
     b"%PDF-1.4\n"
     b"1 0 obj<< /Type /Catalog /Pages 2 0 R>>endobj\n"
@@ -412,15 +425,29 @@ async def seed_demo_environment() -> dict:
         await db.documents.insert_one(doc)
 
     # ── Activities ──
+    _activity_demo_dir = UPLOAD_DIR / "activities" / "demo"
+    _activity_demo_dir.mkdir(parents=True, exist_ok=True)
+
+    _demo_feed_photo_bytes: Optional[bytes] = None
+    if DEMO_CONSTRUCTION_FEED_PHOTO_PATH.is_file():
+        try:
+            _demo_feed_photo_bytes = DEMO_CONSTRUCTION_FEED_PHOTO_PATH.read_bytes()
+        except OSError as e:
+            logger.warning("Could not read demo construction feed photo: %s", e)
+    _demo_feed_filename = "construction_site_progress.png"
+    _demo_feed_body = _demo_feed_photo_bytes if _demo_feed_photo_bytes else _DEMO_FEED_PHOTO_FALLBACK
+    _demo_feed_size = len(_demo_feed_body)
+    _demo_activity_pdf_size = len(_DEMO_VAULT_PDF)
+
     demo_activities = [
         {
             "activity_id": "demo_act_001",
             "type": "image",
-            "title": "Foundation Complete",
-            "content": "Great news! The foundation work for your unit has been completed successfully. The concrete curing process is underway and structural work will begin next week.",
-            "file_url": "/api/activities/files/demo/foundation_complete.jpg",
-            "file_name": "foundation_complete.jpg",
-            "file_size": 19735,
+            "title": "Site progress update",
+            "content": "Latest from the site: foundation and ground-level structural work are advancing. Concrete curing is underway and the next slab pour is scheduled for the coming week.",
+            "file_url": f"/api/activities/files/demo/{_demo_feed_filename}",
+            "file_name": _demo_feed_filename,
+            "file_size": _demo_feed_size,
             "file_type": "image",
             "author_id": demo_agent_id,
             "author_role": "agent",
@@ -436,7 +463,7 @@ async def seed_demo_environment() -> dict:
             "content": "Please find attached the updated floor plan reflecting your requested modifications to the living room layout. The changes include an expanded balcony access and repositioned kitchen island.",
             "file_url": "/api/activities/files/demo/floor_plan_a301.pdf",
             "file_name": "floor_plan_a301.pdf",
-            "file_size": 2077,
+            "file_size": _demo_activity_pdf_size,
             "file_type": "pdf",
             "author_id": demo_agent_id,
             "author_role": "agent",
@@ -452,7 +479,7 @@ async def seed_demo_environment() -> dict:
             "content": "Attached is the contract for your premium kitchen upgrade package. Please review the terms and let me know if you have any questions before signing.",
             "file_url": "/api/activities/files/demo/contract_upgrade_package.pdf",
             "file_name": "contract_upgrade_package.pdf",
-            "file_size": 2152,
+            "file_size": _demo_activity_pdf_size,
             "file_type": "pdf",
             "author_id": demo_agent_id,
             "author_role": "agent",
@@ -500,7 +527,7 @@ async def seed_demo_environment() -> dict:
             "content": "Here's your monthly construction progress report. All milestones are on track and we remain on schedule for the planned completion date.",
             "file_url": "/api/activities/files/demo/progress_report_march.pdf",
             "file_name": "progress_report_march.pdf",
-            "file_size": 2088,
+            "file_size": _demo_activity_pdf_size,
             "file_type": "pdf",
             "author_id": demo_agent_id,
             "author_role": "agent",
@@ -513,6 +540,17 @@ async def seed_demo_environment() -> dict:
 
     for activity in demo_activities:
         await db.activities.insert_one(activity)
+
+    try:
+        (_activity_demo_dir / _demo_feed_filename).write_bytes(_demo_feed_body)
+        for _pdf_name in (
+            "floor_plan_a301.pdf",
+            "contract_upgrade_package.pdf",
+            "progress_report_march.pdf",
+        ):
+            (_activity_demo_dir / _pdf_name).write_bytes(_DEMO_VAULT_PDF)
+    except OSError as e:
+        logger.warning("Could not write demo activity attachment files: %s", e)
 
     # ── Activity Recipients ──
     demo_recipients = [
@@ -1008,6 +1046,22 @@ async def seed_demo_environment() -> dict:
         },
     ])
 
+    _arch_bytes: Optional[bytes] = None
+    if DEMO_ARCHITECT_FLOOR_PLAN_PATH.is_file():
+        try:
+            _arch_bytes = DEMO_ARCHITECT_FLOOR_PLAN_PATH.read_bytes()
+        except OSError as e:
+            logger.warning("Could not read demo architect floor plan asset: %s", e)
+
+    _vault_arch_stored = "demo_architect_floor_plan.png"
+    _vault_arch_original = "Residenza_Lago_Vista_floor_plan.png"
+    _vault_arch_ct = "image/png"
+    _vault_arch_size = len(_arch_bytes) if _arch_bytes else 4102033
+    if not _arch_bytes:
+        _vault_arch_stored = "demo_plan_v4.pdf"
+        _vault_arch_original = "architect_master_plan_v4.pdf"
+        _vault_arch_ct = "application/pdf"
+
     await db.vault_documents.insert_many([
         {
             "vault_document_id": "demo_vault_001",
@@ -1015,15 +1069,15 @@ async def seed_demo_environment() -> dict:
             "project_id": demo_project_id,
             "client_ids": [demo_client1_id, demo_client2_id],
             "buyer_ids": [demo_buyer1_id, demo_buyer2_id],
-            "title": "Architect master plan v4",
+            "title": "Residenza Lago Vista — floor plan (demo)",
             "category": "architect_plans",
             "doc_type": "architect_plan",
-            "description": "Latest signed architectural plan set.",
+            "description": "Sample floor plan for the demo (Lugano unit narrative).",
             "access_level": "shared",
-            "stored_filename": "demo_plan_v4.pdf",
-            "original_filename": "architect_master_plan_v4.pdf",
-            "file_size": 4102033,
-            "content_type": "application/pdf",
+            "stored_filename": _vault_arch_stored,
+            "original_filename": _vault_arch_original,
+            "file_size": _vault_arch_size,
+            "content_type": _vault_arch_ct,
             "created_at": (now - timedelta(days=12)).isoformat(),
             "updated_at": (now - timedelta(days=12)).isoformat(),
         },
@@ -1068,14 +1122,14 @@ async def seed_demo_environment() -> dict:
     try:
         from services import file_service as _demo_fs
 
-        for _vault_fn in (
-            "demo_plan_v4.pdf",
-            "demo_appliance_sheet.pdf",
-            "demo_execution_handbook.pdf",
-        ):
+        if _arch_bytes:
+            _demo_fs.write_vault_bytes(_vault_arch_stored, _arch_bytes, "image/png")
+        else:
+            _demo_fs.write_vault_bytes(_vault_arch_stored, _DEMO_VAULT_PDF, "application/pdf")
+        for _vault_fn in ("demo_appliance_sheet.pdf", "demo_execution_handbook.pdf"):
             _demo_fs.write_vault_bytes(_vault_fn, _DEMO_VAULT_PDF, "application/pdf")
     except Exception as exc:
-        logger.warning("Could not write demo vault placeholder PDFs: %s", exc)
+        logger.warning("Could not write demo vault placeholder files: %s", exc)
 
     await db.notifications.insert_many([
         {
