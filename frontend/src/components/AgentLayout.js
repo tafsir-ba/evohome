@@ -21,7 +21,7 @@ import {
   ChevronUp,
   CheckSquare
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationCenter } from './NotificationCenter';
@@ -62,12 +62,9 @@ export const AgentLayout = ({ children }) => {
   );
 
   const isActive = (href) => location.pathname === href || location.pathname.startsWith(href + '/');
-  const activeItemLabel = useMemo(() => {
-    const inPrimary = navigation.find((item) => isActive(item.href));
-    if (inPrimary) return inPrimary.name;
-    const inMore = moreNavigation.find((item) => isActive(item.href));
-    return inMore?.name || t('nav.dashboard');
-  }, [location.pathname, navigation, moreNavigation, t]);
+  const inPrimary = navigation.find((item) => isActive(item.href));
+  const inMore = moreNavigation.find((item) => isActive(item.href));
+  const activeItemLabel = inPrimary?.name || inMore?.name || t('nav.dashboard');
 
   useEffect(() => {
     setSidebarOpen(false);
