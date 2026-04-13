@@ -275,7 +275,6 @@ async def list_workspace_users(
     user: dict = Depends(get_current_agent),
 ):
     """List agent users in current workspace."""
-    _require_super_admin(user)
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -300,7 +299,6 @@ async def list_workspace_users(
 @router.post("/admin/users")
 async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Depends(get_current_agent)):
     """Create an agent account inside current workspace."""
-    _require_super_admin(user)
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     if data.workspace_role == "admin" and not is_workspace_owner(user):
@@ -348,7 +346,6 @@ async def update_workspace_user_role(
     user: dict = Depends(get_current_agent),
 ):
     """Update workspace role for an agent member."""
-    _require_super_admin(user)
     if not is_workspace_owner(user):
         raise HTTPException(status_code=403, detail="Only workspace owner can change roles")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -378,7 +375,6 @@ async def update_workspace_user_role(
 @router.post("/admin/users/{member_id}/deactivate")
 async def deactivate_workspace_user(member_id: str, user: dict = Depends(get_current_agent)):
     """Deactivate a team member and revoke active sessions."""
-    _require_super_admin(user)
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -413,7 +409,6 @@ async def deactivate_workspace_user(member_id: str, user: dict = Depends(get_cur
 @router.post("/admin/users/{member_id}/reactivate")
 async def reactivate_workspace_user(member_id: str, user: dict = Depends(get_current_agent)):
     """Reactivate a team member."""
-    _require_super_admin(user)
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -444,7 +439,6 @@ async def reactivate_workspace_user(member_id: str, user: dict = Depends(get_cur
 @router.get("/admin/users/{member_id}/delete-impact")
 async def get_workspace_user_delete_impact(member_id: str, user: dict = Depends(get_current_agent)):
     """Preview linked records before hard-deleting a user."""
-    _require_super_admin(user)
     if not is_workspace_owner(user):
         raise HTTPException(status_code=403, detail="Only workspace owner can preview hard delete impact")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -469,7 +463,6 @@ async def hard_delete_workspace_user(
     user: dict = Depends(get_current_agent),
 ):
     """Hard delete team user (owner only, with impact guard)."""
-    _require_super_admin(user)
     if not is_workspace_owner(user):
         raise HTTPException(status_code=403, detail="Only workspace owner can hard delete users")
     workspace_owner_id = get_workspace_owner_id(user)
@@ -516,7 +509,6 @@ async def list_audit_logs(
     user: dict = Depends(get_current_agent),
 ):
     """List workspace audit logs."""
-    _require_super_admin(user)
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     workspace_owner_id = get_workspace_owner_id(user)
