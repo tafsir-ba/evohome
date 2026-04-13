@@ -26,7 +26,6 @@ import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationCenter } from './NotificationCenter';
-import { LanguageToggle } from './LanguageToggle';
 
 export const AgentLayout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -233,9 +232,6 @@ export const AgentLayout = ({ children }) => {
             <p className="text-sm font-medium text-foreground truncate lg:hidden">{activeItemLabel}</p>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
-            <div className="hidden sm:block">
-              <LanguageToggle />
-            </div>
             <NotificationCenter />
             <ThemeToggle />
           </div>

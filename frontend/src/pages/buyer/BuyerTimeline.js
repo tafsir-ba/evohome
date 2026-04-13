@@ -10,7 +10,6 @@ import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { ThemeToggle } from '../../components/ThemeToggle';
-import { LanguageToggle } from '../../components/LanguageToggle';
 import { NotificationCenter } from '../../components/NotificationCenter';
 import { PdfViewer } from '../../components/PdfViewer';
 import { 
@@ -2011,9 +2010,6 @@ export const BuyerTimeline = () => {
                 <LogOut className="w-4 h-4" />
               </Button>
             </div>
-          </div>
-          <div className="mt-3 flex items-center justify-end">
-            <LanguageToggle />
           </div>
           
           {/* Search Bar */}

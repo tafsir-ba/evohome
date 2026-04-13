@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
 import { DataProvider } from "./context/DataContext";
 import { ThemeProvider } from "./components/ThemeProvider";
-import { GoogleTranslateAuto } from "./components/GoogleTranslateAuto";
 
 // Pages
 import { LandingPage } from "./pages/LandingPage";
@@ -246,7 +245,6 @@ function App() {
         <AuthProvider>
           <SettingsProvider>
             <DataProvider>
-              <GoogleTranslateAuto />
               <AppRouter />
               <Toaster position="top-right" richColors />
             </DataProvider>
