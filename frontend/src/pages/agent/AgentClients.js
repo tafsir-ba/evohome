@@ -17,6 +17,7 @@ import {
   Mail,
   Phone,
   Building2,
+  Home,
   ArrowRight,
   Pencil,
   Trash2,
