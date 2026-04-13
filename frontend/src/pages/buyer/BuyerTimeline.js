@@ -1966,7 +1966,6 @@ export const BuyerTimeline = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <LanguageToggle />
               <Button
                 variant="ghost"
                 size="icon"
@@ -1988,6 +1987,9 @@ export const BuyerTimeline = () => {
                 <LogOut className="w-4 h-4" />
               </Button>
             </div>
+          </div>
+          <div className="mt-3 flex items-center justify-end">
+            <LanguageToggle />
           </div>
           
           {/* Search Bar */}
