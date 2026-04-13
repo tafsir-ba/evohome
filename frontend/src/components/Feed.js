@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader } from './ui/card';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Checkbox } from './ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -656,7 +658,8 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
   
   // Edit state
   const [editingActivity, setEditingActivity] = useState(null);
-  const [editFormData, setEditFormData] = useState({ content: '' });
+  const [editFormData, setEditFormData] = useState({ content: '', project_id: '', client_ids: [] });
+  const [editRecipientsResetNotice, setEditRecipientsResetNotice] = useState(false);
   const [saving, setSaving] = useState(false);
   
   // Delete confirmation state  
@@ -824,13 +827,24 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
 
   const handleEditActivity = (activity) => {
     setEditingActivity(activity);
+    setEditRecipientsResetNotice(false);
     setEditFormData({
       content: getActivityPostBody(activity),
+      project_id: activity.project_id || '',
+      client_ids: (activity.recipients || []).map((r) => r.client_id),
     });
   };
 
   const handleSaveEdit = async () => {
     if (!editingActivity) return;
+    if (!editFormData.project_id) {
+      toast.error('Please select a project');
+      return;
+    }
+    if (!editFormData.client_ids || editFormData.client_ids.length === 0) {
+      toast.error('Please select at least one recipient');
+      return;
+    }
     
     setSaving(true);
     try {
@@ -838,12 +852,18 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
-        body: JSON.stringify({ title: '', content: editFormData.content })
+        body: JSON.stringify({
+          title: '',
+          content: editFormData.content,
+          project_id: editFormData.project_id,
+          client_ids: editFormData.client_ids,
+        })
       });
 
       if (res.ok) {
         toast.success('Activity updated');
         setEditingActivity(null);
+        setEditRecipientsResetNotice(false);
         fetchActivities();
       } else {
         const error = await res.json();
@@ -881,6 +901,10 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
     setFilterClient(null);
     setFilterProject(null);
   };
+
+  const editProjectClients = clients.filter(
+    (c) => !editFormData.project_id || c.project_id === editFormData.project_id
+  );
 
   // Loading state
   if (loading && activities.length === 0) {
@@ -1086,6 +1110,79 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-project">Project</Label>
+              <Select
+                value={editFormData.project_id || ''}
+                onValueChange={(v) => setEditFormData((prev) => {
+                  const changed = prev.project_id && prev.project_id !== v;
+                  if (changed) setEditRecipientsResetNotice(true);
+                  return { ...prev, project_id: v, client_ids: [] };
+                })}
+              >
+                <SelectTrigger id="edit-project">
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.project_id} value={p.project_id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {editRecipientsResetNotice && (
+                <p className="text-xs text-amber-600">
+                  Project changed. Recipients were reset, please re-select recipients.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Recipients</Label>
+              <div className="border border-border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                {editProjectClients.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No clients in this project</p>
+                ) : (
+                  <>
+                    <div className="flex items-center space-x-2 pb-2 border-b border-border">
+                      <Checkbox
+                        checked={editFormData.client_ids.length === editProjectClients.length && editProjectClients.length > 0}
+                        onCheckedChange={(checked) =>
+                          setEditFormData((prev) => ({
+                            ...prev,
+                            client_ids: checked ? editProjectClients.map((c) => c.client_id) : [],
+                          }))
+                        }
+                      />
+                      <label className="text-sm font-medium">Select all ({editProjectClients.length})</label>
+                    </div>
+                    {editProjectClients.map((client) => (
+                      <div key={client.client_id} className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={editFormData.client_ids.includes(client.client_id)}
+                          onCheckedChange={(checked) => {
+                            setEditFormData((prev) => ({
+                              ...prev,
+                              client_ids: checked
+                                ? [...prev.client_ids, client.client_id]
+                                : prev.client_ids.filter((id) => id !== client.client_id),
+                            }));
+                          }}
+                        />
+                        <label className="text-sm">
+                          {client.name}
+                          {client.unit_reference ? (
+                            <span className="text-muted-foreground ml-1">({client.unit_reference})</span>
+                          ) : null}
+                        </label>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="edit-content">Post</Label>
               <Textarea
