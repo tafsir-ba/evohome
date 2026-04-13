@@ -601,23 +601,37 @@ export const AgentProjects = () => {
                         </div>
                         <div>
                           <p className="font-medium text-sm">{unit.unit_reference}</p>
-                          {unit.assigned_client_name ? (
-                            <p className="text-xs text-muted-foreground">Assigned to {unit.assigned_client_name}</p>
+                          {(unit.assigned_clients_count || 0) > 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              {(unit.assigned_clients_count || 0)} client{(unit.assigned_clients_count || 0) !== 1 ? 's' : ''} assigned
+                            </p>
                           ) : (
                             <p className="text-xs text-amber-600">Available</p>
                           )}
                         </div>
                       </div>
-                      {!unit.assigned_client_id && (
+                      <div className="flex items-center gap-1">
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeleteUnit(unit.unit_id)}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowUnitsDialog(false);
+                            navigate(`/agent/units/${unit.unit_id}`);
+                          }}
                         >
-                          <X className="w-4 h-4" />
+                          Manage
                         </Button>
-                      )}
+                        {(unit.assigned_clients_count || 0) === 0 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeleteUnit(unit.unit_id)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -625,7 +639,7 @@ export const AgentProjects = () => {
             </div>
             
             <p className="text-xs text-muted-foreground mt-3">
-              {units.length} unit{units.length !== 1 ? 's' : ''} • {units.filter(u => !u.assigned_client_id).length} available
+              {units.length} unit{units.length !== 1 ? 's' : ''} • {units.filter(u => (u.assigned_clients_count || 0) === 0).length} available
             </p>
           </div>
           

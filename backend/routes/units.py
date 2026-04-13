@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from core.auth import get_current_user, get_current_agent
 from core.access_control import can_access_project, is_agent, get_workspace_owner_id
-from services import unit_service
+from services import unit_service, client_service
 from services.billing_service import can_create_unit, get_unit_limit
 
 logger = logging.getLogger(__name__)
@@ -78,6 +78,64 @@ async def get_unit(unit_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Access denied")
 
     return unit
+
+
+@router.get("/units/{unit_id}/clients")
+async def list_unit_clients(unit_id: str, user=Depends(get_current_user)):
+    """List clients currently assigned to a unit."""
+    unit = await unit_service.get_unit(unit_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    if not await can_access_project(user, unit['project_id']):
+        raise HTTPException(status_code=403, detail="Access denied")
+    clients = await client_service.list_clients_by_project(unit["project_id"])
+    return [c for c in clients if c.get("unit_id") == unit_id]
+
+
+@router.post("/units/{unit_id}/clients/{client_id}")
+async def attach_client_to_unit(unit_id: str, client_id: str, user=Depends(get_current_agent)):
+    """Assign a client to this unit (unit-side action)."""
+    unit = await unit_service.get_unit(unit_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    if not await can_access_project(user, unit['project_id']):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    client = await client_service.get_client(client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if client.get("agent_id") != get_workspace_owner_id(user):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if client.get("project_id") != unit.get("project_id"):
+        raise HTTPException(status_code=400, detail="Client and unit must belong to the same project")
+
+    updated = await client_service.update_client(client_id, {"unit_id": unit_id})
+    if not updated:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return {"message": "Client attached to unit", "client": updated}
+
+
+@router.delete("/units/{unit_id}/clients/{client_id}")
+async def detach_client_from_unit(unit_id: str, client_id: str, user=Depends(get_current_agent)):
+    """Detach a client from this unit (set client unit to null)."""
+    unit = await unit_service.get_unit(unit_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    if not await can_access_project(user, unit['project_id']):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    client = await client_service.get_client(client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if client.get("agent_id") != get_workspace_owner_id(user):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if client.get("unit_id") != unit_id:
+        raise HTTPException(status_code=400, detail="Client is not assigned to this unit")
+
+    updated = await client_service.update_client(client_id, {"unit_id": None})
+    if not updated:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return {"message": "Client detached from unit", "client": updated}
 
 
 @router.put("/units/{unit_id}")

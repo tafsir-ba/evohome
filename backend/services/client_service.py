@@ -19,6 +19,53 @@ def _make_client_id() -> str:
     return f"client_{uuid.uuid4().hex[:12]}"
 
 
+def _normalize_unit_id(unit_id: Optional[str]) -> Optional[str]:
+    if not unit_id:
+        return None
+    value = str(unit_id).strip()
+    if not value or value.lower() in {"none", "general", "null"}:
+        return None
+    return value
+
+
+async def _attach_client_to_unit(unit_id: str, client_id: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    await db.units.update_one(
+        {"unit_id": unit_id},
+        {
+            "$addToSet": {"assigned_client_ids": client_id},
+            "$set": {
+                "assigned_client_id": client_id,  # backward compatibility
+                "is_available": False,
+                "updated_at": now,
+            },
+        },
+    )
+
+
+async def _detach_client_from_unit(unit_id: str, client_id: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    await db.units.update_one(
+        {"unit_id": unit_id},
+        {"$pull": {"assigned_client_ids": client_id}, "$set": {"updated_at": now}},
+    )
+    remaining_clients = await db.clients.find(
+        {"unit_id": unit_id, "client_id": {"$ne": client_id}},
+        {"_id": 0, "client_id": 1},
+    ).to_list(1)
+    next_client_id = remaining_clients[0]["client_id"] if remaining_clients else None
+    await db.units.update_one(
+        {"unit_id": unit_id},
+        {
+            "$set": {
+                "assigned_client_id": next_client_id,
+                "is_available": next_client_id is None,
+                "updated_at": now,
+            }
+        },
+    )
+
+
 async def create_client(
     agent_id: str,
     name: str,
@@ -30,6 +77,7 @@ async def create_client(
 ) -> Dict[str, Any]:
     """Create a client."""
     client_id = _make_client_id()
+    normalized_unit_id = _normalize_unit_id(unit_id)
     doc = {
         "client_id": client_id,
         "agent_id": agent_id,
@@ -37,22 +85,16 @@ async def create_client(
         "email": email,
         "phone": phone,
         "project_id": project_id,
-        "unit_id": unit_id,
+        "unit_id": normalized_unit_id,
         "buyer_id": None,
         "status": "active",
         "notes": notes,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # If unit_id is provided, mark unit as assigned
-    if unit_id:
-        await db.units.update_one(
-            {"unit_id": unit_id},
-            {"$set": {"assigned_client_id": client_id, "is_available": False,
-                      "updated_at": datetime.now(timezone.utc).isoformat()}}
-        )
-
     await db.clients.insert_one(doc)
+    if normalized_unit_id:
+        await _attach_client_to_unit(normalized_unit_id, client_id)
     doc.pop('_id', None)
     return doc
 
@@ -143,23 +185,14 @@ async def update_client(
     old_client = await get_client(client_id)
     if "unit_id" in filtered and old_client:
         old_unit_id = old_client.get("unit_id")
-        new_unit_id = filtered.get("unit_id")
+        new_unit_id = _normalize_unit_id(filtered.get("unit_id"))
+        filtered["unit_id"] = new_unit_id
 
-        # Unassign old unit
         if old_unit_id and old_unit_id != new_unit_id:
-            await db.units.update_one(
-                {"unit_id": old_unit_id},
-                {"$set": {"assigned_client_id": None, "is_available": True,
-                          "updated_at": datetime.now(timezone.utc).isoformat()}}
-            )
+            await _detach_client_from_unit(old_unit_id, client_id)
 
-        # Assign new unit
         if new_unit_id:
-            await db.units.update_one(
-                {"unit_id": new_unit_id},
-                {"$set": {"assigned_client_id": client_id, "is_available": False,
-                          "updated_at": datetime.now(timezone.utc).isoformat()}}
-            )
+            await _attach_client_to_unit(new_unit_id, client_id)
 
     filtered["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.clients.update_one({"client_id": client_id}, {"$set": filtered})
@@ -223,10 +256,7 @@ async def delete_client(client_id: str, force: bool = False) -> bool:
         await db.clients.update_one({"client_id": client_id}, {"$set": {"buyer_id": None}})
 
     if client and client.get("unit_id"):
-        await db.units.update_one(
-            {"unit_id": client["unit_id"]},
-            {"$set": {"assigned_client_id": None, "is_available": True}}
-        )
+        await _detach_client_from_unit(client["unit_id"], client_id)
     result = await db.clients.delete_one({"client_id": client_id})
     return result.deleted_count > 0
 

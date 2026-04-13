@@ -32,6 +32,7 @@ import { AgentSettings } from "./pages/agent/AgentSettings";
 import { AgentAnalytics } from "./pages/agent/AgentAnalytics";
 import { AgentVault } from "./pages/agent/AgentVault";
 import { AgentHomePage } from "./pages/agent/AgentHomePage";
+import { AgentUnitDetail } from "./pages/agent/AgentUnitDetail";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 
 import "./App.css";
@@ -192,6 +193,11 @@ const AppRouter = () => {
       <Route path="/agent/clients/:clientId/preview" element={
         <ProtectedRoute allowedRoles={['agent']}>
           <ClientPreview />
+        </ProtectedRoute>
+      } />
+      <Route path="/agent/units/:unitId" element={
+        <ProtectedRoute allowedRoles={['agent']}>
+          <AgentUnitDetail />
         </ProtectedRoute>
       } />
       <Route path="/agent/workflow" element={

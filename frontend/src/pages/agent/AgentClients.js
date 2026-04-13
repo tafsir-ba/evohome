@@ -117,12 +117,18 @@ export const AgentClients = () => {
     e.preventDefault();
     setFormLoading(true);
     
+    const payload = {
+      ...clientForm,
+      unit_id: !clientForm.unit_id || clientForm.unit_id === 'none' || clientForm.unit_id === 'general'
+        ? null
+        : clientForm.unit_id,
+    };
     try {
       const response = await fetch(`${API}/clients`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
-        body: JSON.stringify(clientForm)
+        body: JSON.stringify(payload)
       });
       
       if (response.ok) {
@@ -320,6 +326,14 @@ export const AgentClients = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {client.unit_id && (
+                        <Link to={`/agent/units/${client.unit_id}`}>
+                          <Button variant="outline" size="sm" className="rounded-lg gap-1.5" data-testid={`manage-unit-${client.client_id}`}>
+                            <Home className="w-4 h-4" />
+                            Unit
+                          </Button>
+                        </Link>
+                      )}
                       <Link to={`/agent/clients/${client.client_id}/preview`}>
                         <Button variant="outline" size="sm" className="rounded-lg gap-1.5" data-testid={`view-client-${client.client_id}`}>
                           <Eye className="w-4 h-4" />
@@ -444,7 +458,7 @@ export const AgentClients = () => {
                     } />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="general">General (No specific unit)</SelectItem>
+                    <SelectItem value="none">General (No specific unit)</SelectItem>
                     {projectUnits.map(unit => (
                       <SelectItem key={unit.unit_id} value={unit.unit_id}>
                         {unit.name || unit.unit_reference}
