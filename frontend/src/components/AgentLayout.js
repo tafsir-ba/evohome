@@ -6,7 +6,6 @@ import {
   Home, 
   Users, 
   FileText, 
-  Receipt, 
   LogOut,
   Menu,
   X,
@@ -22,13 +21,11 @@ import {
   ChevronUp,
   CheckSquare
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationCenter } from './NotificationCenter';
 import { LanguageToggle } from './LanguageToggle';
-
-const API = process.env.REACT_APP_BACKEND_URL;
 
 export const AgentLayout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -65,9 +62,19 @@ export const AgentLayout = ({ children }) => {
   );
 
   const isActive = (href) => location.pathname === href || location.pathname.startsWith(href + '/');
+  const activeItemLabel = useMemo(() => {
+    const inPrimary = navigation.find((item) => isActive(item.href));
+    if (inPrimary) return inPrimary.name;
+    const inMore = moreNavigation.find((item) => isActive(item.href));
+    return inMore?.name || t('nav.dashboard');
+  }, [location.pathname, navigation, moreNavigation, t]);
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-background transition-colors">
+    <div className="min-h-screen bg-background transition-colors overflow-x-hidden">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
@@ -78,7 +85,7 @@ export const AgentLayout = ({ children }) => {
       
       {/* Sidebar */}
       <aside className={cn(
-        "fixed left-0 top-0 h-screen w-64 bg-card border-r border-border z-50 transition-transform duration-300",
+        "fixed left-0 top-0 h-screen w-[86vw] max-w-72 lg:w-64 bg-card border-r border-border z-50 transition-transform duration-300",
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         <div className="flex flex-col h-full">
@@ -115,8 +122,9 @@ export const AgentLayout = ({ children }) => {
                 <Link
                   key={item.href}
                   to={item.href}
+                  onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+                    "flex items-center gap-3 px-3 py-3 lg:py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
                     active 
                       ? "bg-primary/10 text-primary shadow-sm" 
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -161,8 +169,9 @@ export const AgentLayout = ({ children }) => {
                       <Link
                         key={item.href}
                         to={item.href}
+                        onClick={() => setSidebarOpen(false)}
                         className={cn(
-                          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                          "flex items-center gap-3 px-3 py-2.5 lg:py-2 rounded-lg text-sm font-medium transition-all duration-200",
                           active 
                             ? "bg-primary/10 text-primary" 
                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -206,23 +215,27 @@ export const AgentLayout = ({ children }) => {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border h-16 flex items-center px-6">
+        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border h-16 flex items-center px-3 sm:px-4 lg:px-6">
           <button 
-            className="lg:hidden p-2 hover:bg-muted rounded-lg mr-4 transition-colors"
+            className="lg:hidden p-2 hover:bg-muted rounded-lg mr-2 transition-colors"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex-1" />
-          <div className="flex items-center gap-2">
-            <LanguageToggle />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate lg:hidden">{activeItemLabel}</p>
+          </div>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <div className="hidden sm:block">
+              <LanguageToggle />
+            </div>
             <NotificationCenter />
             <ThemeToggle />
           </div>
         </header>
         
         {/* Page content */}
-        <main className="p-6">
+        <main className="p-3 sm:p-4 lg:p-6">
           {children}
         </main>
       </div>

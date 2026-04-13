@@ -397,73 +397,75 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
             </div>
           </div>
           
-          {/* Recipients badge and Actions - only for agents */}
-          {isAgent && (
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {!isDraft && activity.recipients && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground mr-1">
-                  <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  <span>{activity.recipients.length}</span>
-                </div>
-              )}
-              
-              {/* Edit/Delete dropdown menu */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    data-testid={`activity-menu-${activity.activity_id}`}
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => onEdit && onEdit(activity)}
-                    className="cursor-pointer"
-                    data-testid={`edit-activity-${activity.activity_id}`}
-                  >
-                    <Edit2 className="w-4 h-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={handleDelete}
-                    className="cursor-pointer text-destructive focus:text-destructive"
-                    disabled={deleting}
-                    data-testid={`delete-activity-${activity.activity_id}`}
-                  >
-                    {deleting ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4 mr-2" />
-                    )}
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
-          
-          {/* Send button for drafts */}
-          {isDraft && isAgent && (
-            <Button
-              size="sm"
-              onClick={handleSendDraft}
-              disabled={sending}
-              className="bg-emerald-600 hover:bg-emerald-700"
-            >
-              {sending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <Send className="w-4 h-4 mr-1" />
-                  Send
-                </>
-              )}
-            </Button>
-          )}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Recipients badge and Actions - only for agents */}
+            {isAgent && (
+              <>
+                {!isDraft && activity.recipients && (
+                  <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground mr-1">
+                    <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                    <span>{activity.recipients.length}</span>
+                  </div>
+                )}
+                
+                {/* Edit/Delete dropdown menu */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      data-testid={`activity-menu-${activity.activity_id}`}
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => onEdit && onEdit(activity)}
+                      className="cursor-pointer"
+                      data-testid={`edit-activity-${activity.activity_id}`}
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleDelete}
+                      className="cursor-pointer text-destructive focus:text-destructive"
+                      disabled={deleting}
+                      data-testid={`delete-activity-${activity.activity_id}`}
+                    >
+                      {deleting ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4 mr-2" />
+                      )}
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+            
+            {/* Send button for drafts */}
+            {isDraft && isAgent && (
+              <Button
+                size="sm"
+                onClick={handleSendDraft}
+                disabled={sending}
+                className="bg-emerald-600 hover:bg-emerald-700 h-8 px-2.5 sm:px-3"
+              >
+                {sending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Send</span>
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       
@@ -579,7 +581,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
         )}
         
         {/* Actions */}
-        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
+        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between gap-2">
           <Button
             variant="ghost"
             size="sm"
@@ -598,9 +600,9 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
               </>
             )}
           </Button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             {activity.reply_count > 0 && !expanded && (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground truncate">
                 {activity.reply_count} repl{activity.reply_count === 1 ? 'y' : 'ies'}
               </span>
             )}
@@ -608,12 +610,12 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8"
+                className="h-8 px-2.5 sm:px-3"
                 onClick={() => setShowReplyInput(!showReplyInput)}
                 data-testid={`reply-btn-${activity.activity_id}`}
               >
                 <Reply className="w-4 h-4 mr-1" />
-                Reply
+                <span className="hidden xs:inline sm:inline">Reply</span>
               </Button>
             )}
           </div>
@@ -894,21 +896,24 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
   // Empty state
   if (activities.length === 0 && !loading) {
     return (
-      <div data-testid="feed-empty">
+      <div className="space-y-4" data-testid="feed-empty">
         {/* Header for agent view */}
         {isAgent && !embedded && (
-          <div className={cn('flex items-start justify-between', compact ? 'mb-4' : 'mb-6')}>
-            <div>
+          <div className={cn(
+            'flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3',
+            compact ? 'mb-2 sm:mb-4' : 'mb-4 sm:mb-6'
+          )}>
+            <div className="min-w-0">
               <h1 className={cn(
                 'font-outfit font-semibold text-foreground tracking-tight',
-                compact ? 'text-xl' : 'text-3xl'
+                compact ? 'text-xl' : 'text-2xl sm:text-3xl'
               )}>
                 {compact ? 'Client updates' : 'Activity Feed'}
               </h1>
               <p className="text-muted-foreground mt-1 text-sm">0 activities</p>
             </div>
             <Button 
-              className="rounded-lg"
+              className="rounded-lg w-full sm:w-auto"
               onClick={() => setShowCreateDialog(true)}
               data-testid="create-activity-btn"
             >
@@ -957,14 +962,17 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
   }
 
   return (
-    <div className="space-y-6" data-testid="feed-container">
+    <div className={cn('space-y-5 sm:space-y-6', compact && 'space-y-4')} data-testid="feed-container">
       {/* Header - only for non-embedded agent view */}
       {isAgent && !embedded && (
-        <div className={cn('flex items-start justify-between', compact && 'mb-1')}>
-          <div>
+        <div className={cn(
+          'flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3',
+          compact && 'mb-1'
+        )}>
+          <div className="min-w-0">
             <h1 className={cn(
               'font-outfit font-semibold text-foreground tracking-tight',
-              compact ? 'text-xl' : 'text-3xl'
+              compact ? 'text-xl' : 'text-2xl sm:text-3xl'
             )}>
               {compact ? 'Client updates' : 'Activity Feed'}
             </h1>
@@ -993,7 +1001,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
             </div>
           </div>
           <Button 
-            className="rounded-lg"
+            className="rounded-lg w-full sm:w-auto"
             onClick={() => setShowCreateDialog(true)}
             data-testid="create-activity-btn"
           >
@@ -1014,7 +1022,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
       )}
 
       {/* Activities List */}
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         {activities.map(activity => (
           <ActivityCard 
             key={activity.activity_id} 
@@ -1030,16 +1038,17 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
         
         {/* Pagination */}
         {total > limit && (
-          <div className="flex justify-center gap-2 pt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-2 pt-4">
             <Button
               variant="outline"
               size="sm"
               disabled={offset === 0}
               onClick={() => setOffset(Math.max(0, offset - limit))}
+              className="w-full sm:w-auto"
             >
               Previous
             </Button>
-            <span className="text-sm text-muted-foreground py-2">
+            <span className="text-sm text-muted-foreground py-1 text-center">
               {offset + 1} - {Math.min(offset + limit, total)} of {total}
             </span>
             <Button
@@ -1047,6 +1056,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
               size="sm"
               disabled={offset + limit >= total}
               onClick={() => setOffset(offset + limit)}
+              className="w-full sm:w-auto"
             >
               Next
             </Button>
@@ -1088,7 +1098,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setEditingActivity(null)}>
               Cancel
             </Button>
@@ -1116,7 +1126,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
               </p>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setDeleteConfirm({ open: false, activity: null })}>
               Cancel
             </Button>

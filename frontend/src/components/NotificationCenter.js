@@ -172,7 +172,7 @@ export const NotificationCenter = () => {
           <span className="sr-only">Notifications</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80 max-h-[70vh] overflow-hidden flex flex-col">
+      <DropdownMenuContent align="end" className="w-[calc(100vw-1rem)] max-w-80 max-h-[70vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="font-semibold text-sm">Notifications</span>

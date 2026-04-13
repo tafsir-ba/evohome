@@ -34,7 +34,7 @@ export const AgentHomePage = () => {
 
   return (
     <AgentLayout>
-      <div className="space-y-8 pb-10" data-testid="agent-home-page">
+      <div className="space-y-6 sm:space-y-8 pb-8 sm:pb-10" data-testid="agent-home-page">
         <ControlTower projectCount={projects.length} onRefresh={handleRefresh} />
 
         <section className="space-y-4" aria-labelledby="client-updates-heading">
@@ -47,12 +47,12 @@ export const AgentHomePage = () => {
                 Post updates, photos, PDFs, and status notes. Buyers see these in their timeline.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => navigate('/agent/feed')} className="shrink-0">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:justify-end">
+              <Button variant="outline" size="sm" onClick={() => navigate('/agent/feed')} className="w-full sm:w-auto shrink-0">
                 <LayoutList className="w-4 h-4 mr-2" />
                 Full feed &amp; filters
               </Button>
-              <Button variant="outline" size="sm" onClick={() => navigate('/agent/documents')} className="shrink-0">
+              <Button variant="outline" size="sm" onClick={() => navigate('/agent/documents')} className="w-full sm:w-auto shrink-0">
                 Documents
               </Button>
             </div>
