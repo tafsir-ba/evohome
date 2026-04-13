@@ -133,14 +133,34 @@ export const ControlTower = ({
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-2">Overview</p>
       {/* KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" data-testid="kpi-strip">
-        <KpiItem icon={Users} value={stats.total_clients || 0} label="Total Clients" />
-        <KpiItem icon={Building2} value={projectCount} label="Active Projects" />
+        <KpiItem
+          icon={Users}
+          value={stats.total_clients || 0}
+          label="Total Clients"
+          onClick={() => navigate('/agent/clients')}
+          testId="kpi-total-clients"
+        />
+        <KpiItem
+          icon={Building2}
+          value={projectCount}
+          label="Active Projects"
+          onClick={() => navigate('/agent/projects')}
+          testId="kpi-active-projects"
+        />
         <KpiItem
           icon={DollarSign}
           value={new Intl.NumberFormat('de-CH', { notation: 'compact', maximumFractionDigits: 1 }).format(stats.total_revenue || 0)}
           label="Revenue (CHF)"
+          onClick={() => navigate('/agent/analytics')}
+          testId="kpi-revenue"
         />
-        <KpiItem icon={BarChart3} value={stats.approved_quotes?.length || 0} label="Approved Quotes" />
+        <KpiItem
+          icon={BarChart3}
+          value={stats.approved_quotes?.length || 0}
+          label="Approved Quotes"
+          onClick={() => navigate('/agent/documents')}
+          testId="kpi-approved-quotes"
+        />
       </div>
     </>
   );
@@ -162,6 +182,14 @@ const ActionCard = ({ count, label, icon: Icon, activeColor, onClick, testId }) 
         isActive && colors.border
       )}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      role="button"
+      tabIndex={0}
       data-testid={testId}
     >
       <CardContent className="py-4 px-4 sm:px-5">
@@ -182,12 +210,29 @@ const ActionCard = ({ count, label, icon: Icon, activeColor, onClick, testId }) 
   );
 };
 
-const KpiItem = ({ icon: Icon, value, label }) => (
-  <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card min-w-0">
-    <Icon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-    <div className="min-w-0">
-      <p className="text-lg font-semibold font-outfit truncate">{value}</p>
-      <p className="text-[11px] text-muted-foreground truncate">{label}</p>
-    </div>
-  </div>
+const KpiItem = ({ icon: Icon, value, label, onClick, testId }) => (
+  <Card
+    className="border-border cursor-pointer transition-all hover:shadow-md group"
+    onClick={onClick}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onClick?.();
+      }
+    }}
+    role="button"
+    tabIndex={0}
+    data-testid={testId}
+  >
+    <CardContent className="flex items-center justify-between gap-2 p-3 min-w-0">
+      <div className="flex items-center gap-3 min-w-0">
+        <Icon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        <div className="min-w-0">
+          <p className="text-lg font-semibold font-outfit truncate">{value}</p>
+          <p className="text-[11px] text-muted-foreground truncate">{label}</p>
+        </div>
+      </div>
+      <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+    </CardContent>
+  </Card>
 );
