@@ -803,7 +803,7 @@ export const AgentTimeline = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="col-span-2">
                 <Label htmlFor="name">Stage Name *</Label>
                 <Input
@@ -1054,7 +1054,7 @@ export const AgentTimeline = () => {
                           placeholder="Step title"
                           className="font-medium"
                         />
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <Input
                             value={stage.date_text || ''}
                             onChange={(e) => handleEditExtractedStage(index, 'date_text', e.target.value)}

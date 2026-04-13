@@ -921,7 +921,7 @@ export const AgentSettings = () => {
                       placeholder="Rue du Rhône 1"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="space-y-2">
                       <Label htmlFor="billing_postal_code">Postal Code</Label>
                       <Input

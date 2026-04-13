@@ -367,7 +367,7 @@ export const AgentVault = () => {
             <h1 className="text-2xl font-outfit font-semibold">Document Vault</h1>
             <p className="text-muted-foreground">Store and organize critical project documents</p>
           </div>
-          <Button onClick={() => setUploadModalOpen(true)} data-testid="upload-vault-doc-btn">
+          <Button onClick={() => setUploadModalOpen(true)} className="w-full sm:w-auto" data-testid="upload-vault-doc-btn">
             <Upload className="w-4 h-4 mr-2" />Upload Document
           </Button>
         </div>
@@ -380,7 +380,7 @@ export const AgentVault = () => {
                 <Input placeholder="Search documents..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" data-testid="vault-search-input" />
               </div>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-[180px]" data-testid="vault-category-filter">
+                <SelectTrigger className="w-full sm:w-[180px]" data-testid="vault-category-filter">
                   <Filter className="w-4 h-4 mr-2" /><SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
@@ -447,7 +447,7 @@ export const AgentVault = () => {
                   <Label htmlFor="doc-title">Document Name *</Label>
                   <Input id="doc-title" value={uploadForm.title} onChange={(e) => setUploadForm(prev => ({ ...prev, title: e.target.value }))} placeholder="e.g., Construction Contract" data-testid="vault-doc-name-input" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Category</Label>
                     <Select value={uploadForm.category} onValueChange={(v) => setUploadForm(prev => ({ ...prev, category: v }))}>
@@ -470,7 +470,7 @@ export const AgentVault = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Document Type</Label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Button type="button" variant={uploadForm.doc_type === 'general' ? 'default' : 'outline'} size="sm" onClick={() => setUploadForm(prev => ({ ...prev, doc_type: 'general' }))} className="flex-1">General</Button>
                     <Button type="button" variant={uploadForm.doc_type === 'action_required' ? 'default' : 'outline'} size="sm" onClick={() => setUploadForm(prev => ({ ...prev, doc_type: 'action_required' }))} className="flex-1 text-amber-600 border-amber-300">Action Required</Button>
                   </div>
@@ -502,9 +502,9 @@ export const AgentVault = () => {
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setUploadModalOpen(false); resetUploadForm(); }} disabled={uploading}>Cancel</Button>
-            <Button onClick={handleUpload} disabled={!uploadFile || !uploadForm.title || uploading} data-testid="vault-upload-submit">
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => { setUploadModalOpen(false); resetUploadForm(); }} disabled={uploading}>Cancel</Button>
+            <Button className="w-full sm:w-auto" onClick={handleUpload} disabled={!uploadFile || !uploadForm.title || uploading} data-testid="vault-upload-submit">
               {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
               {uploading ? 'Uploading...' : 'Upload'}
             </Button>
@@ -521,7 +521,7 @@ export const AgentVault = () => {
               <Label>Document Name</Label>
               <Input value={editForm.title || ''} onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))} data-testid="vault-edit-name-input" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Category</Label>
                 <Select value={editForm.category} onValueChange={(v) => setEditForm(prev => ({ ...prev, category: v }))}>
@@ -558,9 +558,9 @@ export const AgentVault = () => {
               }}
             />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDoc(null)}>Cancel</Button>
-            <Button onClick={handleEditSave} disabled={savingEdit} data-testid="vault-edit-save">
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setEditDoc(null)}>Cancel</Button>
+            <Button className="w-full sm:w-auto" onClick={handleEditSave} disabled={savingEdit} data-testid="vault-edit-save">
               {savingEdit ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}Save Changes
             </Button>
           </DialogFooter>
@@ -575,9 +575,9 @@ export const AgentVault = () => {
             <p className="text-muted-foreground">Are you sure you want to delete <span className="font-medium text-foreground">"{deleteDoc?.title}"</span>?</p>
             <p className="text-sm text-destructive mt-2">This action cannot be undone.</p>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDoc(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={confirmDelete}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDeleteDoc(null)}>Cancel</Button>
+            <Button variant="destructive" className="w-full sm:w-auto" onClick={confirmDelete}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -595,7 +595,7 @@ export const AgentVault = () => {
 const AccessLevelPicker = ({ accessLevel, clientIds, clients, projectId, onAccessLevelChange, onClientIdsChange, onSelectAll }) => (
   <div className="space-y-2">
     <Label>Access Level</Label>
-    <div className="flex gap-2">
+    <div className="flex flex-col sm:flex-row gap-2">
       <Button type="button" variant={accessLevel === 'private' ? 'default' : 'outline'} size="sm" onClick={() => onAccessLevelChange('private')} className="flex-1" data-testid="vault-access-private">
         <Lock className="w-4 h-4 mr-2" />Private
       </Button>
@@ -606,9 +606,9 @@ const AccessLevelPicker = ({ accessLevel, clientIds, clients, projectId, onAcces
     <p className="text-xs text-muted-foreground">{accessLevel === 'private' ? 'Only you can see this document' : 'Select which buyers can view this document'}</p>
     {accessLevel === 'shared' && (
       <div className="mt-3 space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <Label className="text-sm font-medium">Select Buyers</Label>
-          <Button type="button" variant="ghost" size="sm" onClick={onSelectAll} className="text-xs h-7">Select all{projectId !== 'none' ? ' in project' : ''}</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={onSelectAll} className="text-xs h-7 shrink-0">Select all{projectId !== 'none' ? ' in project' : ''}</Button>
         </div>
         <div className="max-h-40 overflow-y-auto border border-border rounded-lg p-2 space-y-1">
           {clients.length === 0 ? (
@@ -671,7 +671,7 @@ const DocumentGrid = ({ documents, onPreview, onEdit, onDelete, onDownload, getP
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-1 mt-3 pt-3 border-t border-border">
+          <div className="flex flex-wrap items-center gap-1 mt-3 pt-3 border-t border-border">
             <Button variant="ghost" size="sm" onClick={() => onPreview(doc)} className="flex-1" data-testid={`vault-preview-${doc.vault_document_id}`}><Eye className="w-4 h-4 mr-1" />View</Button>
             <Button variant="ghost" size="sm" onClick={() => onDownload(doc)} className="flex-1"><Download className="w-4 h-4 mr-1" />Download</Button>
             <Button variant="ghost" size="icon" onClick={() => onEdit(doc)} className="h-8 w-8"><Pencil className="w-4 h-4" /></Button>

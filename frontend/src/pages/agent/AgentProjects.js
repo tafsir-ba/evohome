@@ -502,7 +502,7 @@ export const AgentProjects = () => {
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="total_units">Total Units</Label>
                 <Input
@@ -562,7 +562,7 @@ export const AgentProjects = () => {
           
           <div className="py-4">
             {/* Add new unit */}
-            <div className="flex gap-2 mb-4">
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
               <Input
                 value={newUnit}
                 onChange={(e) => setNewUnit(e.target.value)}
