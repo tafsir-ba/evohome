@@ -41,7 +41,7 @@ def api_client():
 def agent_session(api_client):
     """Get demo agent session with token"""
     # Create demo agent session
-    response = api_client.post(f"{BASE_URL}/api/auth/demo/agent")
+    response = api_client.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
     assert response.status_code == 200, f"Failed to create demo session: {response.text}"
     
     data = response.json()

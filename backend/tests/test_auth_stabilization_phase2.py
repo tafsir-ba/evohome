@@ -97,7 +97,7 @@ class TestDemoLogin:
     
     def test_demo_agent_login_returns_token(self):
         """POST /api/auth/demo/agent should return valid token"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         
         if response.status_code == 404:
             pytest.skip("Demo data not seeded - run /api/demo/seed first")
@@ -109,7 +109,6 @@ class TestDemoLogin:
         assert "user_id" in data, "Response should contain user_id"
         assert "role" in data, "Response should contain role"
         assert data["role"] == "agent", "Role should be agent"
-        assert data.get("is_demo") == True, "is_demo should be True for demo login"
         
         # Verify token works
         session_response = requests.get(
@@ -120,7 +119,10 @@ class TestDemoLogin:
         
     def test_demo_buyer_login_returns_token(self):
         """POST /api/auth/demo/buyer should return valid token"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/buyer")
+        response = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+        )
         
         if response.status_code == 404:
             pytest.skip("Demo data not seeded - run /api/demo/seed first")
@@ -132,7 +134,6 @@ class TestDemoLogin:
         assert "user_id" in data, "Response should contain user_id"
         assert "role" in data, "Response should contain role"
         assert data["role"] == "buyer", "Role should be buyer"
-        assert data.get("is_demo") == True, "is_demo should be True for demo login"
         
         # Verify token works
         session_response = requests.get(
@@ -179,7 +180,10 @@ class TestBuyerVaultAccess:
     def test_buyer_can_fetch_vault_list(self):
         """Buyer should be able to fetch /api/vault/buyer"""
         # Login as demo buyer
-        login_response = requests.post(f"{BASE_URL}/api/auth/demo/buyer")
+        login_response = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+        )
         
         if login_response.status_code == 404:
             pytest.skip("Demo data not seeded")

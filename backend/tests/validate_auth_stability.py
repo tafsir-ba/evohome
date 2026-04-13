@@ -42,7 +42,7 @@ class ValidationSuite:
                 raise Exception(f"Agent login failed: {r.text}")
             
             # Buyer 1 login (Sophie)
-            r = await client.post(f"{API_URL}/auth/demo/buyer?buyer_num=1")
+            r = await client.post(f"{API_URL}/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
             if r.status_code == 200:
                 data = r.json()
                 self.buyer1_token = data.get('token')
@@ -51,7 +51,7 @@ class ValidationSuite:
                 raise Exception(f"Buyer 1 login failed: {r.text}")
             
             # Buyer 2 login (Thomas)
-            r = await client.post(f"{API_URL}/auth/demo/buyer?buyer_num=2")
+            r = await client.post(f"{API_URL}/demo/enter", json={"persona": "buyer", "buyer_slot": 2, "fresh": False})
             if r.status_code == 200:
                 data = r.json()
                 self.buyer2_token = data.get('token')
@@ -728,7 +728,7 @@ class ValidationSuite:
             
             agent_docs = r3.json()
             
-            r4 = await client.post(f"{API_URL}/auth/demo/buyer?buyer_num=1")
+            r4 = await client.post(f"{API_URL}/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
             buyer_token = r4.json().get('token')
             
             r5 = await client.get(f"{API_URL}/documents",
@@ -760,7 +760,7 @@ class ValidationSuite:
             
             agent_notifications = r2.json()
             
-            r3 = await client.post(f"{API_URL}/auth/demo/buyer?buyer_num=1")
+            r3 = await client.post(f"{API_URL}/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
             buyer_token = r3.json().get('token')
             
             r4 = await client.get(f"{API_URL}/notifications",
@@ -793,7 +793,7 @@ class ValidationSuite:
             
             project_id = agent_projects[0]['project_id']
             
-            r3 = await client.post(f"{API_URL}/auth/demo/buyer?buyer_num=1")
+            r3 = await client.post(f"{API_URL}/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
             buyer_token = r3.json().get('token')
             
             r4 = await client.get(f"{API_URL}/projects",
@@ -876,7 +876,7 @@ class ValidationSuite:
             vault_docs = r2.json()
             shared_docs = [d for d in vault_docs if d.get('access_level') == 'shared']
             
-            r3 = await client.post(f"{API_URL}/auth/demo/buyer?buyer_num=1")
+            r3 = await client.post(f"{API_URL}/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
             buyer_token = r3.json().get('token')
             
             r4 = await client.get(f"{API_URL}/vault/buyer",

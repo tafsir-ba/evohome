@@ -35,8 +35,8 @@ class TestVaultRouteOrdering:
     def get_demo_buyer_session(self, buyer_num=1):
         """Login as demo buyer"""
         response = self.session.post(
-            f"{BASE_URL}/api/auth/demo/buyer",
-            params={"buyer_num": buyer_num}
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": buyer_num, "fresh": False}
         )
         if response.status_code == 200:
             token = response.json().get("token")
@@ -46,7 +46,7 @@ class TestVaultRouteOrdering:
     
     def get_demo_agent_session(self):
         """Login as demo agent"""
-        response = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         if response.status_code == 200:
             token = response.json().get("token")
             self.session.headers.update({"Authorization": f"Bearer {token}"})
@@ -151,8 +151,8 @@ class TestBuyerVaultDocumentFields:
     def get_demo_buyer_session(self, buyer_num=1):
         """Login as demo buyer"""
         response = self.session.post(
-            f"{BASE_URL}/api/auth/demo/buyer",
-            params={"buyer_num": buyer_num}
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": buyer_num, "fresh": False}
         )
         if response.status_code == 200:
             token = response.json().get("token")
@@ -225,7 +225,7 @@ class TestAgentVaultUploadAndSharing:
     
     def get_demo_agent_session(self):
         """Login as demo agent"""
-        response = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         if response.status_code == 200:
             token = response.json().get("token")
             self.session.headers.update({"Authorization": f"Bearer {token}"})
@@ -272,8 +272,8 @@ class TestBuyerVaultDownload:
     def get_demo_buyer_session(self, buyer_num=1):
         """Login as demo buyer"""
         response = self.session.post(
-            f"{BASE_URL}/api/auth/demo/buyer",
-            params={"buyer_num": buyer_num}
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": buyer_num, "fresh": False}
         )
         if response.status_code == 200:
             token = response.json().get("token")
@@ -348,8 +348,8 @@ class TestSpecificBugScenario:
     def get_demo_buyer_session(self, buyer_num=1):
         """Login as demo buyer"""
         response = self.session.post(
-            f"{BASE_URL}/api/auth/demo/buyer",
-            params={"buyer_num": buyer_num}
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": buyer_num, "fresh": False}
         )
         if response.status_code == 200:
             token = response.json().get("token")

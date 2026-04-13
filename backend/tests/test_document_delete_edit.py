@@ -21,7 +21,7 @@ class TestDocumentDeleteEndpoint:
     def setup(self):
         """Login as demo agent and get auth token"""
         # Login as demo agent
-        response = requests.post(f"{API_URL}/auth/demo/agent")
+        response = requests.post(f"{API_URL}/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200, f"Demo login failed: {response.text}"
         self.token = response.json().get('token')
         self.headers = {
@@ -99,7 +99,7 @@ class TestDocumentEditEndpoint:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Login as demo agent"""
-        response = requests.post(f"{API_URL}/auth/demo/agent")
+        response = requests.post(f"{API_URL}/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         self.token = response.json().get('token')
         self.headers = {
@@ -281,7 +281,7 @@ class TestBillingSyncEndpoint:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Login as demo agent"""
-        response = requests.post(f"{API_URL}/auth/demo/agent")
+        response = requests.post(f"{API_URL}/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         self.token = response.json().get('token')
         self.headers = {
@@ -332,7 +332,7 @@ class TestBillingVerifySession:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Login as demo agent"""
-        response = requests.post(f"{API_URL}/auth/demo/agent")
+        response = requests.post(f"{API_URL}/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         self.token = response.json().get('token')
         self.headers = {
@@ -388,7 +388,7 @@ class TestDeleteButtonVisibilityLogic:
     
     @pytest.fixture(autouse=True)
     def setup(self):
-        response = requests.post(f"{API_URL}/auth/demo/agent")
+        response = requests.post(f"{API_URL}/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         self.token = response.json().get('token')
         self.headers = {

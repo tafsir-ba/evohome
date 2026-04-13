@@ -22,7 +22,7 @@ class TestTeamInvitations:
     def setup(self):
         """Get auth token before each test"""
         # Login as demo agent
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Demo login failed: {res.text}"
         data = res.json()
         self.token = data.get('token')

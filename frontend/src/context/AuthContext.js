@@ -166,27 +166,39 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  const demoLogin = async (role, buyerNum = 1) => {
-    const n = Number(buyerNum);
-    const safeBuyerNum =
-      role === 'buyer' && Number.isFinite(n) && n >= 1 && n <= 4 ? Math.floor(n) : 1;
-    const url =
-      role === 'buyer'
-        ? `${API}/auth/demo/${role}?buyer_num=${safeBuyerNum}`
-        : `${API}/auth/demo/${role}`;
-    
-    const response = await fetch(url, {
+  /**
+   * Enter the demo app. When fresh is true, the backend purges and re-seeds all demo_* data,
+   * then issues a normal session (same cookie shape as email login).
+   */
+  const enterDemo = async ({ persona, buyerSlot = 1, fresh = true }) => {
+    const response = await fetch(`${API}/demo/enter`, {
       method: 'POST',
-      credentials: 'include'
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        persona,
+        buyer_slot: buyerSlot,
+        fresh,
+      }),
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Demo login failed');
+      let detail = 'Demo login failed';
+      try {
+        const err = await response.json();
+        const d = err.detail;
+        if (Array.isArray(d)) {
+          detail = d.map((e) => (typeof e === 'object' && e.msg) ? e.msg : JSON.stringify(e)).join('; ') || detail;
+        } else if (typeof d === 'string') {
+          detail = d;
+        }
+      } catch {
+        /* ignore */
+      }
+      throw new Error(detail);
     }
 
     const data = await response.json();
-    // Store token for WebSocket auth
     if (data.token) {
       localStorage.setItem('auth_token', data.token);
     }
@@ -224,7 +236,7 @@ export const AuthProvider = ({ children }) => {
     register,
     loginWithGoogle,
     exchangeSession,
-    demoLogin,
+    enterDemo,
     logout,
     checkAuth,
     setAuthUser

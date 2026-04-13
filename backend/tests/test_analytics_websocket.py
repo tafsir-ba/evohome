@@ -13,7 +13,7 @@ class TestDemoAgentLogin:
     
     def test_demo_agent_login_returns_token(self):
         """POST /api/auth/demo/agent returns valid token"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         
         data = response.json()
@@ -31,7 +31,7 @@ class TestAnalyticsEndpoint:
     @pytest.fixture
     def auth_token(self):
         """Get authentication token for demo agent"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         return response.json()["token"]
     
@@ -172,7 +172,7 @@ class TestWebSocketEndpoint:
     
     def test_websocket_user_exists_in_db(self):
         """Verify demo agent user exists for WebSocket connection"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         
         data = response.json()
@@ -204,7 +204,7 @@ class TestAgentSidebar:
     @pytest.fixture
     def auth_token(self):
         """Get authentication token for demo agent"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         return response.json()["token"]
     

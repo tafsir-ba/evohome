@@ -16,14 +16,14 @@ BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 @pytest.fixture(scope="module")
 def agent_token():
     """Get demo agent token (Pro plan)"""
-    resp = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+    resp = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
     assert resp.status_code == 200, f"Failed to get agent token: {resp.text}"
     return resp.json()['token']
 
 @pytest.fixture(scope="module")
 def buyer_token():
     """Get demo buyer token"""
-    resp = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+    resp = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
     assert resp.status_code == 200, f"Failed to get buyer token: {resp.text}"
     return resp.json()['token']
 

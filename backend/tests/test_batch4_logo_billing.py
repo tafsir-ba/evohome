@@ -27,23 +27,21 @@ class TestHealthAndAuth:
     
     def test_demo_agent_login(self):
         """Test demo agent login"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         data = res.json()
         assert 'token' in data
         assert data.get('role') == 'agent'
-        assert data.get('is_demo') == True
         print(f"✓ Demo agent login successful: {data.get('name')}")
         return data.get('token')
     
     def test_demo_buyer_login(self):
         """Test demo buyer login (Sophie)"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200
         data = res.json()
         assert 'token' in data
         assert data.get('role') == 'buyer'
-        assert data.get('is_demo') == True
         print(f"✓ Demo buyer login successful: {data.get('name')}")
         return data.get('token')
 
@@ -54,10 +52,10 @@ class TestLogoAndBranding:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get tokens for testing"""
-        agent_res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        agent_res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         self.agent_token = agent_res.json().get('token')
         
-        buyer_res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        buyer_res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         self.buyer_token = buyer_res.json().get('token')
     
     def test_agent_settings_contains_logo_url(self):
@@ -146,7 +144,7 @@ class TestBillingAndSubscription:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get token for testing"""
-        agent_res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        agent_res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         self.agent_token = agent_res.json().get('token')
     
     def test_billing_status_returns_unit_usage(self):
@@ -224,7 +222,7 @@ class TestProjectUnits:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get token and first project for testing"""
-        agent_res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        agent_res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         self.agent_token = agent_res.json().get('token')
         
         # Get first project
@@ -259,10 +257,10 @@ class TestDocuments:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get tokens"""
-        agent_res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        agent_res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         self.agent_token = agent_res.json().get('token')
         
-        buyer_res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        buyer_res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         self.buyer_token = buyer_res.json().get('token')
     
     def test_agent_documents_list(self):

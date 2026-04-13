@@ -17,7 +17,7 @@ class TestBillingPlans:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token for tests"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}"}
@@ -92,7 +92,7 @@ class TestBillingStatus:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token for tests"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}"}
@@ -136,7 +136,7 @@ class TestCheckoutSessionCreation:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token for tests"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
@@ -219,7 +219,7 @@ class TestPropertyGating:
     def test_demo_user_bypasses_property_limit(self):
         """Demo users should NOT be blocked by property limits"""
         # Get demo agent
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         token = res.json()['token']
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}

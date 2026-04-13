@@ -17,7 +17,7 @@ class TestDocumentEndpoints:
         """Setup test session with demo agent authentication"""
         self.session = requests.Session()
         # Login as demo agent
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Agent login failed: {res.text}"
         self.agent_token = res.json().get('token')
         self.session.headers.update({'Authorization': f'Bearer {self.agent_token}'})
@@ -82,7 +82,7 @@ class TestDocumentUpdate:
     def setup(self):
         """Setup test session with demo agent authentication"""
         self.session = requests.Session()
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Agent login failed: {res.text}"
         self.agent_token = res.json().get('token')
         self.session.headers.update({'Authorization': f'Bearer {self.agent_token}'})
@@ -129,7 +129,7 @@ class TestHeroImageEndpoints:
     def setup(self):
         """Setup test session"""
         self.session = requests.Session()
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Agent login failed: {res.text}"
         self.agent_token = res.json().get('token')
         self.session.headers.update({'Authorization': f'Bearer {self.agent_token}'})
@@ -199,7 +199,7 @@ class TestQRCodeEndpoint:
         """Setup test session with demo buyer authentication"""
         self.session = requests.Session()
         # Login as demo buyer
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200, f"Buyer login failed: {res.text}"
         self.buyer_token = res.json().get('token')
         self.session.headers.update({'Authorization': f'Bearer {self.buyer_token}'})
@@ -267,7 +267,7 @@ class TestTimelineEndpoint:
     def setup(self):
         """Setup test session with demo buyer authentication"""
         self.session = requests.Session()
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200, f"Buyer login failed: {res.text}"
         self.buyer_token = res.json().get('token')
         self.session.headers.update({'Authorization': f'Bearer {self.buyer_token}'})
@@ -322,25 +322,23 @@ class TestAuthenticationFlows:
     def test_demo_agent_login(self):
         """Test demo agent login"""
         session = requests.Session()
-        res = session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         data = res.json()
         assert 'user_id' in data
         assert 'token' in data
         assert data.get('role') == 'agent'
-        assert data.get('is_demo') == True
         print(f"Demo agent login successful: {data.get('name')}")
         
     def test_demo_buyer_login(self):
         """Test demo buyer login"""
         session = requests.Session()
-        res = session.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200
         data = res.json()
         assert 'user_id' in data
         assert 'token' in data
         assert data.get('role') == 'buyer'
-        assert data.get('is_demo') == True
         print(f"Demo buyer login successful: {data.get('name')}")
 
 

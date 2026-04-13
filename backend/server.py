@@ -35,9 +35,9 @@ init_access_control(db)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
 logger = logging.getLogger(__name__)
 
-# Upload directory
-UPLOAD_DIR = Path("/app/backend/uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+# Upload directory (repo-local so dev/pytest works without /app in Docker-only layouts)
+UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # App version (git SHA if available, else static)
 APP_VERSION = "3.1.0"

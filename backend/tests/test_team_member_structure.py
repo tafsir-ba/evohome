@@ -19,7 +19,7 @@ class TestTeamMemberStructure:
         self.session.headers.update({"Content-Type": "application/json"})
         
         # Login as demo agent
-        login_res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        login_res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert login_res.status_code == 200, f"Demo login failed: {login_res.text}"
         self.agent_data = login_res.json()
         self.token = self.agent_data.get('token')
@@ -263,7 +263,7 @@ class TestTeamMemberEmailLinks:
         self.session.headers.update({"Content-Type": "application/json"})
         
         # Login as demo agent
-        login_res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        login_res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert login_res.status_code == 200
         self.token = login_res.json().get('token')
         if self.token:

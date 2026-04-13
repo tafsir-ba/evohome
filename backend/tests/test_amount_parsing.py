@@ -20,7 +20,7 @@ class TestAmountParsing:
         """Setup: Login as demo agent and get session"""
         self.session = requests.Session()
         # Login as demo agent
-        login_res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        login_res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert login_res.status_code == 200, f"Failed to login: {login_res.text}"
         self.user_data = login_res.json()
         print(f"Logged in as: {self.user_data.get('name')}")

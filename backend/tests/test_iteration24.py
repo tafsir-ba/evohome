@@ -35,7 +35,7 @@ def agent_token(api_client):
         data = response.json()
         return data.get("token")
     # Try demo login if direct login fails
-    response = api_client.post(f"{BASE_URL}/api/auth/demo/agent")
+    response = api_client.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
     if response.status_code == 200:
         return response.json().get("token")
     pytest.skip("Authentication failed - skipping authenticated tests")

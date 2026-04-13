@@ -22,7 +22,7 @@ class TestFoundationFeatures:
         """Setup - login as demo agent"""
         # Login as demo agent
         self.session = requests.Session()
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Demo login failed: {res.text}"
         self.agent_data = res.json()
         self.token = self.agent_data.get('token')
@@ -423,7 +423,7 @@ class TestClientUnitValidation:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.session = requests.Session()
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.agent_data = res.json()
         self.token = self.agent_data.get('token')
@@ -483,7 +483,7 @@ class TestEmailNotificationTemplates:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.session = requests.Session()
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.agent_data = res.json()
         self.token = self.agent_data.get('token')

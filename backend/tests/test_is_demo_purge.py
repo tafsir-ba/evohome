@@ -152,7 +152,7 @@ class TestDemoLoginEndpoints:
     
     def test_demo_agent_login(self):
         """POST /api/auth/demo/agent returns user data without is_demo"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200, f"Demo agent login failed: {response.text}"
         
         data = response.json()
@@ -172,7 +172,7 @@ class TestDemoLoginEndpoints:
     
     def test_demo_buyer_login_buyer1(self):
         """POST /api/auth/demo/buyer?buyer_num=1 works"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert response.status_code == 200, f"Demo buyer 1 login failed: {response.text}"
         
         data = response.json()
@@ -186,7 +186,7 @@ class TestDemoLoginEndpoints:
     
     def test_demo_buyer_login_buyer2(self):
         """POST /api/auth/demo/buyer?buyer_num=2 works"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=2")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 2, "fresh": False})
         assert response.status_code == 200, f"Demo buyer 2 login failed: {response.text}"
         
         data = response.json()
@@ -495,17 +495,17 @@ class TestDemoIdNamespaceConvention:
     def test_demo_user_ids_use_prefix(self, demo_token):
         """Demo users use demo_* ID prefix"""
         # Demo agent
-        agent_resp = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        agent_resp = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert agent_resp.status_code == 200
         agent_data = agent_resp.json()
         assert agent_data["user_id"].startswith("demo_"), f"Demo agent should have demo_ prefix: {agent_data['user_id']}"
         
         # Demo buyers
-        buyer1_resp = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        buyer1_resp = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert buyer1_resp.status_code == 200
         assert buyer1_resp.json()["user_id"] == "demo_buyer_001"
         
-        buyer2_resp = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=2")
+        buyer2_resp = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 2, "fresh": False})
         assert buyer2_resp.status_code == 200
         assert buyer2_resp.json()["user_id"] == "demo_buyer_002"
         

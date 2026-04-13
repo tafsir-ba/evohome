@@ -7,7 +7,7 @@ import bcrypt
 import jwt
 import httpx
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, HTTPException, Depends, Request, Response, Query
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import logging
@@ -381,29 +381,6 @@ async def reset_password(request: ResetPasswordRequest):
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"password_hash": password_hash}, "$unset": {"password_reset_token": "", "password_reset_expires": ""}})
     logger.info(f"Password reset successful for user: {user['user_id']}")
     return {"message": "Password reset successful. You can now log in with your new password."}
-
-
-@router.post("/auth/demo/{role}")
-async def demo_login(
-    role: str,
-    response: Response,
-    buyer_num: int = Query(1, ge=1, le=4, description="Demo buyer slot (Sophie=1, Thomas=2, …)"),
-):
-    """Demo login — finds demo users by user_id prefix convention (demo_*)."""
-    if role not in ['buyer', 'agent']:
-        raise HTTPException(status_code=400, detail="Invalid role")
-    if role == 'buyer':
-        buyer_id = f"demo_buyer_00{buyer_num}" if buyer_num in [1, 2, 3, 4] else "demo_buyer_001"
-        demo_user = await db.users.find_one({"user_id": buyer_id, "role": "buyer"}, {"_id": 0, "password_hash": 0})
-    else:
-        demo_user = await db.users.find_one({"user_id": "demo_agent_001", "role": role}, {"_id": 0, "password_hash": 0})
-        if not demo_user:
-            demo_user = await db.users.find_one({"user_id": {"$regex": "^demo_"}, "role": role}, {"_id": 0, "password_hash": 0})
-    if not demo_user:
-        raise HTTPException(status_code=404, detail="Demo not initialized. Please seed demo data first.")
-    token = create_access_token(demo_user['user_id'], role)
-    _set_session_cookie(response, token)
-    return {"user_id": demo_user['user_id'], "email": demo_user['email'], "name": demo_user['name'], "role": role, "token": token}
 
 
 @router.post("/auth/refresh")

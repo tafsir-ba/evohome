@@ -43,7 +43,7 @@ class TestAuthAndDocumentsEndpoint:
     @pytest.fixture(scope="class")
     def buyer_token(self):
         """Get buyer (Sophie) token via demo login"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200
         return res.json()["token"]
     
@@ -108,7 +108,7 @@ class TestBuyerTimeline:
     @pytest.fixture(scope="class")
     def buyer_token(self):
         """Get buyer token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200
         return res.json()["token"]
     
@@ -172,7 +172,7 @@ class TestQuoteApprovalFlow:
     @pytest.fixture(scope="class")
     def buyer_token(self):
         """Get buyer token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200
         return res.json()["token"]
     
@@ -337,7 +337,7 @@ class TestPaymentConfirmation:
     @pytest.fixture(scope="class")
     def buyer_token(self):
         """Get buyer token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200
         return res.json()["token"]
     
@@ -387,7 +387,7 @@ class TestStateMachineEnforcement:
     @pytest.fixture(scope="class")
     def buyer_token(self):
         """Get buyer token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200
         return res.json()["token"]
     
@@ -501,7 +501,7 @@ class TestDocumentHistory:
     @pytest.fixture(scope="class")
     def buyer_token(self):
         """Get buyer token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200
         return res.json()["token"]
     
@@ -530,7 +530,7 @@ class TestQuoteChangeRequest:
     @pytest.fixture(scope="class")
     def buyer_token(self):
         """Get buyer 2 token (Thomas Weber) who has Sent quotes"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=2")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 2, "fresh": False})
         assert res.status_code == 200
         return res.json()["token"]
     
@@ -626,7 +626,7 @@ class TestBuyerStats:
     @pytest.fixture(scope="class")
     def buyer_token(self):
         """Get buyer token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert res.status_code == 200
         return res.json()["token"]
     

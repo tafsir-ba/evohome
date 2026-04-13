@@ -18,7 +18,7 @@ class TestTimelineStepCRUD:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Setup: Get demo agent session token"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200, f"Demo auth failed: {response.text}"
         data = response.json()
         self.token = data.get('token')

@@ -28,7 +28,7 @@ BASE_URL = _api_base_url()
 @pytest.fixture(scope="module")
 def agent_session():
     session = requests.Session()
-    response = session.post(f"{BASE_URL}/auth/demo/agent")
+    response = session.post(f"{BASE_URL}/demo/enter", json={"persona": "agent", "fresh": False})
     assert response.status_code == 200, f"Demo agent login failed: {response.text}"
     token = response.json().get("token")
     assert token, f"No token in agent login response: {response.text}"
@@ -39,7 +39,7 @@ def agent_session():
 @pytest.fixture(scope="module")
 def buyer_session_and_id():
     session = requests.Session()
-    response = session.post(f"{BASE_URL}/auth/demo/buyer")
+    response = session.post(f"{BASE_URL}/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
     assert response.status_code == 200, f"Demo buyer login failed: {response.text}"
     payload = response.json()
     token = payload.get("token")

@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
-import { Home, User, Briefcase, Building2, ShoppingBag, Mail, Lock, Loader2, ArrowLeft } from 'lucide-react';
+import { User, Briefcase, Building2, ShoppingBag, Mail, Lock, Loader2, ArrowLeft, Sparkles } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { cn } from '../lib/utils';
 
@@ -20,7 +20,7 @@ export const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const { loginWithGoogle, demoLogin, setAuthUser } = useAuth();
+  const { loginWithGoogle, enterDemo, setAuthUser } = useAuth();
   const navigate = useNavigate();
 
   const handleGoogleLogin = (role) => {
@@ -28,13 +28,17 @@ export const LoginPage = () => {
     loginWithGoogle(role);
   };
 
-  const handleDemoLogin = async (role, buyerNum = 1) => {
-    const key = role === 'buyer' ? `buyer${buyerNum}` : 'agent';
+  const handleDemoEnter = async (persona, buyerSlot = 1) => {
+    const key = persona === 'buyer' ? `buyer${buyerSlot}` : 'agent';
     setDemoLoading(key);
     try {
-      await demoLogin(role, buyerNum);
-      toast.success(`Logged in as Demo ${role === 'agent' ? 'Agent' : 'Buyer'}`);
-      navigate(role === 'agent' ? '/agent/home' : '/buyer/dashboard');
+      const data = await enterDemo({ persona, buyerSlot, fresh: true });
+      toast.success(
+        persona === 'agent'
+          ? 'Demo agent ready — fresh sample data loaded.'
+          : 'Demo buyer ready — fresh sample data loaded.'
+      );
+      navigate(data.redirect || (persona === 'agent' ? '/agent/home' : '/buyer/dashboard'));
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -254,54 +258,53 @@ export const LoginPage = () => {
                     </Button>
                   </div>
                   
-                  {/* Demo Options */}
-                  <div className="p-4 bg-muted/50 rounded-xl border border-border">
-                    <p className="text-xs font-semibold tracking-widest uppercase text-muted-foreground mb-3">
-                      Try Demo
-                    </p>
+                  {/* Demo — resets sandbox data then signs you in */}
+                  <div className="p-4 bg-muted/50 rounded-xl border border-border space-y-3">
+                    <div className="flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold tracking-widest uppercase text-muted-foreground">
+                          Try demo
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                          Loads a clean sample project each time, then opens the app with a demo account.
+                        </p>
+                      </div>
+                    </div>
                     {selectedRole === 'buyer' ? (
                       <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-10 sm:h-11 rounded-xl border-border hover:border-primary hover:bg-primary/5 hover:text-primary text-xs transition-all"
-                          onClick={() => handleDemoLogin('buyer', 1)}
-                          disabled={demoLoading !== null}
-                          data-testid="demo-buyer-btn"
-                        >
-                          {demoLoading === 'buyer1' ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <>
-                              <User className="w-3 h-3 mr-1" />
-                              Sophie
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-10 sm:h-11 rounded-xl border-border hover:border-primary hover:bg-primary/5 hover:text-primary text-xs transition-all"
-                          onClick={() => handleDemoLogin('buyer', 2)}
-                          disabled={demoLoading !== null}
-                          data-testid="demo-buyer-2-btn"
-                        >
-                          {demoLoading === 'buyer2' ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <>
-                              <User className="w-3 h-3 mr-1" />
-                              Thomas
-                            </>
-                          )}
-                        </Button>
+                        {[
+                          { slot: 1, label: 'Sophie' },
+                          { slot: 2, label: 'Thomas' },
+                          { slot: 3, label: 'Luca' },
+                          { slot: 4, label: 'Emma' },
+                        ].map(({ slot, label }) => (
+                          <Button
+                            key={slot}
+                            type="button"
+                            variant="outline"
+                            className="h-10 sm:h-11 rounded-xl border-border hover:border-primary hover:bg-primary/5 hover:text-primary text-xs transition-all"
+                            onClick={() => handleDemoEnter('buyer', slot)}
+                            disabled={demoLoading !== null}
+                            data-testid={slot === 1 ? 'demo-buyer-btn' : `demo-buyer-${slot}-btn`}
+                          >
+                            {demoLoading === `buyer${slot}` ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <User className="w-3 h-3 mr-1" />
+                                {label}
+                              </>
+                            )}
+                          </Button>
+                        ))}
                       </div>
                     ) : (
                       <Button
                         type="button"
                         variant="outline"
                         className="w-full h-10 sm:h-11 rounded-xl border-border hover:border-emerald-600 hover:bg-emerald-600/5 hover:text-emerald-600 transition-all"
-                        onClick={() => handleDemoLogin('agent')}
+                        onClick={() => handleDemoEnter('agent')}
                         disabled={demoLoading !== null}
                         data-testid="demo-agent-btn"
                       >
@@ -310,7 +313,7 @@ export const LoginPage = () => {
                         ) : (
                           <>
                             <Briefcase className="w-4 h-4 mr-2" />
-                            Marc Dubois (Pro)
+                            Agent — Marc Dubois
                           </>
                         )}
                       </Button>

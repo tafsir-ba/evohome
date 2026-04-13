@@ -11,9 +11,11 @@ Database Isolation Strategy:
 - Selection is made at boot time via DEMO_MODE env var, NOT at query time
 - This replaces the broken is_demo query filter pattern
 
-Demo seeding (destructive): POST /api/demo/seed returns 404 unless DEMO_MODE=true.
-Try Demo login: POST /api/auth/demo/* is always available; returns 404 only if demo users
-are missing from the database.
+Demo HTTP:
+- Try Demo: POST /api/demo/enter (optional fresh=true to purge+seed demo_* data, then session).
+- Standalone seed/reset: POST or GET /api/demo/seed and POST /api/demo/reset when
+  DEMO_MODE is true OR PUBLIC_DEMO is not disabled.
+- Set PUBLIC_DEMO=false to turn off all of the above (404).
 
 Usage:
     from core.config import validate_config, get_config
@@ -58,6 +60,9 @@ class Config:
     # Demo mode - determines which database to use
     DEMO_MODE: bool = False
     
+    # Public demo HTTP (Try Demo, seed when allowed). Set PUBLIC_DEMO=false to disable.
+    PUBLIC_DEMO_ALLOWED: bool = True
+
     # Optional with graceful degradation
     RESEND_API_KEY: Optional[str] = None
     SENDER_EMAIL: Optional[str] = None
@@ -118,6 +123,9 @@ class Config:
     
     def _load_optional(self):
         """Load optional environment variables with warnings."""
+        pd_raw = os.environ.get("PUBLIC_DEMO", "true").strip().lower()
+        self.PUBLIC_DEMO_ALLOWED = pd_raw not in ("0", "false", "no", "off")
+
         # Email
         self.RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
         self.SENDER_EMAIL = os.environ.get('SENDER_EMAIL', '')
@@ -231,6 +239,11 @@ class Config:
     def is_demo_deployment(self) -> bool:
         """Check if this is a demo deployment (separate from user is_demo flag)."""
         return self.DEMO_MODE
+
+    @property
+    def public_demo_allowed(self) -> bool:
+        """Whether Try Demo and related HTTP endpoints are enabled."""
+        return self.PUBLIC_DEMO_ALLOWED
 
 
 # Singleton config instance

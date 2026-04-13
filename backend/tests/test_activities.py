@@ -19,7 +19,7 @@ class TestActivityFeedAPI:
         """Get authenticated session for demo agent"""
         session = requests.Session()
         # Login as demo agent - session cookie is set automatically
-        res = session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Agent login failed: {res.text}"
         data = res.json()
         assert 'name' in data, "No user name in agent response"
@@ -32,7 +32,10 @@ class TestActivityFeedAPI:
         """Get authenticated session for demo buyer (Sophie Müller)"""
         session = requests.Session()
         # Login as demo buyer - session cookie is set automatically
-        res = session.post(f"{BASE_URL}/api/auth/demo/buyer")
+        res = session.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+        )
         assert res.status_code == 200, f"Buyer login failed: {res.text}"
         data = res.json()
         assert 'name' in data, "No user name in buyer response"
