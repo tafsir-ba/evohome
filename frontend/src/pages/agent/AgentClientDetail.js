@@ -24,7 +24,8 @@ import {
   User, 
   Mail, 
   Phone,
-  Loader2
+  Loader2,
+  Plus
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -41,19 +42,35 @@ export const AgentClientDetail = () => {
   const { t } = useSettings();
   const [client, setClient] = useState(null);
   const [project, setProject] = useState(null);
+  const [projects, setProjects] = useState([]);
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [newUnitReference, setNewUnitReference] = useState('');
+  const [creatingUnit, setCreatingUnit] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
+    project_id: '',
     unit_id: ''
   });
 
   useEffect(() => {
     fetchClient();
+    fetchProjects();
   }, [clientId]);
+
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch(`${API}/projects`, { credentials: 'include', headers: getAuthHeaders() });
+      if (res.ok) {
+        setProjects(await res.json());
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects:', error);
+    }
+  };
 
   const fetchClient = async () => {
     try {
@@ -65,12 +82,16 @@ export const AgentClientDetail = () => {
           name: data.name,
           email: data.email,
           phone: data.phone || '',
+          project_id: data.project_id || '',
           unit_id: data.unit_id || ''
         });
         
         // Fetch project and units
         if (data.project_id) {
           fetchProjectAndUnits(data.project_id);
+        } else {
+          setProject(null);
+          setUnits([]);
         }
       } else {
         toast.error('Client not found');
@@ -106,6 +127,49 @@ export const AgentClientDetail = () => {
     setFormData({ ...formData, unit_id: newUnitId });
   };
 
+  const handleProjectChange = async (projectId) => {
+    setFormData((prev) => ({ ...prev, project_id: projectId, unit_id: '' }));
+    if (projectId) {
+      await fetchProjectAndUnits(projectId);
+    } else {
+      setProject(null);
+      setUnits([]);
+    }
+  };
+
+  const handleCreateUnitInline = async () => {
+    if (!formData.project_id) {
+      toast.error('Select a project first');
+      return;
+    }
+    if (!newUnitReference.trim()) {
+      toast.error('Enter a unit reference');
+      return;
+    }
+    setCreatingUnit(true);
+    try {
+      const res = await fetch(`${API}/projects/${formData.project_id}/units`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
+        body: JSON.stringify({ unit_reference: newUnitReference.trim() }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || 'Failed to create unit');
+      }
+      const created = await res.json();
+      setNewUnitReference('');
+      toast.success('Unit created');
+      await fetchProjectAndUnits(formData.project_id);
+      setFormData((prev) => ({ ...prev, unit_id: created.unit_id }));
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setCreatingUnit(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -119,6 +183,7 @@ export const AgentClientDetail = () => {
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
+          project_id: formData.project_id || null,
           unit_id: formData.unit_id || null
         })
       });
@@ -261,15 +326,30 @@ export const AgentClientDetail = () => {
                   <Building2 className="w-4 h-4" />
                   Project
                 </Label>
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <Building2 className="w-5 h-5 text-primary" />
+                <Select value={formData.project_id || 'none'} onValueChange={(value) => handleProjectChange(value === 'none' ? '' : value)}>
+                  <SelectTrigger className="rounded-lg">
+                    <SelectValue placeholder="Select project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No project selected</SelectItem>
+                    {projects.map((p) => (
+                      <SelectItem key={p.project_id} value={p.project_id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {project && (
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <Building2 className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{project?.name}</p>
+                      <p className="text-sm text-muted-foreground">{project?.address || 'No address'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">{project?.name || client?.project_id}</p>
-                    <p className="text-sm text-muted-foreground">{project?.address || 'No address'}</p>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Unit Selection */}
@@ -279,7 +359,13 @@ export const AgentClientDetail = () => {
                   Assigned Unit
                 </Label>
                 
-                {units.length === 0 ? (
+                {!formData.project_id ? (
+                  <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      Select a project first to manage unit assignment.
+                    </p>
+                  </div>
+                ) : units.length === 0 ? (
                   <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                     <p className="text-sm text-amber-800 dark:text-amber-200">
                       No units defined for this project yet. 
@@ -290,6 +376,17 @@ export const AgentClientDetail = () => {
                         Add units to the project
                       </Link>
                     </p>
+                    <div className="mt-3 flex gap-2">
+                      <Input
+                        placeholder="New unit reference (e.g. A-301)"
+                        value={newUnitReference}
+                        onChange={(e) => setNewUnitReference(e.target.value)}
+                        className="bg-background"
+                      />
+                      <Button onClick={handleCreateUnitInline} disabled={creatingUnit || !newUnitReference.trim()}>
+                        {creatingUnit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <>
