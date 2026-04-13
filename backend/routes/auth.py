@@ -7,7 +7,7 @@ import bcrypt
 import jwt
 import httpx
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, HTTPException, Depends, Request, Response
+from fastapi import APIRouter, HTTPException, Depends, Request, Response, Query
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import logging
@@ -385,9 +385,13 @@ async def reset_password(request: ResetPasswordRequest):
 
 
 @router.post("/auth/demo/{role}")
-async def demo_login(role: str, response: Response, buyer_num: int = 1):
+async def demo_login(
+    role: str,
+    response: Response,
+    buyer_num: int = Query(1, ge=1, le=4, description="Demo buyer slot (Sophie=1, Thomas=2, …)"),
+):
     """Demo login — finds demo users by user_id prefix convention (demo_*)."""
-    if not get_config().is_demo_deployment:
+    if not get_config().is_demo_login_enabled:
         raise HTTPException(status_code=404, detail="Not found")
     if role not in ['buyer', 'agent']:
         raise HTTPException(status_code=400, detail="Invalid role")

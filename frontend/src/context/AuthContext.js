@@ -167,9 +167,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   const demoLogin = async (role, buyerNum = 1) => {
-    const url = role === 'buyer' 
-      ? `${API}/auth/demo/${role}?buyer_num=${buyerNum}`
-      : `${API}/auth/demo/${role}`;
+    const n = Number(buyerNum);
+    const safeBuyerNum =
+      role === 'buyer' && Number.isFinite(n) && n >= 1 && n <= 4 ? Math.floor(n) : 1;
+    const url =
+      role === 'buyer'
+        ? `${API}/auth/demo/${role}?buyer_num=${safeBuyerNum}`
+        : `${API}/auth/demo/${role}`;
     
     const response = await fetch(url, {
       method: 'POST',

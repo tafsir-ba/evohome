@@ -11,6 +11,12 @@ Database Isolation Strategy:
 - Selection is made at boot time via DEMO_MODE env var, NOT at query time
 - This replaces the broken is_demo query filter pattern
 
+Demo login vs demo seeding:
+- ENABLE_DEMO_LOGIN (default true): POST /api/auth/demo/* (Try Demo on login) uses the
+  same Mongo as the app unless DEMO_MODE is on.
+- DEMO_MODE + MONGO_URL_DEMO + DB_NAME_DEMO: full isolated demo stack; also enables /demo/seed.
+- Set ENABLE_DEMO_LOGIN=false to hide Try Demo on hosts where demo users must not exist.
+
 Usage:
     from core.config import validate_config, get_config
     
@@ -53,6 +59,8 @@ class Config:
     
     # Demo mode - determines which database to use
     DEMO_MODE: bool = False
+    # One-touch demo auth on login (independent of DEMO_MODE / separate DB)
+    ENABLE_DEMO_LOGIN: bool = True
     
     # Optional with graceful degradation
     RESEND_API_KEY: Optional[str] = None
@@ -93,6 +101,10 @@ class Config:
         # Demo mode flag - set to 'true' for demo deployment
         demo_mode_raw = os.environ.get('DEMO_MODE', 'false').lower()
         self.DEMO_MODE = demo_mode_raw in ('true', '1', 'yes')
+
+        # Try Demo on login — default on so production marketing apps keep working
+        _demo_login_raw = os.environ.get('ENABLE_DEMO_LOGIN', 'true').strip().lower()
+        self.ENABLE_DEMO_LOGIN = _demo_login_raw not in ('false', '0', 'no', 'off')
         
         # JWT Secret
         self.JWT_SECRET = os.environ.get('JWT_SECRET', '')
@@ -228,6 +240,11 @@ class Config:
         """Check if this is a demo deployment (separate from user is_demo flag)."""
         return self.DEMO_MODE
 
+    @property
+    def is_demo_login_enabled(self) -> bool:
+        """POST /api/auth/demo/* allowed (Try Demo buttons)."""
+        return self.DEMO_MODE or self.ENABLE_DEMO_LOGIN
+
 
 # Singleton config instance
 _config: Optional[Config] = None
@@ -255,6 +272,9 @@ def validate_config() -> Config:
         logger.info(f"  - Billing: {'enabled' if _config.billing_enabled else 'disabled'}")
         logger.info(f"  - AI Extraction: {'enabled' if _config.ai_enabled else 'disabled'}")
         logger.info(f"  - Google OAuth: {'enabled' if _config.google_oauth_enabled else 'disabled'}")
+        logger.info(
+            f"  - Demo login (/auth/demo): {'enabled' if _config.is_demo_login_enabled else 'disabled'}"
+        )
         return _config
     except ConfigurationError as e:
         logger.critical(f"STARTUP FAILED - Configuration Error:\n{e}")
