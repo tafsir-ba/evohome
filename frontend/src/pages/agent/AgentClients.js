@@ -200,8 +200,8 @@ export const AgentClients = () => {
   };
 
   const filteredClients = clients.filter(client =>
-    client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (client.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (client.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (client.unit_reference || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -295,14 +295,14 @@ export const AgentClients = () => {
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
                       <div className="w-12 h-12 bg-[#2E3A45] rounded-full flex items-center justify-center text-white font-medium">
-                        {client.name.charAt(0)}
+                        {(client.name || '?').charAt(0)}
                       </div>
                       <div>
-                        <h3 className="font-medium text-[#1A1A1A]">{client.name}</h3>
+                        <h3 className="font-medium text-[#1A1A1A]">{client.name || 'Unnamed Client'}</h3>
                         <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Mail className="w-3 h-3" />
-                            {client.email}
+                            {client.email || 'No email'}
                           </span>
                           {client.phone && (
                             <span className="flex items-center gap-1">
