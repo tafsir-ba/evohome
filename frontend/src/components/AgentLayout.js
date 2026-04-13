@@ -65,6 +65,12 @@ export const AgentLayout = ({ children }) => {
   const inPrimary = navigation.find((item) => isActive(item.href));
   const inMore = moreNavigation.find((item) => isActive(item.href));
   const activeItemLabel = inPrimary?.name || inMore?.name || t('nav.dashboard');
+  const mobileQuickNavigation = [
+    { name: t('nav.dashboard'), mobileName: t('nav.dashboard'), href: '/agent/home', icon: Home },
+    { name: t('nav.projects'), mobileName: t('nav.projects'), href: '/agent/projects', icon: Building2 },
+    { name: t('nav.feed'), mobileName: t('nav.feed'), href: '/agent/feed', icon: MessageSquare },
+    { name: t('nav.quotes') + ' / ' + t('nav.invoices'), mobileName: 'Docs', href: '/agent/documents', icon: FileText },
+  ];
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -232,10 +238,36 @@ export const AgentLayout = ({ children }) => {
         </header>
         
         {/* Page content */}
-        <main className="p-3 sm:p-4 lg:p-6">
+        <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6">
           {children}
         </main>
       </div>
+
+      {/* Mobile bottom quick navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/95 backdrop-blur lg:hidden">
+        <div className="grid grid-cols-4 px-2 py-1.5">
+          {mobileQuickNavigation.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                className={cn(
+                  'flex flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium transition-colors',
+                  active ? 'text-primary bg-primary/10' : 'text-muted-foreground'
+                )}
+                data-testid={`mobile-nav-${item.href.split('/').pop()}`}
+              >
+                <Icon className="w-4 h-4" />
+                <span className="truncate max-w-full">
+                  {item.mobileName || item.name}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 };

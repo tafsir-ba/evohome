@@ -632,7 +632,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
  * - isAgent: determines UI permissions (create post, view all recipients)
  * - Uses same /api/activities endpoint - backend handles role-based filtering
  */
-export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = null, compact = false }) => {
+export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = null, compact = false, mobileFab = false }) => {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -1001,7 +1001,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
             </div>
           </div>
           <Button 
-            className="rounded-lg w-full sm:w-auto"
+            className={cn('rounded-lg w-full sm:w-auto', mobileFab && 'mb-16 sm:mb-0')}
             onClick={() => setShowCreateDialog(true)}
             data-testid="create-activity-btn"
           >
@@ -1141,6 +1141,17 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {isAgent && !embedded && mobileFab && (
+        <Button
+          onClick={() => setShowCreateDialog(true)}
+          className="fixed bottom-20 right-4 z-30 rounded-full h-12 px-4 shadow-lg sm:hidden"
+          data-testid="mobile-create-activity-fab"
+        >
+          <Plus className="w-4 h-4 mr-1.5" />
+          New Post
+        </Button>
+      )}
     </div>
   );
 };

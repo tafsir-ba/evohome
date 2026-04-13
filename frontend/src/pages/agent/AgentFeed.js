@@ -30,7 +30,7 @@ export const AgentFeed = () => {
 
   return (
     <AgentLayout>
-      <Feed isAgent={true} embedded={false} key={refreshKey} />
+      <Feed isAgent={true} embedded={false} mobileFab key={refreshKey} />
     </AgentLayout>
   );
 };
