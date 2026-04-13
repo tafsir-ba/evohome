@@ -19,7 +19,7 @@ import openai
 import fitz
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 
 from database import db
@@ -174,7 +174,10 @@ async def get_workflow_execution(execution_id: str, user: dict = Depends(get_cur
 
 
 @router.get("/workflows/history")
-async def get_workflow_history(limit: int = 20, user: dict = Depends(get_current_agent)):
+async def get_workflow_history(
+    limit: int = Query(20, ge=1, le=100),
+    user: dict = Depends(get_current_agent),
+):
     """Get recent workflow executions for the agent."""
     service = get_workflow_service(db)
     executions = await service.get_agent_executions(user['user_id'], limit)

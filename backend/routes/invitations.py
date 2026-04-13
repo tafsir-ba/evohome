@@ -16,6 +16,8 @@ from pydantic import BaseModel, EmailStr
 
 from database import db
 from core.auth import get_current_user, get_current_agent, create_access_token, JWT_EXPIRY_DAYS
+from core.access_control import get_workspace_owner_id, is_workspace_admin, is_workspace_owner
+from core.audit import log_audit_event
 from services.email_service import send_email_async, send_notification_email, get_email_template
 
 logger = logging.getLogger(__name__)
@@ -30,21 +32,29 @@ class TeamInviteCreate(BaseModel):
     message: Optional[str] = None
 
 
+class TeamMemberRoleUpdate(BaseModel):
+    role: str
+
+
 # ── Endpoints ──
 
 @router.post("/team/invitations")
 async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(get_current_agent)):
     """Invite a new team member to the agent's workspace"""
+    if not is_workspace_admin(user):
+        raise HTTPException(status_code=403, detail="Only workspace admins can invite team members")
+    workspace_owner_id = get_workspace_owner_id(user)
+
     existing_agent = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
     if existing_agent:
-        if existing_agent.get('workspace_owner_id') == user['user_id']:
+        if existing_agent.get('workspace_owner_id') == workspace_owner_id:
             raise HTTPException(status_code=400, detail="This user is already part of your team")
         if existing_agent.get('workspace_owner_id'):
             raise HTTPException(status_code=400, detail="This user is already part of another workspace")
 
     existing_invite = await db.team_invitations.find_one({
         "email": data.email,
-        "invited_by": user['user_id'],
+        "invited_by": workspace_owner_id,
         "status": "pending",
     })
     if existing_invite:
@@ -60,7 +70,7 @@ async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(ge
         "role": data.role,
         "message": data.message,
         "status": "pending",
-        "invited_by": user['user_id'],
+        "invited_by": workspace_owner_id,
         "invited_by_name": user.get('name', 'Unknown'),
         "invitation_token": invitation_token,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -99,7 +109,7 @@ async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(ge
         "email": data.email,
         "role": data.role,
         "status": "pending",
-        "invited_by": user['user_id'],
+        "invited_by": workspace_owner_id,
         "invited_by_name": user.get('name', 'Unknown'),
         "created_at": invitation_doc['created_at'],
         "expires_at": invitation_doc['expires_at'],
@@ -109,8 +119,9 @@ async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(ge
 @router.get("/team/invitations")
 async def list_team_invitations(user: dict = Depends(get_current_agent)):
     """List all team invitations sent by this agent"""
+    workspace_owner_id = get_workspace_owner_id(user)
     invitations = await db.team_invitations.find(
-        {"invited_by": user['user_id']},
+        {"invited_by": workspace_owner_id},
         {"_id": 0, "invitation_token": 0},
     ).sort("created_at", -1).to_list(100)
     return invitations
@@ -119,15 +130,26 @@ async def list_team_invitations(user: dict = Depends(get_current_agent)):
 @router.delete("/team/invitations/{invitation_id}")
 async def cancel_team_invitation(invitation_id: str, user: dict = Depends(get_current_agent)):
     """Cancel a pending team invitation"""
+    if not is_workspace_admin(user):
+        raise HTTPException(status_code=403, detail="Only workspace admins can cancel invitations")
+    workspace_owner_id = get_workspace_owner_id(user)
     invitation = await db.team_invitations.find_one({
         "invitation_id": invitation_id,
-        "invited_by": user['user_id'],
+        "invited_by": workspace_owner_id,
     })
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitation not found")
     if invitation['status'] != 'pending':
         raise HTTPException(status_code=400, detail="Can only cancel pending invitations")
     await db.team_invitations.delete_one({"invitation_id": invitation_id})
+    await log_audit_event(
+        actor_user=user,
+        action="team_invitation_cancelled",
+        target_type="team_invitation",
+        target_id=invitation_id,
+        workspace_owner_id=workspace_owner_id,
+        metadata={"email": invitation.get("email")},
+    )
     return {"message": "Invitation cancelled"}
 
 
@@ -279,21 +301,73 @@ async def register_invited_user(
 
 @router.delete("/team/members/{member_id}")
 async def remove_team_member(member_id: str, user: dict = Depends(get_current_agent)):
-    """Remove a team member from the workspace (owner only)"""
-    if user.get('workspace_owner_id'):
-        raise HTTPException(status_code=403, detail="Only workspace owner can remove team members")
+    """Remove a team member from the workspace with role guards."""
+    if not is_workspace_admin(user):
+        raise HTTPException(status_code=403, detail="Only workspace admins can remove team members")
+    workspace_owner_id = get_workspace_owner_id(user)
 
     member = await db.users.find_one({
         "user_id": member_id,
-        "workspace_owner_id": user['user_id'],
+        "workspace_owner_id": workspace_owner_id,
     })
     if not member:
         raise HTTPException(status_code=404, detail="Team member not found")
+    if member_id == workspace_owner_id:
+        raise HTTPException(status_code=400, detail="Cannot remove workspace owner")
+    if member.get("workspace_role") == "admin" and not is_workspace_owner(user):
+        raise HTTPException(status_code=403, detail="Only workspace owner can remove another admin")
 
     await db.users.update_one(
         {"user_id": member_id},
         {"$unset": {"workspace_owner_id": "", "workspace_role": ""}},
     )
+    await db.team_invitations.update_many(
+        {"accepted_by": member_id, "invited_by": workspace_owner_id},
+        {"$set": {"status": "revoked", "revoked_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    await log_audit_event(
+        actor_user=user,
+        action="team_member_removed",
+        target_type="user",
+        target_id=member_id,
+        workspace_owner_id=workspace_owner_id,
+        metadata={"workspace_role": member.get("workspace_role", "member")},
+    )
 
     logger.info(f"Team member {member_id} removed from workspace by {user['user_id']}")
     return {"message": "Team member removed from workspace"}
+
+
+@router.patch("/team/members/{member_id}/role")
+async def update_team_member_role(
+    member_id: str,
+    data: TeamMemberRoleUpdate,
+    user: dict = Depends(get_current_agent),
+):
+    """Update workspace role for a team member (owner only)."""
+    if not is_workspace_owner(user):
+        raise HTTPException(status_code=403, detail="Only workspace owner can change team roles")
+    if data.role not in {"member", "admin"}:
+        raise HTTPException(status_code=400, detail="Invalid role; must be 'member' or 'admin'")
+
+    workspace_owner_id = get_workspace_owner_id(user)
+    member = await db.users.find_one(
+        {"user_id": member_id, "workspace_owner_id": workspace_owner_id, "role": "agent"},
+        {"_id": 0, "user_id": 1},
+    )
+    if not member:
+        raise HTTPException(status_code=404, detail="Team member not found")
+
+    await db.users.update_one(
+        {"user_id": member_id},
+        {"$set": {"workspace_role": data.role}},
+    )
+    await log_audit_event(
+        actor_user=user,
+        action="team_member_role_updated",
+        target_type="user",
+        target_id=member_id,
+        workspace_owner_id=workspace_owner_id,
+        metadata={"workspace_role": data.role},
+    )
+    return {"message": "Team member role updated", "member_id": member_id, "role": data.role}

@@ -6,12 +6,11 @@ Thin route layer. No is_demo. No business logic.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project
-from database import db
+from core.access_control import can_access_project, get_workspace_owner_id
 from services import project_service
 
 logger = logging.getLogger(__name__)
@@ -45,7 +44,7 @@ class UpdateProjectRequest(BaseModel):
 async def list_projects(user=Depends(get_current_user)):
     """List projects. Agents see theirs; buyers see linked projects."""
     if user['role'] == 'agent':
-        return await project_service.list_projects_by_agent(user['user_id'])
+        return await project_service.list_projects_by_agent(get_workspace_owner_id(user))
     elif user['role'] == 'buyer':
         return await project_service.list_projects_for_buyer(user['user_id'])
     return []
@@ -55,7 +54,7 @@ async def list_projects(user=Depends(get_current_user)):
 async def create_project(data: CreateProjectRequest, user=Depends(get_current_agent)):
     """Create a project. Agent only."""
     project = await project_service.create_project(
-        agent_id=user['user_id'],
+        agent_id=get_workspace_owner_id(user),
         name=data.name,
         address=data.address,
         description=data.description,
@@ -91,20 +90,32 @@ async def update_project(project_id: str, data: UpdateProjectRequest, user=Depen
     return updated
 
 
+@router.get("/projects/{project_id}/delete-impact")
+async def get_project_delete_impact(project_id: str, user=Depends(get_current_agent)):
+    """Preview linked records and risks before deleting a project."""
+    if not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    project = await project_service.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return await project_service.get_project_delete_impact(project_id)
+
+
 @router.delete("/projects/{project_id}")
-async def delete_project(project_id: str, user=Depends(get_current_agent)):
-    """Delete a project. Agent only. Fails if project has linked clients."""
+async def delete_project(
+    project_id: str,
+    force: bool = Query(False),
+    user=Depends(get_current_agent),
+):
+    """Delete a project with dependency guards and optional force cascade."""
     if not await can_access_project(user, project_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    client_count = await db.clients.count_documents({"project_id": project_id})
-    if client_count > 0:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot delete project with {client_count} linked client(s). Remove clients first."
-        )
+    try:
+        result = await project_service.delete_project(project_id, get_workspace_owner_id(user), force=force)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    deleted = await project_service.delete_project(project_id)
-    if not deleted:
+    if not result.get("deleted"):
         raise HTTPException(status_code=404, detail="Project not found")
-    return {"message": "Project deleted"}
+    return {"message": "Project deleted", "impact": result.get("impact", {})}

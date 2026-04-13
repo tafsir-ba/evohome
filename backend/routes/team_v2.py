@@ -11,10 +11,11 @@ import logging
 from typing import Optional, List
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
 from pydantic import BaseModel
 
 from core.auth import get_current_user, get_current_agent
+from core.access_control import get_workspace_owner_id
 from services import team_service
 from services.ai_service import OPENAI_API_KEY
 
@@ -66,14 +67,15 @@ async def get_team_members(project_id: str, user: dict = Depends(get_current_use
 async def create_team_member(project_id: str, data: TeamMemberCreateBody, user: dict = Depends(get_current_agent)):
     """Add a team member to a project."""
     from database import db
+    scope_agent_id = get_workspace_owner_id(user)
     project = await db.projects.find_one(
-        {"project_id": project_id, "agent_id": user["user_id"]}, {"_id": 0}
+        {"project_id": project_id, "agent_id": scope_agent_id}, {"_id": 0}
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return await team_service.create_team_member(
         project_id=project_id,
-        agent_id=user["user_id"],
+        agent_id=scope_agent_id,
         company_name=data.company_name,
         contact_name=data.contact_name,
         role=data.role,
@@ -91,7 +93,7 @@ async def update_team_member(project_id: str, member_id: str, data: TeamMemberUp
     result = await team_service.update_team_member(
         member_id=member_id,
         project_id=project_id,
-        agent_id=user["user_id"],
+        agent_id=get_workspace_owner_id(user),
         update_data=data.model_dump(),
     )
     if result is None:
@@ -102,7 +104,7 @@ async def update_team_member(project_id: str, member_id: str, data: TeamMemberUp
 @router.delete("/projects/{project_id}/team/{member_id}")
 async def delete_team_member(project_id: str, member_id: str, user: dict = Depends(get_current_agent)):
     """Delete a team member."""
-    if not await team_service.delete_team_member(member_id, project_id, user["user_id"]):
+    if not await team_service.delete_team_member(member_id, project_id, get_workspace_owner_id(user)):
         raise HTTPException(status_code=404, detail="Team member not found")
     return {"message": "Team member deleted"}
 
@@ -111,14 +113,15 @@ async def delete_team_member(project_id: str, member_id: str, user: dict = Depen
 async def create_team_members_bulk(project_id: str, request: BulkContactsBody, user: dict = Depends(get_current_agent)):
     """Bulk import team members after AI extraction review."""
     from database import db
+    scope_agent_id = get_workspace_owner_id(user)
     project = await db.projects.find_one(
-        {"project_id": project_id, "agent_id": user["user_id"]}, {"_id": 0}
+        {"project_id": project_id, "agent_id": scope_agent_id}, {"_id": 0}
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return await team_service.bulk_create_team_members(
         project_id=project_id,
-        agent_id=user["user_id"],
+        agent_id=scope_agent_id,
         contacts=request.contacts,
     )
 
@@ -129,12 +132,12 @@ async def create_team_members_bulk(project_id: str, request: BulkContactsBody, u
 async def get_team_directory(
     search: Optional[str] = None,
     project_id: Optional[str] = None,
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=100),
     user: dict = Depends(get_current_agent),
 ):
     """Global supplier/contact directory for an agent."""
     return await team_service.get_directory(
-        agent_id=user["user_id"], search=search, project_id=project_id, limit=limit
+        agent_id=get_workspace_owner_id(user), search=search, project_id=project_id, limit=limit
     )
 
 

@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 
 from database import db
+from core.access_control import get_workspace_owner_id
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +18,9 @@ logger = logging.getLogger(__name__)
 async def _verify_project_access(project_id: str, user: dict) -> dict:
     """Verify user has access to the project. Returns project dict."""
     if user["role"] == "agent":
+        scope_agent_id = get_workspace_owner_id(user)
         project = await db.projects.find_one(
-            {"project_id": project_id, "agent_id": user["user_id"]}, {"_id": 0}
+            {"project_id": project_id, "agent_id": scope_agent_id}, {"_id": 0}
         )
     else:
         client = await db.clients.find_one(

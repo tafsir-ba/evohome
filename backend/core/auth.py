@@ -151,6 +151,8 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     
     if not user:
         raise HTTPException(status_code=401, detail="User not found. Please login again.")
+    if user.get("is_active", True) is False:
+        raise HTTPException(status_code=401, detail="Account is deactivated. Contact your administrator.")
     
     # Set trace context user info (non-blocking)
     try:
@@ -183,6 +185,7 @@ async def get_current_buyer(request: Request) -> Dict[str, Any]:
 # In-memory blacklist for invalidated tokens (for MVP)
 # In production, use Redis or database
 _invalidated_tokens: set = set()
+_invalidated_user_ids: set = set()
 
 def invalidate_token(token: str):
     """Add token to blacklist"""
@@ -195,10 +198,22 @@ def invalidate_token(token: str):
         pass  # Invalid token, no need to blacklist
 
 
+def invalidate_user_sessions(user_id: str):
+    """Invalidate all current and future tokens for a user until re-enabled."""
+    _invalidated_user_ids.add(user_id)
+
+
+def allow_user_sessions(user_id: str):
+    """Remove user-level invalidation marker."""
+    _invalidated_user_ids.discard(user_id)
+
+
 def is_token_invalidated(token: str) -> bool:
     """Check if token has been invalidated"""
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM], options={"verify_exp": False})
+        if payload.get("user_id") in _invalidated_user_ids:
+            return True
         jti = payload.get('jti') or payload.get('user_id') + str(payload.get('iat', ''))
         return jti in _invalidated_tokens
     except Exception:

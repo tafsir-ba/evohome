@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project, is_agent
+from core.access_control import can_access_project, is_agent, get_workspace_owner_id
 from services import unit_service
 from services.billing_service import can_create_unit, get_unit_limit
 
@@ -50,7 +50,7 @@ async def create_unit(project_id: str, data: CreateUnitRequest, user=Depends(get
 
     unit = await unit_service.create_unit(
         project_id=project_id,
-        agent_id=user['user_id'],
+        agent_id=get_workspace_owner_id(user),
         unit_reference=data.unit_reference,
         notes=data.notes,
     )
@@ -105,5 +105,8 @@ async def delete_unit(unit_id: str, user=Depends(get_current_agent)):
     if not await can_access_project(user, unit['project_id']):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    await unit_service.delete_unit(unit_id)
+    try:
+        await unit_service.delete_unit(unit_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"message": "Unit deleted"}

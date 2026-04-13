@@ -120,7 +120,18 @@ async def unassign_client(unit_id: str) -> Optional[Dict[str, Any]]:
 
 
 async def delete_unit(unit_id: str) -> bool:
-    """Delete a unit."""
+    """Delete a unit if it is not linked to active client references."""
+    unit = await get_unit(unit_id)
+    if not unit:
+        return False
+
+    if unit.get("assigned_client_id"):
+        raise ValueError("Cannot delete unit while a client is assigned")
+
+    linked_clients = await db.clients.count_documents({"unit_id": unit_id})
+    if linked_clients > 0:
+        raise ValueError("Cannot delete unit while client records still reference it")
+
     result = await db.units.delete_one({"unit_id": unit_id})
     return result.deleted_count > 0
 

@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any
 from database import db
 
 logger = logging.getLogger(__name__)
+NON_DRAFT_DOCUMENT_STATUS = {"Draft"}
 
 
 def _make_client_id() -> str:
@@ -165,8 +166,62 @@ async def update_client(
     return await get_client(client_id)
 
 
-async def delete_client(client_id: str) -> bool:
+async def get_client_delete_impact(client_id: str) -> Dict[str, Any]:
+    """Summarize linked records and deletion risks for a client."""
+    doc_status_pipeline = [
+        {"$match": {"client_id": client_id}},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+    ]
+    status_rows = await db.documents.aggregate(doc_status_pipeline).to_list(50)
+    documents_by_status = {row.get("_id") or "unknown": row.get("count", 0) for row in status_rows}
+    non_draft_documents = sum(
+        count for status, count in documents_by_status.items() if status not in NON_DRAFT_DOCUMENT_STATUS
+    )
+    return {
+        "client_id": client_id,
+        "documents_total": await db.documents.count_documents({"client_id": client_id}),
+        "documents_non_draft": non_draft_documents,
+        "documents_by_status": documents_by_status,
+        "activity_recipients": await db.activity_recipients.count_documents({"client_id": client_id}),
+        "decision_recipients": await db.decision_recipients.count_documents({"client_id": client_id}),
+    }
+
+
+async def delete_client(client_id: str, force: bool = False) -> bool:
     client = await get_client(client_id)
+    if not client:
+        return False
+
+    impact = await get_client_delete_impact(client_id)
+    if impact["documents_non_draft"] > 0:
+        raise ValueError(
+            "Cannot delete client with issued documents (Sent/Approved/Paid/etc). "
+            "Reassign/archive records first."
+        )
+
+    # Clean up draft document files and rows.
+    from services.file_service import delete_file
+    draft_docs = await db.documents.find(
+        {"client_id": client_id, "status": "Draft"},
+        {"_id": 0, "document_id": 1, "pdf_stored_filename": 1, "hero_image_stored_filename": 1},
+    ).to_list(10000)
+    draft_doc_ids = [d["document_id"] for d in draft_docs]
+    for doc in draft_docs:
+        for fk in ("pdf_stored_filename", "hero_image_stored_filename"):
+            if doc.get(fk):
+                delete_file(doc[fk])
+    if draft_doc_ids:
+        await db.change_requests.delete_many({"entity_id": {"$in": draft_doc_ids}})
+    await db.documents.delete_many({"client_id": client_id, "status": "Draft"})
+
+    # Remove recipient links tied to this client.
+    await db.activity_recipients.delete_many({"client_id": client_id})
+    await db.decision_recipients.delete_many({"client_id": client_id})
+
+    # Optionally detach buyer mapping from the client before deletion.
+    if force and client.get("buyer_id"):
+        await db.clients.update_one({"client_id": client_id}, {"$set": {"buyer_id": None}})
+
     if client and client.get("unit_id"):
         await db.units.update_one(
             {"unit_id": client["unit_id"]},

@@ -69,3 +69,4 @@ resend>=2.0.0
 qrbill>=1.1.0
 PyMuPDF>=1.23.0
 litellm>=1.0.0
+redis>=5.0.0

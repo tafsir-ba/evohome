@@ -10,7 +10,7 @@ import logging
 from typing import Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from fastapi.responses import FileResponse
 from database import db
 
@@ -95,8 +95,8 @@ async def list_traces(
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
     action: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     _=Depends(require_debug_auth),
 ):
     """List trace events with filters."""
@@ -117,7 +117,7 @@ async def list_traces(
     total = await db.trace_events.count_documents(query)
     traces = await db.trace_events.find(
         query, {"_id": 0}
-    ).sort("created_at", -1).skip(offset).limit(min(limit, 200)).to_list(min(limit, 200))
+    ).sort("created_at", -1).skip(offset).limit(limit).to_list(limit)
 
     return {"traces": traces, "total": total, "limit": limit, "offset": offset}
 

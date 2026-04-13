@@ -15,6 +15,7 @@ from typing import Optional, List, Dict, Any
 from database import db
 from helpers import validate_transition
 from services.notification_service import emit_notification, emit_email, emit_realtime
+from pymongo import ReturnDocument
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,31 @@ FINALIZED_STATUSES = {"Approved", "Paid"}
 
 
 # ── Core CRUD ──
+
+async def _next_document_number(agent_id: str, doc_type: str) -> str:
+    """Generate document numbers atomically to avoid concurrent collisions."""
+    year = datetime.now(timezone.utc).year
+    prefix = "INV" if doc_type == "invoice" else "QT"
+    counter_key = f"docnum:{agent_id}:{doc_type}:{year}"
+
+    counter = await db.counters.find_one_and_update(
+        {"counter_key": counter_key},
+        {
+            "$inc": {"value": 1},
+            "$setOnInsert": {
+                "counter_key": counter_key,
+                "agent_id": agent_id,
+                "doc_type": doc_type,
+                "year": year,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        },
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+        projection={"_id": 0, "value": 1},
+    )
+    sequence = int(counter.get("value", 1))
+    return f"{prefix}-{year}-{str(sequence).zfill(4)}"
 
 async def create_document(
     agent_id: str,
@@ -46,12 +72,9 @@ async def create_document(
     if not client:
         raise ValueError("Client not found")
 
-    if doc_type == 'invoice':
-        count = await db.documents.count_documents({"agent_id": agent_id, "type": "invoice"})
-        doc_number = f"INV-{datetime.now().year}-{str(count + 1).zfill(4)}"
-    else:
-        count = await db.documents.count_documents({"agent_id": agent_id, "type": "quote"})
-        doc_number = f"QT-{datetime.now().year}-{str(count + 1).zfill(4)}"
+    if doc_type not in VALID_DOC_TYPES:
+        raise ValueError("Invalid document type")
+    doc_number = await _next_document_number(agent_id, doc_type)
 
     doc_id = f"doc_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
@@ -251,13 +274,15 @@ async def update_document(document_id: str, agent_id: str, updates: Dict[str, An
 
 
 async def delete_document(document_id: str, agent_id: str, force: bool = False) -> bool:
-    """Delete a document. Non-drafts require force=True."""
+    """Delete a document with lifecycle safety guards."""
     query = {"document_id": document_id, "agent_id": agent_id}
     doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
         return False
+    if doc['status'] in FINALIZED_STATUSES:
+        raise ValueError(f"Cannot delete document with final status '{doc['status']}'")
     if doc['status'] != 'Draft' and not force:
-        raise ValueError("Can only delete Draft documents. Use force=true for others.")
+        raise ValueError("Can only delete non-draft document with force=true")
 
     # Cleanup files via file_service
     from services.file_service import delete_file
@@ -273,6 +298,7 @@ async def delete_document(document_id: str, agent_id: str, force: bool = False) 
                 pass
 
     await db.documents.delete_one(query)
+    await db.change_requests.delete_many({"entity_id": document_id})
     return True
 
 
@@ -691,8 +717,7 @@ async def _notify_agent_action(doc, title, message, notification_type, user_name
 
 async def _convert_quote_to_invoice(quote, agent_id, now):
     """Convert an approved quote to a new invoice."""
-    count = await db.documents.count_documents({"agent_id": agent_id, "type": "invoice"})
-    invoice_number = f"INV-{datetime.now().year}-{str(count + 1).zfill(4)}"
+    invoice_number = await _next_document_number(agent_id, "invoice")
     invoice_id = f"doc_{uuid.uuid4().hex[:12]}"
 
     invoice_doc = {

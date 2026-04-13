@@ -98,7 +98,7 @@ class AuthLogoutResponse(BaseModel):
 
 @router.post("/auth/register")
 async def register_agent(data: AgentRegister, response: Response, request: Request):
-    rate_limit_check(request, "auth_register")
+    await rate_limit_check(request, "auth_register")
     existing = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
 
     if existing:
@@ -140,11 +140,13 @@ async def register_agent(data: AgentRegister, response: Response, request: Reque
 
 @router.post("/auth/login")
 async def login_agent(data: AgentLogin, response: Response, request: Request):
-    rate_limit_check(request, "auth_login")
+    await rate_limit_check(request, "auth_login")
     user = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
     if not user:
         capture_auth_failure("invalid_credentials", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if user.get("is_active", True) is False:
+        raise HTTPException(status_code=403, detail="Account is deactivated. Contact your administrator.")
     if not user.get('password_hash'):
         capture_auth_failure("oauth_only_account", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="This account was created with Google. Please login with Google, or create a password by clicking 'Create Account' with the same email.")
@@ -187,11 +189,13 @@ async def register_buyer(data: BuyerRegister, response: Response):
 
 @router.post("/auth/buyer/login")
 async def login_buyer(data: BuyerLogin, response: Response, request: Request):
-    rate_limit_check(request, "auth_login")
+    await rate_limit_check(request, "auth_login")
     user = await db.users.find_one({"email": data.email, "role": "buyer"}, {"_id": 0})
     if not user:
         capture_auth_failure("invalid_credentials", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if user.get("is_active", True) is False:
+        raise HTTPException(status_code=403, detail="Account is deactivated. Contact your administrator.")
     if not user.get('password_hash'):
         capture_auth_failure("oauth_only_account", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="This account was created with Google. Please login with Google, or create a password by clicking 'Create Account' with the same email.")
@@ -331,7 +335,7 @@ async def set_password_for_oauth_user(request: SetPasswordRequest, response: Res
 
 @router.post("/auth/forgot-password")
 async def forgot_password(request: ForgotPasswordRequest, req: Request):
-    rate_limit_check(req, "auth_password_reset")
+    await rate_limit_check(req, "auth_password_reset")
     email = request.email.lower().strip()
     role = request.role
     if role not in ['agent', 'buyer']:

@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse, FileResponse
 
 from database import db
 from core.auth import get_current_user, get_current_agent
+from core.access_control import get_workspace_owner_id
 from services import document_service
 from services import file_service
 from services.ai_service import extract_document_from_pdf
@@ -23,6 +24,13 @@ from models.schemas import DocumentUpdate, DocumentAction
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _effective_user_id(user: dict) -> str:
+    """Agents operate on workspace scope; buyers use own id."""
+    if user.get("role") == "agent":
+        return get_workspace_owner_id(user)
+    return user["user_id"]
 
 
 # ── Upload + preview (AI extraction is assistive only) ──
@@ -38,8 +46,9 @@ async def upload_document(
     if doc_type not in ("quote", "invoice"):
         doc_type = "quote"
 
+    scope_agent_id = get_workspace_owner_id(user)
     client = await db.clients.find_one(
-        {"client_id": client_id, "agent_id": user["user_id"]}, {"_id": 0}
+        {"client_id": client_id, "agent_id": scope_agent_id}, {"_id": 0}
     )
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
@@ -92,7 +101,7 @@ async def create_document_from_preview(request: Request, user: dict = Depends(ge
 
     try:
         result = await document_service.create_document(
-            agent_id=user["user_id"],
+            agent_id=get_workspace_owner_id(user),
             doc_type=doc_type,
             client_id=client_id,
             title=body.get("title", "Untitled Document"),
@@ -117,7 +126,7 @@ async def reupload_document_pdf(
     document_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_agent),
 ):
     """Upload a revised PDF with version tracking."""
-    query = {"document_id": document_id, "agent_id": user["user_id"]}
+    query = {"document_id": document_id, "agent_id": get_workspace_owner_id(user)}
     doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -137,7 +146,7 @@ async def reupload_document_pdf(
 
     return await document_service.reupload_document(
         document_id,
-        user["user_id"],
+        get_workspace_owner_id(user),
         result["stored_filename"],
         result["original_filename"],
         extraction,
@@ -149,7 +158,7 @@ async def reupload_document_pdf(
 async def update_document(document_id: str, data: DocumentUpdate, user: dict = Depends(get_current_agent)):
     try:
         updates = data.model_dump(exclude_none=False)
-        result = await document_service.update_document(document_id, user["user_id"], updates)
+        result = await document_service.update_document(document_id, get_workspace_owner_id(user), updates)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not result:
@@ -160,7 +169,7 @@ async def update_document(document_id: str, data: DocumentUpdate, user: dict = D
 @router.delete("/documents/{document_id}")
 async def delete_document(document_id: str, force: bool = False, user: dict = Depends(get_current_agent)):
     try:
-        deleted = await document_service.delete_document(document_id, user["user_id"], force)
+        deleted = await document_service.delete_document(document_id, get_workspace_owner_id(user), force)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not deleted:
@@ -171,7 +180,7 @@ async def delete_document(document_id: str, force: bool = False, user: dict = De
 @router.post("/documents/{document_id}/revert-to-draft")
 async def revert_document_to_draft(document_id: str, user: dict = Depends(get_current_agent)):
     try:
-        status = await document_service.revert_to_draft(document_id, user["user_id"])
+        status = await document_service.revert_to_draft(document_id, get_workspace_owner_id(user))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if status is None:
@@ -184,12 +193,12 @@ async def get_documents(
     doc_type: Optional[str] = None, status: Optional[str] = None,
     user: dict = Depends(get_current_user),
 ):
-    return await document_service.list_documents(user["user_id"], user["role"], doc_type, status)
+    return await document_service.list_documents(_effective_user_id(user), user["role"], doc_type, status)
 
 
 @router.get("/documents/{document_id}")
 async def get_document(document_id: str, user: dict = Depends(get_current_user)):
-    doc = await document_service.get_document(document_id, user["user_id"], user["role"])
+    doc = await document_service.get_document(document_id, _effective_user_id(user), user["role"])
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
@@ -197,7 +206,7 @@ async def get_document(document_id: str, user: dict = Depends(get_current_user))
 
 @router.get("/documents/{document_id}/source-pdf")
 async def get_document_source_pdf(document_id: str, user: dict = Depends(get_current_user)):
-    doc = await document_service.get_document(document_id, user["user_id"], user["role"])
+    doc = await document_service.get_document(document_id, _effective_user_id(user), user["role"])
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -230,7 +239,7 @@ async def upload_hero_image(document_id: str, file: UploadFile = File(...), user
     set_trace_action("hero_image_upload")
     set_trace_entity("document", document_id)
     trace_service("routes.documents_v2.upload_hero_image")
-    query = {"document_id": document_id, "agent_id": user["user_id"]}
+    query = {"document_id": document_id, "agent_id": get_workspace_owner_id(user)}
     doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -257,7 +266,7 @@ async def upload_hero_image(document_id: str, file: UploadFile = File(...), user
 
 @router.get("/documents/{document_id}/hero-image")
 async def get_hero_image(document_id: str, user: dict = Depends(get_current_user)):
-    doc = await document_service.get_document(document_id, user["user_id"], user["role"])
+    doc = await document_service.get_document(document_id, _effective_user_id(user), user["role"])
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -290,7 +299,7 @@ async def get_hero_image(document_id: str, user: dict = Depends(get_current_user
 
 @router.delete("/documents/{document_id}/hero-image")
 async def delete_hero_image(document_id: str, user: dict = Depends(get_current_agent)):
-    query = {"document_id": document_id, "agent_id": user["user_id"]}
+    query = {"document_id": document_id, "agent_id": get_workspace_owner_id(user)}
     doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -320,7 +329,7 @@ async def delete_hero_image(document_id: str, user: dict = Depends(get_current_a
 
 @router.get("/documents/{document_id}/qr-code")
 async def get_document_qr_code(document_id: str, user: dict = Depends(get_current_user)):
-    doc = await document_service.get_document(document_id, user["user_id"], user["role"])
+    doc = await document_service.get_document(document_id, _effective_user_id(user), user["role"])
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     if doc["type"] != "invoice":
@@ -359,7 +368,7 @@ async def get_document_qr_code(document_id: str, user: dict = Depends(get_curren
 @router.post("/documents/{document_id}/send")
 async def send_document(document_id: str, user: dict = Depends(get_current_agent)):
     try:
-        return await document_service.send_document(document_id, user["user_id"], user)
+        return await document_service.send_document(document_id, get_workspace_owner_id(user), user)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -368,7 +377,7 @@ async def send_document(document_id: str, user: dict = Depends(get_current_agent
 async def perform_document_action(document_id: str, action_data: DocumentAction, user: dict = Depends(get_current_user)):
     try:
         return await document_service.document_action(
-            document_id, action_data.action, user["user_id"], user["role"],
+            document_id, action_data.action, _effective_user_id(user), user["role"],
             user.get("name", ""), action_data.comment,
         )
     except ValueError as e:
@@ -377,14 +386,14 @@ async def perform_document_action(document_id: str, action_data: DocumentAction,
 
 @router.get("/timeline")
 async def get_document_timeline(user: dict = Depends(get_current_user)):
-    return await document_service.get_document_timeline(user["user_id"], user["role"])
+    return await document_service.get_document_timeline(_effective_user_id(user), user["role"])
 
 
 # ── PDF generation ──
 
 @router.get("/documents/{document_id}/pdf")
 async def get_document_pdf(document_id: str, user: dict = Depends(get_current_user)):
-    doc = await document_service.get_document(document_id, user["user_id"], user["role"])
+    doc = await document_service.get_document(document_id, _effective_user_id(user), user["role"])
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 

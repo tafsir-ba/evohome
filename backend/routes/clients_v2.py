@@ -6,11 +6,11 @@ Thin route layer. No is_demo. No business logic.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project, can_access_client, is_agent
+from core.access_control import can_access_project, can_access_client, is_agent, get_workspace_owner_id
 from services import client_service
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ async def list_clients(project_id: Optional[str] = None, user=Depends(get_curren
         if not await can_access_project(user, project_id):
             raise HTTPException(status_code=403, detail="Access denied to this project")
         return await client_service.list_clients_by_project(project_id)
-    return await client_service.list_clients_by_agent(user['user_id'])
+    return await client_service.list_clients_by_agent(get_workspace_owner_id(user))
 
 
 @router.get("/clients/{client_id}")
@@ -80,7 +80,7 @@ async def create_client(data: CreateClientRequest, user=Depends(get_current_agen
         raise HTTPException(status_code=403, detail="Access denied to project")
 
     client = await client_service.create_client(
-        agent_id=user['user_id'],
+        agent_id=get_workspace_owner_id(user),
         name=data.name,
         email=data.email,
         phone=data.phone,
@@ -105,11 +105,29 @@ async def update_client(client_id: str, data: UpdateClientRequest, user=Depends(
 
 
 @router.delete("/clients/{client_id}")
-async def delete_client(client_id: str, user=Depends(get_current_agent)):
-    """Delete a client. Agent only."""
+async def delete_client(
+    client_id: str,
+    force: bool = Query(False),
+    user=Depends(get_current_agent),
+):
+    """Delete a client with dependency guards."""
     if not await can_access_client(user, client_id):
         raise HTTPException(status_code=403, detail="Access denied")
-    deleted = await client_service.delete_client(client_id)
+    try:
+        deleted = await client_service.delete_client(client_id, force=force)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not deleted:
         raise HTTPException(status_code=404, detail="Client not found")
     return {"message": "Client deleted"}
+
+
+@router.get("/clients/{client_id}/delete-impact")
+async def get_client_delete_impact(client_id: str, user=Depends(get_current_agent)):
+    """Preview linked records and risks before deleting a client."""
+    if not await can_access_client(user, client_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    client = await client_service.get_client(client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return await client_service.get_client_delete_impact(client_id)
