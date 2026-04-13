@@ -147,15 +147,15 @@ export const AgentDocuments = () => {
             </h1>
             <p className="text-muted-foreground mt-1">{filtered.length} document{filtered.length !== 1 ? 's' : ''}</p>
           </div>
-          <div className="flex gap-2">
-            <Link to="/agent/documents/new?type=quote">
-              <Button className="rounded-lg" data-testid="create-quote-btn">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Link to="/agent/documents/new?type=quote" className="w-full sm:w-auto">
+              <Button className="rounded-lg w-full" data-testid="create-quote-btn">
                 <Plus className="w-4 h-4 mr-2" />
                 New Quote
               </Button>
             </Link>
-            <Link to="/agent/documents/new?type=invoice">
-              <Button variant="outline" className="rounded-lg" data-testid="create-invoice-btn">
+            <Link to="/agent/documents/new?type=invoice" className="w-full sm:w-auto">
+              <Button variant="outline" className="rounded-lg w-full" data-testid="create-invoice-btn">
                 <Plus className="w-4 h-4 mr-2" />
                 New Invoice
               </Button>
@@ -164,7 +164,7 @@ export const AgentDocuments = () => {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -176,7 +176,7 @@ export const AgentDocuments = () => {
             />
           </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[150px] rounded-lg" data-testid="category-filter">
+            <SelectTrigger className="w-full sm:w-[150px] rounded-lg" data-testid="category-filter">
               <SelectValue placeholder="Category" />
             </SelectTrigger>
             <SelectContent>
@@ -186,7 +186,7 @@ export const AgentDocuments = () => {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px] rounded-lg" data-testid="status-filter">
+            <SelectTrigger className="w-full sm:w-[180px] rounded-lg" data-testid="status-filter">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -211,16 +211,16 @@ export const AgentDocuments = () => {
                   data-testid={`document-item-${id}`}
                 >
                   <Card className="border-[#E2E8F0] rounded-sm hover:border-primary/20 transition-colors">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between">
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center flex-wrap gap-2">
                             <span className={`text-xs font-medium px-2 py-0.5 rounded ${doc.type === 'invoice' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
                               {doc.type === 'invoice' ? 'Invoice' : 'Quote'}
                             </span>
-                            <h3 className="font-medium text-foreground truncate">{doc.title}</h3>
                             <StatusBadge status={doc.status} />
                           </div>
+                          <h3 className="font-medium text-foreground mt-2 break-words">{doc.title}</h3>
                           <p className="text-sm text-muted-foreground mt-1">
                             {formatDocContext({ document_number: doc.document_number, client_name: doc.client_name, project_name: doc.project_name, unit_reference: doc.unit_reference })}
                           </p>
@@ -232,27 +232,29 @@ export const AgentDocuments = () => {
                             <p className="text-sm text-orange-600 mt-1 italic">CR: "{doc.change_request_comment}"</p>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="text-right mr-2">
-                            <p className="text-lg font-semibold text-foreground">{formatCurrency(doc.amount)}</p>
+                        <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto border-t border-border pt-3 sm:border-0 sm:pt-0">
+                          <div className="text-left sm:text-right sm:mr-1">
+                            <p className="text-xl sm:text-lg font-semibold text-foreground whitespace-nowrap">{formatCurrency(doc.amount)}</p>
                           </div>
-                          {doc.pdf_stored_filename && (
-                            <Button variant="ghost" size="icon" className="rounded-sm"
-                              onClick={(e) => handleDownloadPDF(e, id, doc.document_number)}
-                              data-testid={`download-pdf-${id}`} title="Download PDF">
-                              <Download className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {(doc.status === 'Draft' || doc.status === 'Rejected') && (
-                            <Button variant="ghost" size="icon"
-                              className="rounded-sm text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={(e) => handleDelete(e, id, doc.status)}
-                              disabled={deletingId === id}
-                              data-testid={`delete-doc-${id}`} title="Delete">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                            {doc.pdf_stored_filename && (
+                              <Button variant="ghost" size="icon" className="rounded-sm"
+                                onClick={(e) => handleDownloadPDF(e, id, doc.document_number)}
+                                data-testid={`download-pdf-${id}`} title="Download PDF">
+                                <Download className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {(doc.status === 'Draft' || doc.status === 'Rejected') && (
+                              <Button variant="ghost" size="icon"
+                                className="rounded-sm text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={(e) => handleDelete(e, id, doc.status)}
+                                disabled={deletingId === id}
+                                data-testid={`delete-doc-${id}`} title="Delete">
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                            <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                          </div>
                         </div>
                       </div>
                     </CardContent>

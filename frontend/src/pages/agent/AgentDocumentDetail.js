@@ -134,14 +134,14 @@ export const AgentDocumentDetail = () => {
             <Link to="/agent/documents" className="inline-flex items-center text-sm text-muted-foreground hover:text-primary mb-4 transition-colors" data-testid="back-link">
               <ArrowLeft className="w-4 h-4 mr-2" /> Back to Documents
             </Link>
-            <h1 className="text-2xl sm:text-3xl font-outfit font-semibold text-foreground tracking-tight">{doc.title}</h1>
-            <div className="flex items-center gap-4 mt-2">
+            <h1 className="text-2xl sm:text-3xl font-outfit font-semibold text-foreground tracking-tight break-words">{doc.title}</h1>
+            <div className="flex items-center flex-wrap gap-2 sm:gap-4 mt-2">
               <span className={`text-xs font-medium px-2 py-0.5 rounded ${isInvoice ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>{typeLabel}</span>
-              <p className="text-muted-foreground">{doc.document_number}</p>
+              <p className="text-muted-foreground break-all">{doc.document_number}</p>
               <StatusBadge status={doc.status} />
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             {canEdit && (
               <Button variant="outline" size="icon" className="rounded-lg" onClick={() => navigate(`/agent/documents/edit/${id}`)} data-testid="edit-doc-btn">
                 <Pencil className="w-4 h-4" />
@@ -156,12 +156,12 @@ export const AgentDocumentDetail = () => {
               </Button>
             )}
             {canSend && (
-              <Button className="bg-primary hover:bg-primary/90 rounded-lg" onClick={handleSend} disabled={sendLoading} data-testid="send-doc-btn">
+              <Button className="bg-primary hover:bg-primary/90 rounded-lg w-full sm:w-auto" onClick={handleSend} disabled={sendLoading} data-testid="send-doc-btn">
                 <Send className="w-4 h-4 mr-2" /> {sendLoading ? 'Sending...' : `Send ${typeLabel}`}
               </Button>
             )}
             {isInvoice && doc.status !== 'Paid' && doc.status !== 'Draft' && (
-              <Button className="bg-emerald-600 hover:bg-emerald-700 rounded-lg" onClick={handleMarkPaid} disabled={markingPaid} data-testid="mark-paid-btn">
+              <Button className="bg-emerald-600 hover:bg-emerald-700 rounded-lg w-full sm:w-auto" onClick={handleMarkPaid} disabled={markingPaid} data-testid="mark-paid-btn">
                 <CheckCircle className="w-4 h-4 mr-2" /> {markingPaid ? 'Processing...' : 'Mark as Paid'}
               </Button>
             )}
@@ -177,11 +177,11 @@ export const AgentDocumentDetail = () => {
                 <div className="flex-1">
                   <p className="font-medium text-amber-800">Change Requested by Buyer</p>
                   <p className="text-sm text-amber-700 mt-1 whitespace-pre-wrap">{doc.change_request_comment}</p>
-                  <div className="flex gap-2 mt-4">
-                    <Button size="sm" variant="outline" className="border-amber-500/30 text-amber-700 hover:bg-amber-500/10" onClick={() => navigate(`/agent/documents/edit/${id}`)}>
+                  <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                    <Button size="sm" variant="outline" className="border-amber-500/30 text-amber-700 hover:bg-amber-500/10 w-full sm:w-auto" onClick={() => navigate(`/agent/documents/edit/${id}`)}>
                       <Pencil className="w-4 h-4 mr-2" /> Edit {typeLabel}
                     </Button>
-                    <Button size="sm" variant="outline" className="border-amber-500/30 text-amber-700 hover:bg-amber-500/10" onClick={handleResend}>
+                    <Button size="sm" variant="outline" className="border-amber-500/30 text-amber-700 hover:bg-amber-500/10 w-full sm:w-auto" onClick={handleResend}>
                       <Send className="w-4 h-4 mr-2" /> Resend to Buyer
                     </Button>
                   </div>
@@ -203,19 +203,21 @@ export const AgentDocumentDetail = () => {
                   <p className="text-muted-foreground mb-6">{doc.description || doc.summary}</p>
                 )}
                 {items.length > 0 && (
-                  <table className="table-swiss">
-                    <thead><tr><th>Description</th><th className="text-right">Qty</th><th className="text-right">Unit Price</th><th className="text-right">Total</th></tr></thead>
-                    <tbody>
-                      {items.map((item, i) => (
-                        <tr key={`item-${i}`}><td>{item.description}</td><td className="text-right">{item.quantity}</td><td className="text-right">{formatCurrency(item.unit_price)}</td><td className="text-right font-medium">{formatCurrency(item.total)}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="overflow-x-auto -mx-1 px-1">
+                    <table className="table-swiss min-w-[640px]">
+                      <thead><tr><th>Description</th><th className="text-right">Qty</th><th className="text-right">Unit Price</th><th className="text-right">Total</th></tr></thead>
+                      <tbody>
+                        {items.map((item, i) => (
+                          <tr key={`item-${i}`}><td>{item.description}</td><td className="text-right">{item.quantity}</td><td className="text-right">{formatCurrency(item.unit_price)}</td><td className="text-right font-medium">{formatCurrency(item.total)}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
                 <div className="mt-6 pt-6 border-t border-[#E2E8F0] flex justify-end">
                   <div className="text-right">
                     <p className="text-xs font-medium tracking-widest uppercase text-muted-foreground">{isInvoice ? 'Amount Due' : 'Total Amount'}</p>
-                    <p className="text-3xl font-outfit font-semibold text-foreground mt-1">{formatCurrency(doc.amount)}</p>
+                    <p className="text-2xl sm:text-3xl font-outfit font-semibold text-foreground mt-1">{formatCurrency(doc.amount)}</p>
                   </div>
                 </div>
                 {doc.notes && (
