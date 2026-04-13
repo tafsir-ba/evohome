@@ -594,7 +594,7 @@ export const useSettings = () => {
 export const SettingsProvider = ({ children }) => {
   const { user } = useAuth();
   const [settings, setSettings] = useState({
-    language: 'en',
+    language: 'fr',
     currency: 'CHF',
     company_name: '',
     company_logo_url: null,
@@ -618,7 +618,11 @@ export const SettingsProvider = ({ children }) => {
       const res = await fetch(`${API}/settings`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
-        setSettings(prev => ({ ...prev, ...data }));
+        const savedLang = localStorage.getItem('evohome_language');
+        const preferredLang = (savedLang === 'en' || savedLang === 'fr')
+          ? savedLang
+          : (data.language || 'fr');
+        setSettings(prev => ({ ...prev, ...data, language: preferredLang }));
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -635,9 +639,11 @@ export const SettingsProvider = ({ children }) => {
         const data = await res.json();
         setAgentBranding(data);
         // Use agent's language preference for buyer interface
-        if (data.language) {
-          setSettings(prev => ({ ...prev, language: data.language, currency: data.currency || 'CHF' }));
-        }
+        const savedLang = localStorage.getItem('evohome_language');
+        const preferredLang = (savedLang === 'en' || savedLang === 'fr')
+          ? savedLang
+          : (data.language || 'fr');
+        setSettings(prev => ({ ...prev, language: preferredLang, currency: data.currency || 'CHF' }));
       }
     } catch (error) {
       console.error('Failed to fetch agent branding:', error);
@@ -748,6 +754,9 @@ export const SettingsProvider = ({ children }) => {
     const savedLang = localStorage.getItem('evohome_language');
     if (savedLang && (savedLang === 'en' || savedLang === 'fr')) {
       setSettings(prev => ({ ...prev, language: savedLang }));
+    } else {
+      localStorage.setItem('evohome_language', 'fr');
+      setSettings(prev => ({ ...prev, language: 'fr' }));
     }
   }, []);
 
