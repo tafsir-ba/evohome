@@ -10,6 +10,7 @@ import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { ThemeToggle } from '../../components/ThemeToggle';
+import { LanguageToggle } from '../../components/LanguageToggle';
 import { NotificationCenter } from '../../components/NotificationCenter';
 import { PdfViewer } from '../../components/PdfViewer';
 import { 
@@ -1965,6 +1966,7 @@ export const BuyerTimeline = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <LanguageToggle />
               <Button
                 variant="ghost"
                 size="icon"

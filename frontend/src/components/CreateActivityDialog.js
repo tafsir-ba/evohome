@@ -101,7 +101,9 @@ export const CreateActivityDialog = ({ open, onOpenChange, projects, clients, on
   const photoPreviewUrls = usePreviewUrls(photoFiles);
 
   const projectClients = useMemo(
-    () => clients.filter((c) => !projectId || c.project_id === projectId),
+    () => clients
+      .filter((c) => c?.client_id)
+      .filter((c) => !projectId || c.project_id === projectId),
     [clients, projectId]
   );
 
@@ -329,7 +331,7 @@ export const CreateActivityDialog = ({ open, onOpenChange, projects, clients, on
                       <Checkbox
                         checked={clientIds.length === projectClients.length && projectClients.length > 0}
                         onCheckedChange={(checked) => {
-                          setClientIds(checked ? projectClients.map((c) => c.client_id) : []);
+                          setClientIds(checked ? projectClients.map((c) => String(c.client_id)) : []);
                         }}
                         data-testid="select-all-clients"
                       />
@@ -338,12 +340,13 @@ export const CreateActivityDialog = ({ open, onOpenChange, projects, clients, on
                     {projectClients.map((client) => (
                       <div key={client.client_id} className="flex items-center space-x-2">
                         <Checkbox
-                          checked={clientIds.includes(client.client_id)}
+                          checked={clientIds.includes(String(client.client_id))}
                           onCheckedChange={(checked) => {
+                            const normalizedId = String(client.client_id);
                             setClientIds((prev) =>
                               checked
-                                ? [...prev, client.client_id]
-                                : prev.filter((id) => id !== client.client_id)
+                                ? [...prev, normalizedId]
+                                : prev.filter((id) => id !== normalizedId)
                             );
                           }}
                           data-testid={`client-checkbox-${client.client_id}`}

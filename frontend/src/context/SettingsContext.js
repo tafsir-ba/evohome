@@ -594,7 +594,7 @@ export const useSettings = () => {
 export const SettingsProvider = ({ children }) => {
   const { user } = useAuth();
   const [settings, setSettings] = useState({
-    language: 'fr',
+    language: 'en',
     currency: 'CHF',
     company_name: '',
     company_logo_url: null,
@@ -621,7 +621,7 @@ export const SettingsProvider = ({ children }) => {
         const savedLang = localStorage.getItem('evohome_language');
         const preferredLang = (savedLang === 'en' || savedLang === 'fr')
           ? savedLang
-          : (data.language || 'fr');
+          : (data.language || 'en');
         setSettings(prev => ({ ...prev, ...data, language: preferredLang }));
       }
     } catch (error) {
@@ -642,7 +642,7 @@ export const SettingsProvider = ({ children }) => {
         const savedLang = localStorage.getItem('evohome_language');
         const preferredLang = (savedLang === 'en' || savedLang === 'fr')
           ? savedLang
-          : (data.language || 'fr');
+          : (data.language || 'en');
         setSettings(prev => ({ ...prev, language: preferredLang, currency: data.currency || 'CHF' }));
       }
     } catch (error) {
@@ -755,8 +755,8 @@ export const SettingsProvider = ({ children }) => {
     if (savedLang && (savedLang === 'en' || savedLang === 'fr')) {
       setSettings(prev => ({ ...prev, language: savedLang }));
     } else {
-      localStorage.setItem('evohome_language', 'fr');
-      setSettings(prev => ({ ...prev, language: 'fr' }));
+      localStorage.setItem('evohome_language', 'en');
+      setSettings(prev => ({ ...prev, language: 'en' }));
     }
   }, []);
 

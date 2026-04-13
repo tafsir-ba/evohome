@@ -112,6 +112,44 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
             "resolved_at": cr.get("resolved_at"),
         } for cr in crs]
 
+    # ── Step 5b: Activity feed posts shared with buyer scope ──
+    recipient_rows = await db.activity_recipients.find(
+        {"client_id": {"$in": peer_client_ids}},
+        {"_id": 0, "activity_id": 1},
+    ).to_list(5000)
+    activity_ids = list({r.get("activity_id") for r in recipient_rows if r.get("activity_id")})
+    activities: List[Dict[str, Any]] = []
+    if activity_ids:
+        raw_activities = await db.activities.find(
+            {"activity_id": {"$in": activity_ids}, "is_draft": {"$ne": True}},
+            {"_id": 0}
+        ).sort("created_at", -1).to_list(200)
+
+        author_ids = list({a.get("author_id") for a in raw_activities if a.get("author_id")})
+        author_map: Dict[str, str] = {}
+        if author_ids:
+            authors = await db.users.find(
+                {"user_id": {"$in": author_ids}},
+                {"_id": 0, "user_id": 1, "name": 1},
+            ).to_list(len(author_ids))
+            author_map = {u["user_id"]: u.get("name", "Agent") for u in authors}
+
+        activities = [{
+            "activity_id": a.get("activity_id"),
+            "type": a.get("type", "message"),
+            "title": a.get("title", ""),
+            "content": a.get("content", ""),
+            "file_url": file_service.get_file_url(a["stored_filename"]) if a.get("stored_filename") else a.get("file_url"),
+            "file_name": a.get("file_name"),
+            "file_type": a.get("file_type"),
+            "author_id": a.get("author_id"),
+            "author_name": author_map.get(a.get("author_id"), "Agent"),
+            "project_id": a.get("project_id"),
+            "unit_id": a.get("unit_id"),
+            "created_at": a.get("created_at"),
+            "updated_at": a.get("updated_at"),
+        } for a in raw_activities]
+
     # ── Step 6: Decisions requiring buyer response ──
     # Query via decision_recipients (linked by client_id); group by decision for multi-client buyers
     pending_recipients = await db.decision_recipients.find(
@@ -216,6 +254,7 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
         "branding": branding,
         "documents": documents,
         "vault_files": vault_files,
+        "activities": activities,
         "change_requests": change_requests,
         "decisions": decisions,
         "team": team,
@@ -286,6 +325,7 @@ def _empty_portal() -> Dict[str, Any]:
         "branding": {},
         "documents": [],
         "vault_files": [],
+        "activities": [],
         "change_requests": [],
         "decisions": [],
         "team": [],
