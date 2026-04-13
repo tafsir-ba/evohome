@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -25,7 +25,6 @@ import {
   ChevronDown,
   ChevronUp,
   HardHat,
-  CreditCard,
   Send,
   Loader2,
   Calendar,
@@ -37,9 +36,6 @@ import {
   ExternalLink,
   ImageIcon,
   Bell,
-  Users,
-  Mail,
-  Phone,
   Building2,
   FolderOpen,
   FileCheck,
@@ -50,7 +46,14 @@ import {
   Paperclip
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { Feed } from '../../components/Feed';
+
+const BUYER_CATEGORY_COLORS = {
+  quote: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+  invoice: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+  update: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+  vault: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+  decision: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20',
+};
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
@@ -244,145 +247,6 @@ const formatDate = (dateStr) => {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-// Buyer Decisions View — shows decisions requiring buyer action
-const BuyerDecisionsView = ({ decisions, onRespond, highlightDecisionId }) => {
-  const [expandedId, setExpandedId] = useState(null);
-  const [comment, setComment] = useState('');
-  const [responding, setResponding] = useState(false);
-
-  useEffect(() => {
-    if (!highlightDecisionId || decisions.length === 0) return;
-    const found = decisions.find(d => d.decision_id === highlightDecisionId);
-    if (!found) return;
-    setExpandedId(highlightDecisionId);
-    requestAnimationFrame(() => {
-      const el = document.querySelector(`[data-testid="buyer-decision-${highlightDecisionId}"]`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
-        setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
-      }
-    });
-  }, [highlightDecisionId, decisions]);
-
-  const handleRespond = async (decisionId, action) => {
-    setResponding(true);
-    await onRespond(decisionId, action, action === 'request_change' ? comment : null);
-    setComment('');
-    setResponding(false);
-  };
-
-  if (decisions.length === 0) {
-    return (
-      <Card className="text-center py-12">
-        <CardContent>
-          <CheckSquare className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-          <p className="text-muted-foreground">No decisions yet</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-3" data-testid="buyer-decisions-view">
-      {decisions.map(d => {
-        const isExpanded = expandedId === d.decision_id;
-        const isPending = d.buyer_status === 'pending';
-        const isOverdue = d.deadline && d.status === 'pending' && new Date(d.deadline) < new Date();
-        return (
-          <Card
-            key={d.decision_id}
-            className={cn('transition-all', isPending && 'border-amber-500/30', isOverdue && 'border-red-500/30')}
-            data-testid={`buyer-decision-${d.decision_id}`}
-          >
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : d.decision_id)}>
-                {d.buyer_status === 'approved' ? (
-                  <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
-                ) : d.buyer_status === 'rejected' ? (
-                  <XCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
-                ) : (
-                  <Clock className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                )}
-                <div className="flex-1">
-                  <p className="font-medium">{d.title}</p>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                    {d.deadline && (
-                      <span className={cn("flex items-center gap-1", isOverdue && "text-red-600 font-medium")}>
-                        <Calendar className="w-3 h-3" />
-                        {isOverdue ? 'Overdue: ' : 'Due: '}{new Date(d.deadline).toLocaleDateString('de-CH')}
-                      </span>
-                    )}
-                    <span className="capitalize">{d.buyer_status}</span>
-                  </div>
-                </div>
-                {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-              </div>
-
-              {isExpanded && (
-                <div className="mt-4 space-y-4 pt-4 border-t">
-                  {d.description && <p className="text-sm whitespace-pre-wrap">{d.description}</p>}
-
-                  {d.external_link && (
-                    <a href={d.external_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline">
-                      <ExternalLink className="w-4 h-4" />Open external document
-                    </a>
-                  )}
-
-                  {d.attachments?.length > 0 && (
-                    <div className="space-y-1">
-                      {d.attachments.map((att, i) => (
-                        <a key={att.filename || `att-${i}`} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted text-sm">
-                          <Paperclip className="w-4 h-4" />
-                          {att.filename || 'Attachment'}
-                        </a>
-                      ))}
-                    </div>
-                  )}
-
-                  {isPending && (
-                    <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleRespond(d.decision_id, 'approved')} disabled={responding} data-testid={`approve-decision-${d.decision_id}`}>
-                          <CheckCircle className="w-4 h-4 mr-1" />Approve
-                        </Button>
-                        <Button size="sm" variant="outline" className="text-red-600 border-red-500/30 hover:bg-red-500/10" onClick={() => handleRespond(d.decision_id, 'rejected')} disabled={responding} data-testid={`reject-decision-${d.decision_id}`}>
-                          <XCircle className="w-4 h-4 mr-1" />Decline
-                        </Button>
-                      </div>
-                      <div className="space-y-2">
-                        <Textarea
-                          value={comment}
-                          onChange={e => setComment(e.target.value)}
-                          placeholder="Ask a question or request changes..."
-                          rows={2}
-                          className="text-sm"
-                          data-testid={`decision-comment-${d.decision_id}`}
-                        />
-                        {comment.trim() && (
-                          <Button size="sm" variant="outline" onClick={() => handleRespond(d.decision_id, 'request_change')} disabled={responding}>
-                            <Send className="w-4 h-4 mr-1" />Send Question
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {d.buyer_status === 'approved' && (
-                    <div className="p-3 rounded-lg bg-emerald-500/10 text-sm text-emerald-700">You approved this decision.</div>
-                  )}
-                  {d.buyer_status === 'rejected' && (
-                    <div className="p-3 rounded-lg bg-red-500/10 text-sm text-red-700">You declined this decision.</div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
-};
 
 const formatRelativeTime = (dateStr) => {
   const date = new Date(dateStr);
@@ -394,6 +258,212 @@ const formatRelativeTime = (dateStr) => {
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
   return formatDate(dateStr);
+};
+
+const mapLegacyTabToFilter = (tab) => {
+  const normalized = (tab || '').toLowerCase();
+  if (normalized === 'documents') return 'all';
+  if (normalized === 'updates') return 'updates';
+  if (normalized === 'vault') return 'vault';
+  if (normalized === 'decisions') return 'decisions';
+  return null;
+};
+
+const FEED_FILTERS = [
+  { key: 'all', label: 'All', icon: Home },
+  { key: 'quotes', label: 'Quotes', icon: FileText },
+  { key: 'invoices', label: 'Invoices', icon: Receipt },
+  { key: 'updates', label: 'Updates', icon: Bell },
+  { key: 'vault', label: 'Vault', icon: FolderOpen },
+  { key: 'decisions', label: 'Decisions', icon: CheckSquare },
+];
+
+const resolveFeedFileUrl = (fileUrl) => {
+  if (!fileUrl) return null;
+  if (String(fileUrl).startsWith('http')) return fileUrl;
+  return `${process.env.REACT_APP_BACKEND_URL}${fileUrl}`;
+};
+
+const getActivityBody = (activity) => {
+  const title = activity?.title?.trim();
+  const content = activity?.content?.trim();
+  if (title && content) return `${title}\n\n${content}`;
+  return content || title || '';
+};
+
+const BuyerUpdateFeedCard = ({ activity, highlight = false }) => {
+  const fileUrl = resolveFeedFileUrl(activity.file_url);
+  const postBody = getActivityBody(activity);
+  const ext = String(activity.file_name || '').split('.').pop()?.toLowerCase();
+  const isImage = activity.type === 'image' || Boolean(activity.file_type?.startsWith('image/')) || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
+
+  return (
+    <Card
+      className={cn(
+        'mb-6 overflow-hidden transition-all duration-200 hover:shadow-md',
+        highlight && 'ring-2 ring-primary/40'
+      )}
+      data-testid={`buyer-update-${activity.activity_id}`}
+    >
+      <CardContent className="p-0">
+        <div className="px-4 pt-4 pb-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">{activity.author_name || 'Your agent'}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{formatRelativeTime(activity.created_at)}</p>
+            </div>
+            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase tracking-wider bg-blue-500/10 text-blue-600 border-blue-500/20">
+              Update
+            </span>
+          </div>
+        </div>
+
+        {isImage && fileUrl && (
+          <div className="border-y border-border bg-muted/30">
+            <img src={fileUrl} alt={activity.file_name || 'Update attachment'} className="w-full max-h-[420px] object-contain" />
+          </div>
+        )}
+
+        {!isImage && fileUrl && (
+          <div className="mx-4 mt-2 p-3 rounded-lg border border-border bg-muted/30 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <span className="text-sm truncate">{activity.file_name || 'Attachment'}</span>
+            </div>
+            <Button variant="outline" size="sm" asChild className="flex-shrink-0">
+              <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                <Eye className="w-4 h-4 mr-1.5" />
+                Open
+              </a>
+            </Button>
+          </div>
+        )}
+
+        {postBody && (
+          <div className="px-4 py-3">
+            <p className="text-sm text-foreground whitespace-pre-wrap break-words">{postBody}</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+const DecisionFeedCard = ({ decision, onRespond, highlighted = false }) => {
+  const [expanded, setExpanded] = useState(Boolean(highlighted));
+  const [comment, setComment] = useState('');
+  const [responding, setResponding] = useState(false);
+  const isPending = decision?.buyer_status === 'pending';
+  const isOverdue = decision?.deadline && decision?.status === 'pending' && new Date(decision.deadline) < new Date();
+
+  useEffect(() => {
+    if (highlighted) setExpanded(true);
+  }, [highlighted]);
+
+  const handleRespond = async (action) => {
+    setResponding(true);
+    try {
+      await onRespond(decision.decision_id, action, action === 'request_change' ? comment : null);
+      if (action === 'request_change') setComment('');
+    } finally {
+      setResponding(false);
+    }
+  };
+
+  return (
+    <Card
+      className={cn(
+        'mb-6 overflow-hidden transition-all duration-200 hover:shadow-md',
+        isPending && 'border-amber-500/30',
+        isOverdue && 'border-red-500/30',
+        highlighted && 'ring-2 ring-primary/40'
+      )}
+      data-testid={`feed-card-decision-${decision.decision_id}`}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3 cursor-pointer" onClick={() => setExpanded((v) => !v)}>
+          {decision.buyer_status === 'approved' ? (
+            <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+          ) : decision.buyer_status === 'rejected' ? (
+            <XCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+          ) : (
+            <Clock className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={cn('inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase tracking-wider', BUYER_CATEGORY_COLORS.decision)}>
+                Decision
+              </span>
+              <span className="text-xs text-muted-foreground capitalize">{decision.buyer_status}</span>
+            </div>
+            <p className="font-semibold text-foreground mt-2">{decision.title}</p>
+            {decision.deadline && (
+              <p className={cn('text-xs mt-1', isOverdue ? 'text-red-600 font-medium' : 'text-muted-foreground')}>
+                Due: {new Date(decision.deadline).toLocaleDateString('de-CH')}
+              </p>
+            )}
+          </div>
+          {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </div>
+
+        {expanded && (
+          <div className="mt-4 pt-4 border-t space-y-3">
+            {decision.description && <p className="text-sm whitespace-pre-wrap">{decision.description}</p>}
+            {decision.external_link && (
+              <a href={decision.external_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+                <ExternalLink className="w-4 h-4" />
+                Open linked file
+              </a>
+            )}
+            {decision.attachments?.length > 0 && (
+              <div className="space-y-1.5">
+                {decision.attachments.map((att, idx) => (
+                  <a
+                    key={att.filename || idx}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 hover:bg-muted text-sm"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                    {att.filename || 'Attachment'}
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {isPending && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleRespond('approved')} disabled={responding}>
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Approve
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-red-600 border-red-500/30 hover:bg-red-500/10" onClick={() => handleRespond('rejected')} disabled={responding}>
+                    <XCircle className="w-4 h-4 mr-1" />
+                    Decline
+                  </Button>
+                </div>
+                <Textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Ask a question or request changes..."
+                  rows={2}
+                  className="text-sm"
+                />
+                {comment.trim() && (
+                  <Button size="sm" variant="outline" onClick={() => handleRespond('request_change')} disabled={responding}>
+                    <Send className="w-4 h-4 mr-1" />
+                    Send request
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 };
 
 // Status configurations
@@ -1178,14 +1248,16 @@ const QrPaymentModal = ({ isOpen, onClose, invoice, qrData, loading }) => {
 // Main Buyer Timeline Page
 export const BuyerTimeline = () => {
   const { user, logout } = useAuth();
-  const { getLogo, getCompanyName, t, formatCurrency: settingsFormatCurrency } = useSettings();
+  const { getLogo, getCompanyName, t } = useSettings();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeView = searchParams.get('tab') || 'documents';
+  const rawTab = searchParams.get('tab') || 'all';
+  const legacyMappedFilter = mapLegacyTabToFilter(rawTab);
+  const feedFilter = FEED_FILTERS.some((f) => f.key === rawTab) ? rawTab : (legacyMappedFilter || 'all');
   const deepLinkHandled = useRef(new Set());
-  const setActiveView = useCallback((view) => {
+  const setFeedFilter = useCallback((nextFilter) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      next.set('tab', view);
+      next.set('tab', nextFilter);
       ['document_id', 'vault_document_id', 'activity_id', 'decision_id', 'milestone_step_id', 'change_request_id'].forEach((k) => next.delete(k));
       return next;
     }, { replace: true });
@@ -1201,6 +1273,7 @@ export const BuyerTimeline = () => {
   const vaultDocumentId = searchParams.get('vault_document_id');
   const milestoneStepId = searchParams.get('milestone_step_id');
   const decisionIdFromUrl = searchParams.get('decision_id');
+  const activityIdFromUrl = searchParams.get('activity_id');
   const changeRequestIdFromUrl = searchParams.get('change_request_id');
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState([]);
@@ -1213,8 +1286,8 @@ export const BuyerTimeline = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [teamMembers, setTeamMembers] = useState([]);
   const [constructionTimeline, setConstructionTimeline] = useState(null);
+  const [buyerActivities, setBuyerActivities] = useState([]);
   const [vaultDocuments, setVaultDocuments] = useState([]);
-  const [vaultLoading, setVaultLoading] = useState(false);
   const [buyerDecisions, setBuyerDecisions] = useState([]);
   
   // PDF Viewer state
@@ -1259,6 +1332,9 @@ export const BuyerTimeline = () => {
         // Team
         setTeamMembers(portal.team || []);
         
+        // Buyer activities (agent feed posts)
+        setBuyerActivities(portal.activities || []);
+        
         // Unread count
         setUnreadCount(portal.unread_count || 0);
         
@@ -1288,7 +1364,7 @@ export const BuyerTimeline = () => {
     }
   }, [fetchData]);
 
-  const { isConnected } = useWebSocket(user?.user_id, handleWebSocketMessage);
+  useWebSocket(user?.user_id, handleWebSocketMessage);
 
   useEffect(() => {
     fetchData();
@@ -1313,19 +1389,20 @@ export const BuyerTimeline = () => {
     setVaultDocuments(portal.vault_files || []);
     setBuyerDecisions(portal.decisions || []);
     setUnreadCount(portal.unread_count || 0);
-    if (portal.team) setTeamMembers(portal.team);
+    setTeamMembers(portal.team || []);
+    setBuyerActivities(portal.activities || []);
     return portal;
   };
 
-  // Mark activities as seen when viewing Updates tab
+  // Mark activities as seen when viewing Updates filter
   useEffect(() => {
-    if (activeView === 'updates') {
+    if (feedFilter === 'updates') {
       portalAction({ action: 'mark_seen' }).catch(() => {});
     }
-    if (activeView === 'vault' || activeView === 'decisions') {
+    if (feedFilter === 'vault' || feedFilter === 'decisions') {
       fetchData();
     }
-  }, [activeView, fetchData]);
+  }, [feedFilter, fetchData]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -1344,7 +1421,7 @@ export const BuyerTimeline = () => {
 
   useEffect(() => {
     if (loading || !decisionIdFromUrl) return;
-    if (activeView !== 'decisions' || buyerDecisions.length === 0) return;
+    if (feedFilter !== 'decisions' || buyerDecisions.length === 0) return;
     const ok = buyerDecisions.some((d) => d.decision_id === decisionIdFromUrl);
     if (!ok) {
       const k = `nodec-${decisionIdFromUrl}`;
@@ -1358,13 +1435,13 @@ export const BuyerTimeline = () => {
         }, { replace: true });
       }
     }
-  }, [loading, decisionIdFromUrl, activeView, buyerDecisions, setSearchParams]);
+  }, [loading, decisionIdFromUrl, feedFilter, buyerDecisions, setSearchParams]);
 
   useEffect(() => {
     if (loading) return;
 
     const run = () => {
-      if (documentId && activeView === 'documents') {
+      if (documentId && ['all', 'quotes', 'invoices'].includes(feedFilter)) {
         const exists = events.some((e) => e.id === documentId);
         const el = document.querySelector(`[data-testid="timeline-event-${documentId}"]`);
         if (el) {
@@ -1384,7 +1461,7 @@ export const BuyerTimeline = () => {
           }
         }
       }
-      if (vaultDocumentId && activeView === 'vault' && vaultDocuments.length > 0) {
+      if (vaultDocumentId && feedFilter === 'vault' && vaultDocuments.length > 0) {
         const match = vaultDocuments.find(
           (d) => d.vault_id === vaultDocumentId || d.vault_document_id === vaultDocumentId
         );
@@ -1434,7 +1511,7 @@ export const BuyerTimeline = () => {
     return () => cancelAnimationFrame(id);
   }, [
     loading,
-    activeView,
+    feedFilter,
     documentId,
     vaultDocumentId,
     milestoneStepId,
@@ -1613,6 +1690,170 @@ export const BuyerTimeline = () => {
     );
   });
 
+  const filteredDocumentsForSearch = filteredEvents;
+  const filteredVaultForSearch = vaultDocuments.filter((doc) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      doc.name?.toLowerCase().includes(query) ||
+      doc.original_filename?.toLowerCase().includes(query) ||
+      doc.category?.toLowerCase().includes(query) ||
+      doc.notes?.toLowerCase().includes(query)
+    );
+  });
+  const filteredDecisionsForSearch = buyerDecisions.filter((decision) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      decision.title?.toLowerCase().includes(query) ||
+      decision.description?.toLowerCase().includes(query) ||
+      decision.buyer_status?.toLowerCase().includes(query)
+    );
+  });
+  const filteredActivitiesForSearch = buyerActivities.filter((activity) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const body = getActivityBody(activity).toLowerCase();
+    return (
+      activity.author_name?.toLowerCase().includes(query) ||
+      activity.file_name?.toLowerCase().includes(query) ||
+      body.includes(query)
+    );
+  });
+
+  const socialFeedItems = useMemo(() => {
+    const entries = [];
+
+    if (feedFilter === 'all' || feedFilter === 'quotes' || feedFilter === 'invoices') {
+      filteredDocumentsForSearch.forEach((doc) => {
+        const normalizedType = String(doc.type || '').toLowerCase();
+        const kind = normalizedType === 'invoice' ? 'invoice' : 'quote';
+        if (feedFilter === 'quotes' && kind !== 'quote') return;
+        if (feedFilter === 'invoices' && kind !== 'invoice') return;
+        entries.push({
+          id: `document-${doc.id}`,
+          kind,
+          sortDate: doc.date || doc.created_at || doc.updated_at,
+          payload: doc,
+        });
+      });
+    }
+
+    if (feedFilter === 'all' || feedFilter === 'vault') {
+      filteredVaultForSearch.forEach((doc) => {
+        entries.push({
+          id: `vault-${doc.vault_id || doc.vault_document_id}`,
+          kind: 'vault',
+          sortDate: doc.created_at || doc.updated_at,
+          payload: doc,
+        });
+      });
+    }
+
+    if (feedFilter === 'all' || feedFilter === 'decisions') {
+      filteredDecisionsForSearch.forEach((decision) => {
+        entries.push({
+          id: `decision-${decision.decision_id}`,
+          kind: 'decision',
+          sortDate: decision.updated_at || decision.created_at || decision.deadline,
+          payload: decision,
+        });
+      });
+    }
+
+    if (feedFilter === 'all' || feedFilter === 'updates') {
+      filteredActivitiesForSearch.forEach((activity) => {
+        entries.push({
+          id: `activity-${activity.activity_id}`,
+          kind: 'updates',
+          sortDate: activity.created_at || activity.updated_at,
+          payload: activity,
+        });
+      });
+    }
+
+    return entries.sort((a, b) => {
+      const aTime = a.sortDate ? new Date(a.sortDate).getTime() : 0;
+      const bTime = b.sortDate ? new Date(b.sortDate).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [
+    feedFilter,
+    filteredDocumentsForSearch,
+    filteredVaultForSearch,
+    filteredDecisionsForSearch,
+    filteredActivitiesForSearch,
+  ]);
+
+  const pendingDecisionCount = buyerDecisions.filter((d) => d.buyer_status === 'pending').length;
+  const filterBadgeCounts = {
+    all: socialFeedItems.length,
+    quotes: filteredDocumentsForSearch.filter((d) => String(d.type || '').toLowerCase() !== 'invoice').length,
+    invoices: filteredDocumentsForSearch.filter((d) => String(d.type || '').toLowerCase() === 'invoice').length,
+    updates: unreadCount,
+    vault: filteredVaultForSearch.length,
+    decisions: pendingDecisionCount,
+  };
+
+  const renderFeedCard = (item) => {
+    if (item.kind === 'updates') {
+      return (
+        <BuyerUpdateFeedCard
+          key={item.id}
+          activity={item.payload}
+          highlight={searchParams.get('activity_id') === item.payload?.activity_id}
+        />
+      );
+    }
+
+    if (item.kind === 'vault') {
+      return (
+        <VaultDocumentCard
+          key={item.id}
+          document={item.payload}
+          onPreview={handleVaultPreview}
+          onDownload={handleVaultDownload}
+        />
+      );
+    }
+
+    if (item.kind === 'decision') {
+      return (
+        <DecisionFeedCard
+          key={item.id}
+          decision={item.payload}
+          onRespond={async (decisionId, action, comment) => {
+            try {
+              await portalAction({ action: 'respond_decision', decision_id: decisionId, option_id: action, comment });
+              toast.success(action === 'approved' ? 'Decision approved' : action === 'rejected' ? 'Decision declined' : 'Change request sent');
+            } catch {
+              toast.error('Failed to respond');
+            }
+          }}
+          highlighted={decisionIdFromUrl === item.payload?.decision_id}
+        />
+      );
+    }
+
+    if (item.kind === 'quote' || item.kind === 'invoice') {
+      return (
+        <TimelineCard
+          key={item.id}
+          event={item.payload}
+          onAction={handleAction}
+          onDownloadPdf={handleDownloadPdf}
+          onPreviewPdf={handlePreviewPdf}
+          onShowQrPayment={handleShowQrPayment}
+          initialExpanded={!!(documentId === item.payload.id && changeRequestIdFromUrl)}
+          highlightChangeRequestId={documentId === item.payload.id ? changeRequestIdFromUrl : null}
+          onClearChangeRequestParam={clearChangeRequestParam}
+        />
+      );
+    }
+
+    return null;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -1752,285 +1993,52 @@ export const BuyerTimeline = () => {
         {/* Construction Progress */}
         <ConstructionPhaseCard stages={stages} />
 
-        {/* View Tabs */}
-        <div className="flex gap-1 p-1 bg-muted rounded-lg mb-6">
-          <button
-            onClick={() => setActiveView('documents')}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
-              activeView === 'documents'
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            data-testid="tab-documents"
-          >
-            <Receipt className="w-4 h-4" />
-            <span className="hidden sm:inline">Quotes & Invoices</span>
-            <span className="sm:hidden">Quotes</span>
-            {pendingCount > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-primary text-primary-foreground">
-                {pendingCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveView('vault')}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
-              activeView === 'vault'
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            data-testid="tab-vault"
-          >
-            <FolderOpen className="w-4 h-4" />
-            <span className="hidden sm:inline">Shared Files</span>
-            <span className="sm:hidden">Files</span>
-            {vaultDocuments.length > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-muted-foreground/20 text-muted-foreground">
-                {vaultDocuments.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveView('updates')}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
-              activeView === 'updates'
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            data-testid="tab-updates"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="hidden sm:inline">Updates</span>
-            {unreadCount > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-primary text-primary-foreground animate-pulse">
-                {unreadCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveView('team')}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
-              activeView === 'team'
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            data-testid="tab-team"
-          >
-            <Users className="w-4 h-4" />
-            <span className="hidden sm:inline">Team</span>
-          </button>
-          <button
-            onClick={() => setActiveView('decisions')}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
-              activeView === 'decisions'
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            data-testid="tab-decisions"
-          >
-            <CheckSquare className="w-4 h-4" />
-            <span className="hidden sm:inline">Decisions</span>
-            {buyerDecisions.filter(d => d.buyer_status === 'pending').length > 0 && (
-              <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center font-medium">
-                {buyerDecisions.filter(d => d.buyer_status === 'pending').length}
-              </span>
-            )}
-          </button>
+        {/* Unified social feed filters */}
+        <div className="mb-4">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {FEED_FILTERS.map((filter) => {
+              const Icon = filter.icon;
+              const isActive = feedFilter === filter.key;
+              return (
+                <button
+                  key={filter.key}
+                  onClick={() => setFeedFilter(filter.key)}
+                  className={cn(
+                    'inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium border whitespace-nowrap transition-colors',
+                    isActive
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:text-foreground'
+                  )}
+                  data-testid={`tab-${filter.key}`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {filter.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Documents View */}
-        {activeView === 'documents' && (
-          <div className="relative">
-            {filteredEvents.length === 0 ? (
-              <Card className="text-center py-12">
-                <CardContent>
-                  <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground">
-                    {searchQuery ? 'No matching documents' : 'No documents yet'}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {searchQuery 
-                      ? 'Try a different search term' 
-                      : 'Your upgrade proposals and invoices will appear here'}
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              filteredEvents.map(event => (
-                <TimelineCard
-                  key={event.id}
-                  event={event}
-                  onAction={handleAction}
-                  onDownloadPdf={handleDownloadPdf}
-                  onPreviewPdf={handlePreviewPdf}
-                  onShowQrPayment={handleShowQrPayment}
-                  initialExpanded={!!(documentId === event.id && changeRequestIdFromUrl)}
-                  highlightChangeRequestId={documentId === event.id ? changeRequestIdFromUrl : null}
-                  onClearChangeRequestParam={clearChangeRequestParam}
-                />
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Vault Documents View */}
-        {activeView === 'vault' && (
-          <div className="space-y-3" data-testid="buyer-vault-view">
-            {vaultLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : vaultDocuments.length === 0 ? (
-              <Card className="text-center py-12">
-                <CardContent>
-                  <FolderOpen className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground font-medium">No shared files yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    When your agent shares contracts, plans, or other documents with you, they'll appear here.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <>
-                {/* Section Header */}
-                <div className="mb-4 pb-3 border-b border-border">
-                  <p className="text-sm text-muted-foreground">
-                    {vaultDocuments.length} file{vaultDocuments.length !== 1 ? 's' : ''} shared with you
-                  </p>
-                </div>
-                
-                {/* Action Required Documents First */}
-                {vaultDocuments.filter(d => d.doc_type === 'action_required').length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Action Required
-                    </p>
-                    {vaultDocuments
-                      .filter(d => d.doc_type === 'action_required')
-                      .map(doc => (
-                        <VaultDocumentCard
-                          key={doc.vault_id}
-                          document={doc}
-                          onPreview={handleVaultPreview}
-                          onDownload={handleVaultDownload}
-                        />
-                      ))}
-                  </div>
-                )}
-                
-                {/* General Documents */}
-                {vaultDocuments.filter(d => d.doc_type !== 'action_required').length > 0 && (
-                  <div>
-                    {vaultDocuments.filter(d => d.doc_type === 'action_required').length > 0 && (
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                        All Documents
-                      </p>
-                    )}
-                    {vaultDocuments
-                      .filter(d => d.doc_type !== 'action_required')
-                      .map(doc => (
-                        <VaultDocumentCard
-                          key={doc.vault_id}
-                          document={doc}
-                          onPreview={handleVaultPreview}
-                          onDownload={handleVaultDownload}
-                        />
-                      ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Updates/Feed View */}
-        {activeView === 'updates' && (
-          <Feed isAgent={false} embedded={true} highlightActivityId={searchParams.get('activity_id')} />
-        )}
-
-        {/* Team View */}
-        {activeView === 'team' && (
-          <div className="space-y-3">
-            {teamMembers.length === 0 ? (
-              <Card className="text-center py-12">
-                <CardContent>
-                  <Users className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground">No team contacts yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Your agent will add team contacts here
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              teamMembers.map(member => (
-                <Card key={member.member_id} className="border-border" data-testid={`team-member-${member.member_id}`}>
-                  <CardContent className="py-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-primary font-semibold text-sm">
-                            {(member.company_name || member.name || '').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                          </span>
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-foreground">{member.company_name || member.name}</h3>
-                          {member.contact_name && (
-                            <p className="text-sm text-muted-foreground">{member.contact_name}</p>
-                          )}
-                          <p className="text-sm text-primary">{member.role}</p>
-                          <div className="flex items-center gap-4 mt-2 flex-wrap">
-                            {member.email && (
-                              <a 
-                                href={`mailto:${member.email}`}
-                                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                              >
-                                <Mail className="w-3.5 h-3.5" />
-                                <span>{member.email}</span>
-                              </a>
-                            )}
-                            {member.phone && (
-                              <a 
-                                href={`tel:${member.phone}`}
-                                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                              >
-                                <Phone className="w-3.5 h-3.5" />
-                                <span>{member.phone}</span>
-                              </a>
-                            )}
-                          </div>
-                          {member.notes && (
-                            <p className="text-sm text-muted-foreground mt-2">{member.notes}</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Decisions View */}
-        {activeView === 'decisions' && (
-          <BuyerDecisionsView
-            decisions={buyerDecisions}
-            highlightDecisionId={decisionIdFromUrl}
-            onRespond={async (decisionId, action, comment) => {
-            try {
-              await portalAction({ action: 'respond_decision', decision_id: decisionId, option_id: action, comment });
-              toast.success(action === 'approved' ? 'Decision approved' : action === 'rejected' ? 'Decision declined' : 'Change request sent');
-            } catch {
-              toast.error('Failed to respond');
-            }
-          }} />
-        )}
+        {/* Unified social feed stack */}
+        <div className="space-y-4" data-testid="buyer-social-feed">
+          {socialFeedItems.length === 0 ? (
+            <Card className="text-center py-12">
+              <CardContent>
+                <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                <p className="text-muted-foreground">
+                  {searchQuery ? 'No matching items' : 'No feed items yet'}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {searchQuery
+                    ? 'Try another search term or filter'
+                    : 'Updates, quotes, invoices, decisions, and shared files will appear here'}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            socialFeedItems.map((item) => renderFeedCard(item))
+          )}
+        </div>
       </main>
 
       {/* Confirmation Dialog */}
