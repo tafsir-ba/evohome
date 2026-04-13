@@ -1654,7 +1654,8 @@ export const BuyerTimeline = () => {
   };
 
   const openBuyerSourcePdfSameAsDownload = async (documentId, documentTitle, { asDownload }) => {
-    const base = (documentTitle || `document_${documentId}`).replace(/[/\\?%*:|"<>]/g, '_').slice(0, 180);
+    let base = (documentTitle || `document_${documentId}`).replace(/[/\\?%*:|"<>]/g, '_').trim().slice(0, 180);
+    if (!base) base = `document_${documentId}`;
     try {
       const res = await fetch(`${API}/documents/${documentId}/source-pdf`, {
         credentials: 'include',
@@ -1669,14 +1670,16 @@ export const BuyerTimeline = () => {
       if (asDownload) {
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${base}.pdf`;
+        const name = base.toLowerCase().endsWith('.pdf') ? base : `${base}.pdf`;
+        a.download = name;
         a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
-        setTimeout(() => {
+        // Revoke only after the browser has picked up the blob URL (100ms was too short and broke saves).
+        window.setTimeout(() => {
           document.body.removeChild(a);
           window.URL.revokeObjectURL(url);
-        }, 100);
+        }, 120000);
       } else {
         window.open(url, '_blank', 'noopener,noreferrer');
         window.setTimeout(() => window.URL.revokeObjectURL(url), 120000);
@@ -1751,14 +1754,18 @@ export const BuyerTimeline = () => {
       } else {
         const a = window.document.createElement('a');
         a.href = url;
-        a.download = document.original_filename || document.name || 'document';
+        let fname = document.original_filename || document.name || 'document';
+        if (!fname.toLowerCase().includes('.') && (document.content_type || '').includes('pdf')) {
+          fname = `${fname}.pdf`;
+        }
+        a.download = fname;
         a.style.display = 'none';
         window.document.body.appendChild(a);
         a.click();
         window.setTimeout(() => {
           window.document.body.removeChild(a);
           window.URL.revokeObjectURL(url);
-        }, 100);
+        }, 120000);
       }
     } catch {
       toast.error(openInNewTab ? 'Failed to open document' : 'Failed to download document');
