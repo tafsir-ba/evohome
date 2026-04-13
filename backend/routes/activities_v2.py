@@ -71,6 +71,8 @@ class ActivityReplyCreate(BaseModel):
 class ActivityUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
+    project_id: Optional[str] = None
+    client_ids: Optional[list[str]] = None
 
 
 # ── Routes ──
@@ -414,8 +416,41 @@ async def update_activity(
         )
         if not p:
             raise HTTPException(status_code=403, detail="Access denied")
+    update_payload = data.model_dump(exclude_none=True)
+    target_project_id = update_payload.get("project_id") or activity.get("project_id")
+    scope_agent_id = get_workspace_owner_id(user)
+
+    if "project_id" in update_payload:
+        project = await db.projects.find_one(
+            {"project_id": update_payload["project_id"], "agent_id": scope_agent_id}, {"_id": 0}
+        )
+        if not project:
+            raise HTTPException(status_code=400, detail="Invalid project")
+
+    if "client_ids" in update_payload:
+        client_ids = [
+            str(cid).strip()
+            for cid in (update_payload.get("client_ids") or [])
+            if str(cid).strip()
+        ]
+        if not client_ids:
+            raise HTTPException(status_code=400, detail="At least one recipient is required")
+        clients = await db.clients.find(
+            {
+                "client_id": {"$in": client_ids},
+                "agent_id": scope_agent_id,
+                "project_id": target_project_id,
+            },
+            {"_id": 0, "client_id": 1},
+        ).to_list(len(client_ids))
+        found = {c["client_id"] for c in clients}
+        missing = [cid for cid in client_ids if cid not in found]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Invalid recipients for selected project: {', '.join(missing)}")
+        update_payload["client_ids"] = client_ids
+
     result = await activity_service.update_activity(
-        activity_id, activity.get("author_id"), data.title, data.content
+        activity_id, activity.get("author_id"), update_payload
     )
     if not result:
         raise HTTPException(status_code=404, detail="Activity not found")

@@ -842,10 +842,24 @@ async def get_document_timeline(user_id: str, role: str) -> Dict[str, Any]:
 # ── Private helpers ──
 
 async def _get_buyer_client_ids(buyer_id: str) -> List[str]:
+    """
+    Return buyer-linked client_ids plus same-unit peer client_ids.
+    Ensures legacy single-recipient records are still visible to co-owners.
+    """
     clients = await db.clients.find(
-        {"buyer_id": buyer_id}, {"_id": 0, "client_id": 1}
-    ).to_list(100)
-    return [c['client_id'] for c in clients]
+        {"buyer_id": buyer_id}, {"_id": 0, "client_id": 1, "unit_id": 1}
+    ).to_list(500)
+    direct_ids = [c['client_id'] for c in clients if c.get('client_id')]
+    unit_ids = list({c.get("unit_id") for c in clients if c.get("unit_id")})
+    if not unit_ids:
+        return direct_ids
+
+    peers = await db.clients.find(
+        {"unit_id": {"$in": unit_ids}}, {"_id": 0, "client_id": 1}
+    ).to_list(2000)
+    out = set(direct_ids)
+    out.update(c.get("client_id") for c in peers if c.get("client_id"))
+    return list(out)
 
 
 def _parse_due_date(due_date: Optional[str], doc_type: str) -> Optional[str]:

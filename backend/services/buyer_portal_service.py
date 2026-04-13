@@ -23,6 +23,34 @@ def _sort_vault_docs(docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(docs, key=_key, reverse=True)
 
 
+async def _get_buyer_client_scope(buyer_id: str) -> Dict[str, Any]:
+    """
+    Resolve buyer client scope including same-unit peer client records.
+    This keeps multi-owner unit views consistent across legacy + new rows.
+    """
+    clients = await db.clients.find(
+        {"buyer_id": buyer_id}, {"_id": 0}
+    ).to_list(500)
+    if not clients:
+        return {"clients": [], "client_ids": [], "peer_client_ids": []}
+
+    client_ids = list({c.get("client_id") for c in clients if c.get("client_id")})
+    unit_ids = list({c.get("unit_id") for c in clients if c.get("unit_id")})
+
+    peer_client_ids = set(client_ids)
+    if unit_ids:
+        peers = await db.clients.find(
+            {"unit_id": {"$in": unit_ids}}, {"_id": 0, "client_id": 1}
+        ).to_list(2000)
+        peer_client_ids.update(c.get("client_id") for c in peers if c.get("client_id"))
+
+    return {
+        "clients": clients,
+        "client_ids": client_ids,
+        "peer_client_ids": list(peer_client_ids),
+    }
+
+
 async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
     """
     Returns the buyer's complete portal state in one response.
@@ -30,15 +58,14 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
     """
 
     # ── Step 1: Find buyer's clients and linked entities ──
-    clients = await db.clients.find(
-        {"buyer_id": buyer_id}, {"_id": 0}
-    ).to_list(100)
-
+    scope = await _get_buyer_client_scope(buyer_id)
+    clients = scope["clients"]
+    client_ids = scope["client_ids"]
+    peer_client_ids = scope["peer_client_ids"]
     if not clients:
         return _empty_portal()
 
-    client_ids = [c["client_id"] for c in clients]
-    await sync_missing_decision_recipients_for_client_ids(client_ids)
+    await sync_missing_decision_recipients_for_client_ids(peer_client_ids)
 
     primary_client = clients[0]
     project_id = primary_client.get("project_id")
@@ -65,7 +92,13 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
 
     # ── Step 3: Documents (quotes + invoices visible to buyer) ──
     docs = await db.documents.find(
-        {"client_id": {"$in": client_ids}, "status": {"$ne": "Draft"}},
+        {
+            "status": {"$ne": "Draft"},
+            "$or": [
+                {"client_id": {"$in": peer_client_ids}},
+                {"recipient_client_ids": {"$in": peer_client_ids}},
+            ],
+        },
         {"_id": 0}
     ).sort("created_at", -1).to_list(200)
 
@@ -74,7 +107,7 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
     # ── Step 4: Vault files (shared with buyer's clients) ──
     vault_query = {"access_level": "shared", "$or": [
         {"buyer_ids": buyer_id},
-        {"client_ids": {"$in": client_ids}},
+        {"client_ids": {"$in": peer_client_ids}},
     ]}
     vault_docs = await db.vault_documents.find(vault_query, {"_id": 0}).sort("created_at", -1).to_list(200)
     vault_docs = _sort_vault_docs(vault_docs)
@@ -101,7 +134,7 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
     # ── Step 6: Decisions requiring buyer response ──
     # Query via decision_recipients (linked by client_id); group by decision for multi-client buyers
     pending_recipients = await db.decision_recipients.find(
-        {"client_id": {"$in": client_ids}},
+        {"client_id": {"$in": peer_client_ids}},
         {"_id": 0}
     ).to_list(200)
     by_decision: Dict[str, List[Dict[str, Any]]] = {}
@@ -123,7 +156,7 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
         for d in decisions_raw:
             recs = [
                 r for r in by_decision.get(d["decision_id"], [])
-                if r.get("client_id") in client_ids
+                if r.get("client_id") in peer_client_ids
             ]
             pending_rec = next((x for x in recs if x.get("status") == "pending"), None)
             chosen = pending_rec or (recs[0] if recs else None)
@@ -318,10 +351,8 @@ async def process_buyer_action(
         if option_id not in ("approved", "rejected", "request_change"):
             raise ValueError("Invalid option_id for decision response")
 
-        buyer_clients = await db.clients.find(
-            {"buyer_id": buyer_id}, {"_id": 0, "client_id": 1}
-        ).to_list(100)
-        buyer_cids = [c["client_id"] for c in buyer_clients]
+        scope = await _get_buyer_client_scope(buyer_id)
+        buyer_cids = scope["peer_client_ids"]
         if not buyer_cids:
             raise ValueError("No client record found for this buyer")
 

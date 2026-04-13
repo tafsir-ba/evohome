@@ -82,6 +82,31 @@ async def _get_buyer_access_scope(buyer_id: str) -> Dict[str, Any]:
     }
 
 
+async def _expand_recipient_client_ids(client_ids: List[str]) -> List[str]:
+    """
+    Expand selected recipients to include all co-owners on the same unit(s).
+    """
+    base_ids = list({cid for cid in client_ids if cid})
+    if not base_ids:
+        return []
+
+    selected_clients = await db.clients.find(
+        {"client_id": {"$in": base_ids}},
+        {"_id": 0, "unit_id": 1},
+    ).to_list(len(base_ids))
+    unit_ids = list({c.get("unit_id") for c in selected_clients if c.get("unit_id")})
+    if not unit_ids:
+        return base_ids
+
+    peers = await db.clients.find(
+        {"unit_id": {"$in": unit_ids}},
+        {"_id": 0, "client_id": 1},
+    ).to_list(2000)
+    expanded = set(base_ids)
+    expanded.update(c.get("client_id") for c in peers if c.get("client_id"))
+    return list(expanded)
+
+
 async def enrich_activity(activity: dict, include_replies: bool = False) -> dict:
     """Enrich a SINGLE activity. Used for detail views only.
     For list views, use batch_enrich_activities() instead."""
@@ -230,14 +255,27 @@ async def create_and_distribute_activity(
 
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "name": 1})
 
-    for client_id in recipient_client_ids:
+    expanded_recipients = await _expand_recipient_client_ids(recipient_client_ids)
+    recipient_clients = await db.clients.find(
+        {"client_id": {"$in": expanded_recipients}},
+        {"_id": 0, "client_id": 1, "buyer_id": 1},
+    ).to_list(len(expanded_recipients))
+    buyer_by_client = {c["client_id"]: c.get("buyer_id") for c in recipient_clients if c.get("client_id")}
+    notified_buyers = set()
+
+    for client_id in expanded_recipients:
         await db.activity_recipients.insert_one({
             "recipient_id": f"rcpt_{uuid.uuid4().hex[:8]}",
             "activity_id": activity_id,
             "client_id": client_id,
             "created_at": now,
         })
+        buyer_id = buyer_by_client.get(client_id)
+        if buyer_id and buyer_id in notified_buyers:
+            continue
         await _notify_recipient(client_id, activity_id, activity_type, content, project, agent_user)
+        if buyer_id:
+            notified_buyers.add(buyer_id)
 
     result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
     return await enrich_activity(result)
@@ -381,24 +419,46 @@ async def can_buyer_access_activity(buyer_id: str, activity_id: str) -> bool:
 
 
 async def update_activity(
-    activity_id: str, author_id: str, title: Optional[str], content: Optional[str]
+    activity_id: str, author_id: str, updates: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
-    """Update activity title/content. Author only."""
+    """Update activity content/project/recipients. Author only."""
     activity = await db.activities.find_one(
         {"activity_id": activity_id, "author_id": author_id}, {"_id": 0}
     )
     if not activity:
         return None
 
-    updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    if title is not None:
-        updates['title'] = title
-    if content is not None:
-        updates['content'] = content
+    update_data: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if "title" in updates:
+        update_data["title"] = updates.get("title")
+    if "content" in updates:
+        update_data["content"] = updates.get("content")
+    if "project_id" in updates and updates.get("project_id"):
+        update_data["project_id"] = updates["project_id"]
 
-    await db.activities.update_one({"activity_id": activity_id}, {"$set": updates})
+    if "client_ids" in updates:
+        client_ids = []
+        seen = set()
+        for cid in updates.get("client_ids") or []:
+            v = str(cid or "").strip()
+            if v and v not in seen:
+                seen.add(v)
+                client_ids.append(v)
+
+        # Replace recipients list for this activity
+        await db.activity_recipients.delete_many({"activity_id": activity_id})
+        now = datetime.now(timezone.utc).isoformat()
+        for client_id in client_ids:
+            await db.activity_recipients.insert_one({
+                "recipient_id": f"rcpt_{uuid.uuid4().hex[:8]}",
+                "activity_id": activity_id,
+                "client_id": client_id,
+                "created_at": now,
+            })
+
+    await db.activities.update_one({"activity_id": activity_id}, {"$set": update_data})
     result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
-    return result
+    return await enrich_activity(result)
 
 
 async def delete_activity(activity_id: str, author_id: str) -> bool:
@@ -513,7 +573,7 @@ async def send_draft_activity(activity_id: str, author_id: str, agent_user: dict
     if not activity or not activity.get('is_draft'):
         return None
 
-    recipients = activity.get('draft_recipients', [])
+    recipients = await _expand_recipient_client_ids(activity.get('draft_recipients', []))
     if not recipients:
         return None
 
@@ -526,6 +586,13 @@ async def send_draft_activity(activity_id: str, author_id: str, agent_user: dict
     project = await db.projects.find_one(
         {"project_id": activity['project_id']}, {"_id": 0, "name": 1}
     )
+    recipient_clients = await db.clients.find(
+        {"client_id": {"$in": recipients}},
+        {"_id": 0, "client_id": 1, "buyer_id": 1},
+    ).to_list(len(recipients))
+    buyer_by_client = {c["client_id"]: c.get("buyer_id") for c in recipient_clients if c.get("client_id")}
+    notified_buyers = set()
+
     for client_id in recipients:
         await db.activity_recipients.insert_one({
             "recipient_id": f"rcpt_{uuid.uuid4().hex[:8]}",
@@ -533,10 +600,15 @@ async def send_draft_activity(activity_id: str, author_id: str, agent_user: dict
             "client_id": client_id,
             "created_at": now,
         })
+        buyer_id = buyer_by_client.get(client_id)
+        if buyer_id and buyer_id in notified_buyers:
+            continue
         await _notify_recipient(
             client_id, activity_id, activity.get('type', 'message'),
             activity.get('content'), project, agent_user
         )
+        if buyer_id:
+            notified_buyers.add(buyer_id)
 
     updated = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
     return await enrich_activity(updated)

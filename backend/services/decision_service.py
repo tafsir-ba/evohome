@@ -510,16 +510,27 @@ async def list_buyer_decisions(buyer_id: str) -> List[Dict[str, Any]]:
     clients = await db.clients.find(
         query, {"_id": 0, "client_id": 1, "project_id": 1}
     ).to_list(50)
-    client_ids = [c["client_id"] for c in clients]
+    client_ids = [c["client_id"] for c in clients if c.get("client_id")]
+    unit_rows = await db.clients.find(
+        query, {"_id": 0, "unit_id": 1}
+    ).to_list(200)
+    unit_ids = [r.get("unit_id") for r in unit_rows if r.get("unit_id")]
+    peer_client_ids = set(client_ids)
+    if unit_ids:
+        peers = await db.clients.find(
+            {"unit_id": {"$in": unit_ids}}, {"_id": 0, "client_id": 1}
+        ).to_list(2000)
+        peer_client_ids.update(p.get("client_id") for p in peers if p.get("client_id"))
+    scope_client_ids = list(peer_client_ids)
 
-    if not client_ids:
+    if not scope_client_ids:
         return []
 
-    await sync_missing_decision_recipients_for_client_ids(client_ids)
+    await sync_missing_decision_recipients_for_client_ids(scope_client_ids)
 
     # Find decisions where buyer is a recipient
     recipient_records = await db.decision_recipients.find(
-        {"client_id": {"$in": client_ids}}, {"_id": 0}
+        {"client_id": {"$in": scope_client_ids}}, {"_id": 0}
     ).to_list(200)
 
     decision_ids = list({r["decision_id"] for r in recipient_records})
@@ -534,7 +545,7 @@ async def list_buyer_decisions(buyer_id: str) -> List[Dict[str, Any]]:
     # Enrich
     for d in decisions:
         recs = [r for r in recipient_records if r["decision_id"] == d["decision_id"]]
-        buyer_rec = next((r for r in recs if r["client_id"] in client_ids), None)
+        buyer_rec = next((r for r in recs if r["client_id"] in scope_client_ids), None)
         d["buyer_status"] = buyer_rec["status"] if buyer_rec else "pending"
         d["buyer_comment"] = buyer_rec.get("comment") if buyer_rec else None
 
