@@ -4,6 +4,13 @@ import { useSettings } from '../context/SettingsContext';
 
 const SCRIPT_ID = 'google-translate-script';
 const SOURCE_LANG = 'en';
+const FULL_PAGE_TRANSLATE_PATHS = [
+  /^\/agent\/feed(?:\/|$)/,
+  /^\/agent\/documents(?:\/|$)/,
+  /^\/agent\/workflow(?:\/|$)/,
+  /^\/agent\/vault(?:\/|$)/,
+  /^\/buyer(?:\/|$)/,
+];
 
 const setGoogleTranslateCookie = (targetLang) => {
   const value = `/${SOURCE_LANG}/${targetLang}`;
@@ -20,9 +27,11 @@ export const GoogleTranslateAuto = () => {
   const location = useLocation();
   const initializedRef = useRef(false);
   const retryRef = useRef(null);
-  const reapplyTimeoutRef = useRef(null);
+  const routeReapplyRef = useRef(null);
   const applyLanguageRef = useRef(() => {});
-  const lastApplyRef = useRef(0);
+
+  const isFullPageTranslateRoute = () =>
+    FULL_PAGE_TRANSLATE_PATHS.some((re) => re.test(location.pathname || ''));
 
   useEffect(() => {
     const stripGoogleBannerChrome = () => {
@@ -38,7 +47,7 @@ export const GoogleTranslateAuto = () => {
       }
     };
 
-    const applyLanguage = (targetLang) => {
+    const applyLanguage = (targetLang, { force = false } = {}) => {
       const normalized = targetLang === 'fr' ? 'fr' : 'en';
       setGoogleTranslateCookie(normalized);
       stripGoogleBannerChrome();
@@ -52,9 +61,11 @@ export const GoogleTranslateAuto = () => {
       const tryApply = () => {
         const combo = document.querySelector('.goog-te-combo');
         if (combo) {
+          if (!force && combo.value === normalized) {
+            return true;
+          }
           combo.value = normalized;
           combo.dispatchEvent(new Event('change'));
-          lastApplyRef.current = Date.now();
           return true;
         }
         return false;
@@ -86,7 +97,7 @@ export const GoogleTranslateAuto = () => {
         'google_translate_element'
       );
       initializedRef.current = true;
-      applyLanguage(language);
+      applyLanguage(language, { force: true });
     };
 
     window.googleTranslateElementInit = initGoogleTranslate;
@@ -102,58 +113,38 @@ export const GoogleTranslateAuto = () => {
       initGoogleTranslate();
     }
 
-    const observer = new MutationObserver(() => {
-      stripGoogleBannerChrome();
-      // React route/content changes can happen after translation initializes.
-      // Re-apply French translation on major DOM updates.
-      if (language !== 'fr') return;
-      const now = Date.now();
-      if (now - lastApplyRef.current < 500) return;
-      if (reapplyTimeoutRef.current) window.clearTimeout(reapplyTimeoutRef.current);
-      reapplyTimeoutRef.current = window.setTimeout(() => {
-        applyLanguageRef.current(language);
-      }, 250);
-    });
-    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
-
     return () => {
       if (retryRef.current) {
         window.clearInterval(retryRef.current);
         retryRef.current = null;
       }
-      if (reapplyTimeoutRef.current) {
-        window.clearTimeout(reapplyTimeoutRef.current);
-        reapplyTimeoutRef.current = null;
+      if (routeReapplyRef.current) {
+        window.clearTimeout(routeReapplyRef.current);
+        routeReapplyRef.current = null;
       }
-      observer.disconnect();
     };
   }, []);
 
   useEffect(() => {
-    const normalized = language === 'fr' ? 'fr' : 'en';
-    setGoogleTranslateCookie(normalized);
-
-    const combo = document.querySelector('.goog-te-combo');
-    if (combo) {
-      combo.value = normalized;
-      combo.dispatchEvent(new Event('change'));
-      lastApplyRef.current = Date.now();
-    }
-  }, [language]);
+    const normalized = (language === 'fr' && isFullPageTranslateRoute()) ? 'fr' : 'en';
+    applyLanguageRef.current(normalized, { force: true });
+  }, [language, location.pathname]);
 
   useEffect(() => {
-    // Ensure newly rendered route content is translated too.
-    if (reapplyTimeoutRef.current) {
-      window.clearTimeout(reapplyTimeoutRef.current);
+    // Re-apply translation once after route transitions.
+    // Avoid MutationObserver loops that caused flicker/tremble.
+    if (routeReapplyRef.current) {
+      window.clearTimeout(routeReapplyRef.current);
     }
-    reapplyTimeoutRef.current = window.setTimeout(() => {
-      applyLanguageRef.current(language);
-    }, 300);
+    routeReapplyRef.current = window.setTimeout(() => {
+      const target = (language === 'fr' && isFullPageTranslateRoute()) ? 'fr' : 'en';
+      applyLanguageRef.current(target, { force: false });
+    }, 450);
 
     return () => {
-      if (reapplyTimeoutRef.current) {
-        window.clearTimeout(reapplyTimeoutRef.current);
-        reapplyTimeoutRef.current = null;
+      if (routeReapplyRef.current) {
+        window.clearTimeout(routeReapplyRef.current);
+        routeReapplyRef.current = null;
       }
     };
   }, [language, location.pathname, location.search]);
