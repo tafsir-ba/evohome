@@ -293,6 +293,25 @@ def read_stored_file_bytes(stored_filename: str) -> Tuple[bytes, str]:
     return path.read_bytes(), ct
 
 
+def write_vault_bytes(stored_filename: str, content: bytes, content_type: str = "application/pdf") -> None:
+    """
+    Persist raw bytes as a vault object (Spaces or local uploads/).
+    Used by demo seed so vault rows always resolve via read_stored_file_bytes.
+    """
+    if (
+        not stored_filename
+        or ".." in stored_filename
+        or "/" in stored_filename
+        or "\\" in stored_filename
+    ):
+        raise ValueError("invalid stored_filename")
+    if USE_SPACES:
+        _upload_to_spaces(stored_filename, content, content_type)
+    else:
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        (UPLOAD_DIR / stored_filename).write_bytes(content)
+
+
 async def save_activity_attachment(file: UploadFile, activity_kind: str) -> Dict[str, Any]:
     """
     Persist activity feed image or PDF to Spaces (or local uploads/ fallback).

@@ -16,6 +16,15 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+# Minimal PDF for demo vault keys (synthetic; real drawings are not bundled).
+_DEMO_VAULT_PDF = (
+    b"%PDF-1.4\n"
+    b"1 0 obj<< /Type /Catalog /Pages 2 0 R>>endobj\n"
+    b"2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1>>endobj\n"
+    b"3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]>>endobj\n"
+    b"xref\n0 4\ntrailer<< /Size 4 /Root 1 0 R>>\nstartxref\n190\n%%EOF\n"
+)
+
 DEMO_ID_PREFIXES = {
     "users": "user_id",
     "projects": "project_id",
@@ -1055,6 +1064,18 @@ async def seed_demo_environment() -> dict:
             "updated_at": (now - timedelta(days=18)).isoformat(),
         },
     ])
+
+    try:
+        from services import file_service as _demo_fs
+
+        for _vault_fn in (
+            "demo_plan_v4.pdf",
+            "demo_appliance_sheet.pdf",
+            "demo_execution_handbook.pdf",
+        ):
+            _demo_fs.write_vault_bytes(_vault_fn, _DEMO_VAULT_PDF, "application/pdf")
+    except Exception as exc:
+        logger.warning("Could not write demo vault placeholder PDFs: %s", exc)
 
     await db.notifications.insert_many([
         {

@@ -143,10 +143,15 @@ async def list_buyer_vault(buyer_id: str) -> List[Dict[str, Any]]:
 
 
 def _enrich_urls(docs):
-    from services.file_service import get_file_url
+    from services.file_service import get_file_url, USE_SPACES
+
     for doc in docs:
         if doc.get("stored_filename"):
-            doc["url"] = get_file_url(doc["stored_filename"])
+            # Private Spaces buckets: raw CDN URLs fail (AccessDenied) in browsers / iframes.
+            if USE_SPACES:
+                doc["url"] = None
+            else:
+                doc["url"] = get_file_url(doc["stored_filename"])
     return docs
 
 

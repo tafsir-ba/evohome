@@ -335,10 +335,13 @@ def _format_document(d: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _format_vault_doc(v: Dict[str, Any]) -> Dict[str, Any]:
-    """Format a vault document for the buyer portal. URL resolved."""
+    """Format a vault document for the buyer portal.
+
+    Do not set ``url`` to the public CDN path: private Spaces buckets return
+    AccessDenied for anonymous iframe loads. The UI uses ``/api/vault/documents/{id}/download``
+    (session cookie) when ``url`` is absent.
+    """
     url = None
-    if v.get("stored_filename"):
-        url = file_service.get_file_url(v["stored_filename"])
 
     return {
         "vault_id": v["vault_document_id"],

@@ -7,8 +7,7 @@ All data operations delegate to vault_service.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Request, Response
 
 from database import db
 from core.auth import get_current_user, get_current_agent
@@ -156,17 +155,20 @@ async def download_vault_document(vault_document_id: str, user: dict = Depends(g
     if not stored:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "File not found"})
 
-    if file_service.USE_SPACES:
-        from fastapi.responses import RedirectResponse
-        url = file_service.get_file_url(stored)
-        return RedirectResponse(url=url)
+    try:
+        data, detected_media = file_service.read_stored_file_bytes(stored)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "File not found in storage"})
+    except ValueError:
+        raise HTTPException(status_code=400, detail={"error": "invalid_request", "message": "Invalid file reference"})
+    except Exception as e:
+        logger.exception("vault download read failed: %s", stored)
+        raise HTTPException(status_code=502, detail={"error": "storage_error", "message": str(e)})
 
-    path = file_service.resolve_path(stored)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "File not found on disk"})
-
-    return FileResponse(
-        str(path),
-        filename=doc.get("original_filename", stored),
-        media_type=doc.get("content_type", "application/octet-stream"),
+    media = doc.get("content_type") or detected_media or "application/octet-stream"
+    fname = doc.get("original_filename") or stored
+    return Response(
+        content=data,
+        media_type=media,
+        headers={"Content-Disposition": f'inline; filename="{fname}"'},
     )
