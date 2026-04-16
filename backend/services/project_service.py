@@ -25,6 +25,16 @@ def _clean(doc: dict) -> dict:
     return doc
 
 
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs from row dicts without raising KeyError."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
+
+
 async def create_project(
     agent_id: str,
     name: str,
@@ -150,7 +160,7 @@ async def delete_project(project_id: str, agent_id: str, force: bool = False) ->
         {"project_id": project_id, "status": "Draft"},
         {"_id": 0, "document_id": 1, "pdf_stored_filename": 1, "hero_image_stored_filename": 1},
     ).to_list(10000)
-    draft_doc_ids = [d["document_id"] for d in draft_docs]
+    draft_doc_ids = _collect_string_ids(draft_docs, "document_id")
     for doc in draft_docs:
         for fk in ("pdf_stored_filename", "hero_image_stored_filename"):
             if doc.get(fk):
@@ -166,7 +176,7 @@ async def delete_project(project_id: str, agent_id: str, force: bool = False) ->
 
     # Activity cascade cleanup (children first)
     activities = await db.activities.find({"project_id": project_id}, {"_id": 0, "activity_id": 1}).to_list(10000)
-    activity_ids = [a["activity_id"] for a in activities]
+    activity_ids = _collect_string_ids(activities, "activity_id")
     if activity_ids:
         await db.activity_recipients.delete_many({"activity_id": {"$in": activity_ids}})
         await db.activity_replies.delete_many({"activity_id": {"$in": activity_ids}})
@@ -174,13 +184,13 @@ async def delete_project(project_id: str, agent_id: str, force: bool = False) ->
 
     # Timeline cascade cleanup (children first)
     timelines = await db.timelines.find({"project_id": project_id}, {"_id": 0, "timeline_id": 1}).to_list(1000)
-    timeline_ids = [t["timeline_id"] for t in timelines]
+    timeline_ids = _collect_string_ids(timelines, "timeline_id")
     step_ids: List[str] = []
     if timeline_ids:
         steps = await db.timeline_steps.find(
             {"timeline_id": {"$in": timeline_ids}}, {"_id": 0, "step_id": 1}
         ).to_list(5000)
-        step_ids = [s["step_id"] for s in steps]
+        step_ids = _collect_string_ids(steps, "step_id")
     if step_ids:
         await db.timeline_step_documents.delete_many({"timeline_step_id": {"$in": step_ids}})
         await db.timeline_step_internal_notes.delete_many({"timeline_step_id": {"$in": step_ids}})
@@ -189,7 +199,7 @@ async def delete_project(project_id: str, agent_id: str, force: bool = False) ->
 
     # Decision recipients linked to project decisions
     decisions = await db.decisions.find({"project_id": project_id}, {"_id": 0, "decision_id": 1}).to_list(5000)
-    decision_ids = [d["decision_id"] for d in decisions]
+    decision_ids = _collect_string_ids(decisions, "decision_id")
     if decision_ids:
         await db.decision_recipients.delete_many({"decision_id": {"$in": decision_ids}})
 

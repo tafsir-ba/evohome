@@ -187,7 +187,7 @@ export const AgentProjects = () => {
         setDeleteImpact(await res.json());
       } else {
         const error = await res.json();
-        setDeleteError(error.detail || 'Failed to load delete impact');
+        setDeleteError(error.message || error.detail || 'Failed to load delete impact');
       }
     } catch (error) {
       console.error('Failed to load delete impact:', error);
@@ -242,7 +242,7 @@ export const AgentProjects = () => {
         refreshProjects();
       } else {
         const error = await res.json();
-        const message = error.detail || 'Failed to delete project';
+        const message = error.message || error.detail || 'Failed to delete project';
         setDeleteError(message);
         toast.error(message);
       }
