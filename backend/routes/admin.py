@@ -379,7 +379,52 @@ async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Dep
         workspace_owner_id=workspace_owner_id,
         metadata={"workspace_role": data.workspace_role, "email": data.email.lower()},
     )
-    return _clean_user_row(user_doc)
+    frontend_url = (FRONTEND_URL or os.environ.get("REACT_APP_BACKEND_URL", "https://evohome.ch")).rstrip("/")
+    if frontend_url.endswith("/api"):
+        frontend_url = frontend_url[:-4]
+
+    subject = "Invitation Evohome - Votre compte agent est pret"
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto;">
+      <h2 style="color:#2563EB;">Bienvenue sur Evohome</h2>
+      <p>Bonjour {data.name},</p>
+      <p>Un compte agent vient d'etre cree pour vous sur Evohome.</p>
+      <p><strong>Comment demarrer en 2 minutes :</strong><br>
+         1) Ouvrez la page de connexion<br>
+         2) Connectez-vous avec votre email<br>
+         3) Utilisez le mot de passe temporaire ci-dessous puis changez-le</p>
+      <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:14px; margin:18px 0;">
+        <p style="margin:0;"><strong>Email:</strong> {data.email.lower()}</p>
+        <p style="margin:8px 0 0;"><strong>Mot de passe temporaire:</strong> {data.password}</p>
+      </div>
+      <p style="text-align:center; margin:24px 0;">
+        <a href="{frontend_url}/login" style="background:#2563EB; color:#fff; padding:12px 22px; text-decoration:none; border-radius:6px; display:inline-block;">Se connecter a Evohome</a>
+      </p>
+      <p style="font-size:12px; color:#6b7280;">Si vous n'attendiez pas cet email, merci de contacter votre administrateur.</p>
+    </div>
+    """
+    email_result = await send_email_async(data.email.lower(), subject, html_content)
+    # region agent log
+    _debug_log(
+        run_id="run-4",
+        hypothesis_id="H5",
+        location="backend/routes/admin.py:create_workspace_user:email_result",
+        message="admin user onboarding email result",
+        data={
+            "recipient_domain": (data.email.lower().split("@", 1)[1] if "@" in data.email.lower() else "invalid"),
+            "status": email_result.get("status"),
+            "reason": email_result.get("reason"),
+            "error_prefix": str(email_result.get("error", ""))[:120],
+        },
+    )
+    # endregion
+
+    row = _clean_user_row(user_doc)
+    row["email_delivery"] = {
+        "status": email_result.get("status"),
+        "reason": email_result.get("reason"),
+    }
+    return row
 
 
 @router.patch("/admin/users/{member_id}/role")

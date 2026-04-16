@@ -201,9 +201,6 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
       toast.error('Name, email and password are required');
       return;
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7316/ingest/24339630-da52-4e2c-9271-dfb14f142b2a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8cd8a'},body:JSON.stringify({sessionId:'b8cd8a',runId:'run-3',hypothesisId:'H5',location:'frontend/src/pages/agent/AgentSettings.js:handleCreateAdminUser:entry',message:'admin create user action triggered',data:{emailDomain:(adminForm.email||'').includes('@')?(adminForm.email||'').split('@').pop():'invalid',workspaceRole:adminForm.workspace_role},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     setCreatingAdminUser(true);
     try {
       const res = await fetch(`${API}/admin/users`, {
@@ -213,15 +210,14 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
         body: JSON.stringify(adminForm),
       });
       if (!res.ok) {
-        // #region agent log
-        fetch('http://127.0.0.1:7316/ingest/24339630-da52-4e2c-9271-dfb14f142b2a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8cd8a'},body:JSON.stringify({sessionId:'b8cd8a',runId:'run-3',hypothesisId:'H5',location:'frontend/src/pages/agent/AgentSettings.js:handleCreateAdminUser:api_error',message:'admin create user API failed',data:{status:res.status},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         throw new Error((await parseApiError(res)).message || 'Failed to create user');
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7316/ingest/24339630-da52-4e2c-9271-dfb14f142b2a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8cd8a'},body:JSON.stringify({sessionId:'b8cd8a',runId:'run-3',hypothesisId:'H5',location:'frontend/src/pages/agent/AgentSettings.js:handleCreateAdminUser:success',message:'admin create user API succeeded',data:{status:res.status},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      toast.success('Admin user created');
+      const payload = await res.json();
+      if (payload?.email_delivery?.status && payload.email_delivery.status !== 'success') {
+        toast.warning(`User created, but email delivery failed: ${payload.email_delivery.reason || 'unknown reason'}`);
+      } else {
+        toast.success('Admin user created and invitation email sent');
+      }
       setAdminForm({ name: '', email: '', password: '', workspace_role: 'member' });
       fetchAdminData();
     } catch (error) {
@@ -322,9 +318,6 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
       toast.error('Please enter an email address');
       return;
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7316/ingest/24339630-da52-4e2c-9271-dfb14f142b2a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8cd8a'},body:JSON.stringify({sessionId:'b8cd8a',runId:'run-3',hypothesisId:'H5',location:'frontend/src/pages/agent/AgentSettings.js:handleSendInvite:entry',message:'team invitation action triggered',data:{emailDomain:(inviteForm.email||'').includes('@')?(inviteForm.email||'').split('@').pop():'invalid',inviteRole:inviteForm.role},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     
     setSendingInvite(true);
     try {
@@ -336,17 +329,11 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
       });
       
       if (res.ok) {
-        // #region agent log
-        fetch('http://127.0.0.1:7316/ingest/24339630-da52-4e2c-9271-dfb14f142b2a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8cd8a'},body:JSON.stringify({sessionId:'b8cd8a',runId:'run-3',hypothesisId:'H5',location:'frontend/src/pages/agent/AgentSettings.js:handleSendInvite:success',message:'team invitation API succeeded',data:{status:res.status},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         toast.success('Invitation sent successfully');
         setInviteDialogOpen(false);
         setInviteForm({ email: '', role: 'member', message: '' });
         fetchTeamData();
       } else {
-        // #region agent log
-        fetch('http://127.0.0.1:7316/ingest/24339630-da52-4e2c-9271-dfb14f142b2a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b8cd8a'},body:JSON.stringify({sessionId:'b8cd8a',runId:'run-3',hypothesisId:'H5',location:'frontend/src/pages/agent/AgentSettings.js:handleSendInvite:api_error',message:'team invitation API failed',data:{status:res.status},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const error = await res.json();
         throw new Error(error.message || error.detail || 'Failed to send invitation');
       }
