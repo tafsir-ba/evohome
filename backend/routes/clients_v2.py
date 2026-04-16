@@ -10,7 +10,8 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project, can_access_client, is_agent, get_workspace_owner_id, get_accessible_project_ids
+from core.access_control import can_access_project, can_access_client
+from core.access_scope import resolve_agent_access_scope
 from services import client_service
 
 logger = logging.getLogger(__name__)
@@ -44,13 +45,13 @@ class UpdateClientRequest(BaseModel):
 @router.get("/clients")
 async def list_clients(project_id: Optional[str] = None, user=Depends(get_current_agent)):
     """List clients for the agent, optionally filtered by project."""
+    scope = await resolve_agent_access_scope(user)
     if project_id:
-        if not await can_access_project(user, project_id):
-            raise HTTPException(status_code=403, detail="Access denied to this project")
+        scope.ensure_project_access(project_id)
         return await client_service.list_clients_by_project(project_id)
     return await client_service.list_clients_by_agent(
-        get_workspace_owner_id(user),
-        await get_accessible_project_ids(user),
+        scope.workspace_owner_id,
+        scope.accessible_project_ids,
     )
 
 
@@ -79,11 +80,12 @@ async def get_client_preview(client_id: str, user=Depends(get_current_agent)):
 @router.post("/clients")
 async def create_client(data: CreateClientRequest, user=Depends(get_current_agent)):
     """Create a new client. Agent only."""
-    if data.project_id and not await can_access_project(user, data.project_id):
-        raise HTTPException(status_code=403, detail="Access denied to project")
+    scope = await resolve_agent_access_scope(user)
+    if data.project_id:
+        scope.ensure_project_access(data.project_id)
 
     client = await client_service.create_client(
-        agent_id=get_workspace_owner_id(user),
+        agent_id=scope.workspace_owner_id,
         name=data.name,
         email=data.email,
         phone=data.phone,

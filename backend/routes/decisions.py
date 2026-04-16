@@ -9,7 +9,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 from core.auth import get_current_user, get_current_agent, get_current_buyer
-from core.access_control import can_access_project, get_workspace_owner_id, get_accessible_project_ids
+from core.access_scope import resolve_agent_access_scope
 from services.change_request_access import user_can_access_entity
 from services.recipient_scope_service import get_buyer_scope
 from services import decision_service, file_service
@@ -55,12 +55,11 @@ class BuyerRespondBody(BaseModel):
 @router.post("/decisions")
 async def create_decision(body: CreateDecisionBody, user: dict = Depends(get_current_agent)):
     """Create a new decision (agent only)."""
-    if not await can_access_project(user, body.project_id):
-        raise HTTPException(status_code=403, detail="Access denied")
-    scope_agent_id = get_workspace_owner_id(user)
+    scope = await resolve_agent_access_scope(user)
+    scope.ensure_project_access(body.project_id)
     try:
         decision = await decision_service.create_decision(
-            agent_id=scope_agent_id,
+            agent_id=scope.workspace_owner_id,
             project_id=body.project_id,
             title=body.title,
             description=body.description,
@@ -87,11 +86,12 @@ async def list_decisions(
     user: dict = Depends(get_current_agent),
 ):
     """List decisions for the current agent."""
-    if project_id and not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    scope = await resolve_agent_access_scope(user)
+    if project_id:
+        scope.ensure_project_access(project_id)
     return await decision_service.list_decisions(
-        agent_id=get_workspace_owner_id(user),
-        accessible_project_ids=await get_accessible_project_ids(user),
+        agent_id=scope.workspace_owner_id,
+        accessible_project_ids=scope.accessible_project_ids,
         project_id=project_id,
         status=status,
         limit=limit,
@@ -115,7 +115,7 @@ async def update_decision(decision_id: str, body: UpdateDecisionBody, user: dict
     """Update a draft decision."""
     if not await user_can_access_entity(user, "decision", decision_id):
         raise HTTPException(status_code=403, detail="Forbidden")
-    scope_agent_id = get_workspace_owner_id(user)
+    scope = await resolve_agent_access_scope(user)
     try:
         updates = body.dict(exclude_none=True)
         if "coverage_type" in updates or "unit_ids" in updates or "client_ids" in updates:
@@ -124,7 +124,7 @@ async def update_decision(decision_id: str, body: UpdateDecisionBody, user: dict
                 "unit_ids": updates.pop("unit_ids", []),
                 "client_ids": updates.pop("client_ids", []),
             }
-        decision = await decision_service.update_decision(decision_id, scope_agent_id, updates)
+        decision = await decision_service.update_decision(decision_id, scope.workspace_owner_id, updates)
         return decision
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -136,7 +136,8 @@ async def send_decision(decision_id: str, user: dict = Depends(get_current_agent
     if not await user_can_access_entity(user, "decision", decision_id):
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        decision = await decision_service.send_decision(decision_id, get_workspace_owner_id(user))
+        scope = await resolve_agent_access_scope(user)
+        decision = await decision_service.send_decision(decision_id, scope.workspace_owner_id)
         return decision
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -148,7 +149,8 @@ async def close_decision(decision_id: str, user: dict = Depends(get_current_agen
     if not await user_can_access_entity(user, "decision", decision_id):
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        decision = await decision_service.close_decision(decision_id, get_workspace_owner_id(user))
+        scope = await resolve_agent_access_scope(user)
+        decision = await decision_service.close_decision(decision_id, scope.workspace_owner_id)
         return decision
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -160,7 +162,8 @@ async def delete_decision(decision_id: str, user: dict = Depends(get_current_age
     if not await user_can_access_entity(user, "decision", decision_id):
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        await decision_service.delete_decision(decision_id, get_workspace_owner_id(user))
+        scope = await resolve_agent_access_scope(user)
+        await decision_service.delete_decision(decision_id, scope.workspace_owner_id)
         return {"message": "Decision deleted"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -173,8 +176,9 @@ async def upload_attachment(
     user: dict = Depends(get_current_agent),
 ):
     """Upload an attachment for a decision."""
+    scope = await resolve_agent_access_scope(user)
     decision = await decision_service.get_decision(decision_id)
-    if not decision or decision["agent_id"] != get_workspace_owner_id(user):
+    if not decision or decision["agent_id"] != scope.workspace_owner_id:
         raise HTTPException(status_code=404, detail="Decision not found")
     if not await user_can_access_entity(user, "decision", decision_id):
         raise HTTPException(status_code=403, detail="Forbidden")

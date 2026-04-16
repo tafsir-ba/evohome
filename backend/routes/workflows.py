@@ -24,7 +24,8 @@ from pydantic import BaseModel
 
 from database import db
 from core.auth import get_current_agent
-from core.access_control import get_workspace_owner_id, can_access_project, get_accessible_project_ids, can_access_document
+from core.access_scope import resolve_agent_access_scope
+from core.access_control import can_access_project, can_access_document
 from services.email_service import send_email_async, RESEND_API_KEY
 from services.ai_service import OPENAI_API_KEY
 from services.workflow_service import (
@@ -121,10 +122,11 @@ async def get_workflow_template(template_id: str, user: dict = Depends(get_curre
 async def execute_workflow(request: WorkflowExecuteRequest, user: dict = Depends(get_current_agent)):
     """Start executing a workflow. All mutations delegated to canonical services."""
     service = get_workflow_service(db)
-    agent_id = get_workspace_owner_id(user)
+    scope = await resolve_agent_access_scope(user)
+    agent_id = scope.workspace_owner_id
     context_project_id = request.context.get("project_id")
-    if context_project_id and not await can_access_project(user, context_project_id):
-        raise HTTPException(status_code=403, detail="Access denied to this project")
+    if context_project_id:
+        scope.ensure_project_access(context_project_id)
     context_document_id = request.context.get("document_id")
     if context_document_id and not await can_access_document(user, context_document_id):
         raise HTTPException(status_code=403, detail="Access denied to this document")
@@ -135,14 +137,18 @@ async def execute_workflow(request: WorkflowExecuteRequest, user: dict = Depends
     try:
         # Enrich context with entity details from DB (read-only lookups)
         enriched_context = await _enrich_context(dict(request.context))
-        if enriched_context.get("project_id") and not await can_access_project(user, enriched_context["project_id"]):
-            raise HTTPException(status_code=403, detail="Access denied to this project")
+        if enriched_context.get("project_id"):
+            scope.ensure_project_access(enriched_context["project_id"])
         if enriched_context.get("step_id"):
             step = await db.timeline_steps.find_one(
                 {"step_id": enriched_context["step_id"]},
                 {"_id": 0, "project_id": 1},
             )
-            if not step or not await can_access_project(user, step.get("project_id")):
+            if not step:
+                raise HTTPException(status_code=403, detail="Access denied to this timeline step")
+            try:
+                scope.ensure_project_access(step.get("project_id"))
+            except HTTPException:
                 raise HTTPException(status_code=403, detail="Access denied to this timeline step")
             if enriched_context.get("project_id") and step.get("project_id") != enriched_context.get("project_id"):
                 raise HTTPException(status_code=400, detail="Workflow context project does not match timeline step project")
@@ -186,7 +192,8 @@ async def get_workflow_execution(execution_id: str, user: dict = Depends(get_cur
     execution = await service.get_execution(execution_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    if execution.agent_id != get_workspace_owner_id(user):
+    scope = await resolve_agent_access_scope(user)
+    if execution.agent_id != scope.workspace_owner_id:
         raise HTTPException(status_code=403, detail="Not authorized")
     return service.get_execution_summary(execution)
 
@@ -198,7 +205,8 @@ async def get_workflow_history(
 ):
     """Get recent workflow executions for the agent."""
     service = get_workflow_service(db)
-    executions = await service.get_agent_executions(get_workspace_owner_id(user), limit)
+    scope = await resolve_agent_access_scope(user)
+    executions = await service.get_agent_executions(scope.workspace_owner_id, limit)
     return {"executions": [service.get_execution_summary(e) for e in executions]}
 
 
@@ -207,7 +215,8 @@ async def cancel_workflow(execution_id: str, user: dict = Depends(get_current_ag
     """Cancel a workflow execution."""
     service = get_workflow_service(db)
     try:
-        execution = await service.cancel_execution(execution_id, get_workspace_owner_id(user))
+        scope = await resolve_agent_access_scope(user)
+        execution = await service.cancel_execution(execution_id, scope.workspace_owner_id)
         return service.get_execution_summary(execution)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -232,12 +241,13 @@ async def retry_workflow_step(
     execution = await service.get_execution(execution_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    if execution.agent_id != get_workspace_owner_id(user):
+    scope = await resolve_agent_access_scope(user)
+    if execution.agent_id != scope.workspace_owner_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     agent_name, agent_email = await _resolve_agent_identity(user)
     step_warnings: Dict[str, str] = {}
-    action_executor = _build_action_executor(get_workspace_owner_id(user), agent_name, agent_email, step_warnings, user)
+    action_executor = _build_action_executor(scope.workspace_owner_id, agent_name, agent_email, step_warnings, user)
 
     try:
         execution = await service.retry_step(execution, step_index, action_executor)
@@ -267,10 +277,11 @@ async def get_workflow_selectors(
     user: dict = Depends(get_current_agent),
 ):
     """Get items for workflow selectors (documents, timeline steps, clients)."""
-    agent_id = get_workspace_owner_id(user)
-    accessible_project_ids = await get_accessible_project_ids(user)
-    if project_id and not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied to this project")
+    scope = await resolve_agent_access_scope(user)
+    agent_id = scope.workspace_owner_id
+    accessible_project_ids = scope.accessible_project_ids
+    if project_id:
+        scope.ensure_project_access(project_id)
 
     if selector_type == "document":
         return await _select_documents(agent_id, project_id, accessible_project_ids)
@@ -298,10 +309,13 @@ def _build_action_executor(
 
         if action == "create_client":
             target_project_id = params.get("project_id") or context.get("project_id")
-            if target_project_id and not await can_access_project(agent_user, target_project_id):
-                result["_warning"] = "Access denied to target project"
-                step_warnings["create_client"] = "Access denied to target project"
-                return result
+            if target_project_id:
+                try:
+                    (await resolve_agent_access_scope(agent_user)).ensure_project_access(target_project_id)
+                except HTTPException:
+                    result["_warning"] = "Access denied to target project"
+                    step_warnings["create_client"] = "Access denied to target project"
+                    return result
             client = await client_service.create_client(
                 agent_id=agent_id,
                 name=params.get("client_name") or context.get("client_name", "New Client"),
@@ -329,7 +343,13 @@ def _build_action_executor(
                     {"step_id": step_id},
                     {"_id": 0, "project_id": 1},
                 )
-                if not step or not await can_access_project(agent_user, step.get("project_id")):
+                if not step:
+                    result["_warning"] = "Access denied to timeline step"
+                    step_warnings["complete_timeline_step"] = "Access denied to timeline step"
+                    return result
+                try:
+                    (await resolve_agent_access_scope(agent_user)).ensure_project_access(step.get("project_id"))
+                except HTTPException:
                     result["_warning"] = "Access denied to timeline step"
                     step_warnings["complete_timeline_step"] = "Access denied to timeline step"
                     return result
@@ -449,11 +469,15 @@ def _build_action_executor(
                 result["emails_sent"] = 0
                 result["_warning"] = "No project_id provided"
                 step_warnings["send_project_announcement_email"] = "No project_id provided"
-            elif not await can_access_project(agent_user, project_id):
-                result["emails_sent"] = 0
-                result["_warning"] = "Access denied to this project"
-                step_warnings["send_project_announcement_email"] = "Access denied to this project"
-            elif not RESEND_API_KEY:
+            else:
+                try:
+                    (await resolve_agent_access_scope(agent_user)).ensure_project_access(project_id)
+                except HTTPException:
+                    result["emails_sent"] = 0
+                    result["_warning"] = "Access denied to this project"
+                    step_warnings["send_project_announcement_email"] = "Access denied to this project"
+                    return result
+            if not RESEND_API_KEY:
                 clients = await db.clients.find(
                     {"project_id": project_id, "agent_id": agent_id, "email": {"$exists": True, "$ne": None}},
                     {"_id": 0},

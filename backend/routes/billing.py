@@ -11,7 +11,7 @@ import stripe
 from fastapi import APIRouter, HTTPException, Depends, Request
 
 from core.auth import get_current_agent
-from core.access_control import get_workspace_owner_id, is_workspace_owner
+from core.access_scope import resolve_agent_access_scope
 from core.config import validate_config
 from core.monitoring import capture_payment_error
 from models.schemas import CreateCheckoutRequest, CheckoutStatusRequest
@@ -47,7 +47,7 @@ async def list_plans(user: dict = Depends(get_current_agent)):
 @router.get("/billing/status")
 async def billing_status(user: dict = Depends(get_current_agent)):
     """Get current subscription status for the agent."""
-    return await get_subscription_status(get_workspace_owner_id(user))
+    return await get_subscription_status((await resolve_agent_access_scope(user)).workspace_owner_id)
 
 
 # ── Checkout ──
@@ -55,11 +55,11 @@ async def billing_status(user: dict = Depends(get_current_agent)):
 @router.post("/billing/create-checkout-session")
 async def checkout(data: CreateCheckoutRequest, user: dict = Depends(get_current_agent)):
     """Create a Stripe checkout session for a plan subscription."""
-    if not is_workspace_owner(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can manage billing")
-    workspace_owner_id = get_workspace_owner_id(user)
     try:
-        return await create_checkout_session(workspace_owner_id, data.plan_id, data.origin_url)
+        return await create_checkout_session(scope.workspace_owner_id, data.plan_id, data.origin_url)
     except BillingNotConfiguredError:
         raise HTTPException(status_code=500, detail="Stripe is not configured")
     except ValueError as e:
@@ -73,11 +73,11 @@ async def checkout(data: CreateCheckoutRequest, user: dict = Depends(get_current
 @router.post("/billing/verify-session")
 async def verify_session(data: CheckoutStatusRequest, user: dict = Depends(get_current_agent)):
     """Verify a checkout session. Reconciliation path."""
-    if not is_workspace_owner(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can manage billing")
-    workspace_owner_id = get_workspace_owner_id(user)
     try:
-        return await verify_checkout(workspace_owner_id, data.session_id)
+        return await verify_checkout(scope.workspace_owner_id, data.session_id)
     except BillingNotConfiguredError:
         raise HTTPException(status_code=500, detail="Stripe is not configured")
     except Exception as e:
@@ -134,11 +134,11 @@ async def webhook(request: Request):
 @router.post("/billing/cancel")
 async def cancel(user: dict = Depends(get_current_agent)):
     """Cancel subscription at period end."""
-    if not is_workspace_owner(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can manage billing")
-    workspace_owner_id = get_workspace_owner_id(user)
     try:
-        return await cancel_subscription(workspace_owner_id)
+        return await cancel_subscription(scope.workspace_owner_id)
     except BillingNotConfiguredError:
         raise HTTPException(status_code=500, detail="Stripe is not configured")
     except ValueError as e:
@@ -154,11 +154,11 @@ async def cancel(user: dict = Depends(get_current_agent)):
 @router.post("/billing/sync")
 async def sync(user: dict = Depends(get_current_agent)):
     """Sync local subscription state from Stripe. Recovery path."""
-    if not is_workspace_owner(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can manage billing")
-    workspace_owner_id = get_workspace_owner_id(user)
     try:
-        return await sync_subscription(workspace_owner_id)
+        return await sync_subscription(scope.workspace_owner_id)
     except BillingNotConfiguredError:
         raise HTTPException(status_code=500, detail="Stripe is not configured")
     except ValueError as e:
@@ -173,9 +173,9 @@ async def sync(user: dict = Depends(get_current_agent)):
 @router.post("/billing/portal")
 async def portal(request: Request, user: dict = Depends(get_current_agent)):
     """Create a Stripe billing portal session for subscription management."""
-    if not is_workspace_owner(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can manage billing")
-    workspace_owner_id = get_workspace_owner_id(user)
     try:
         body = await request.json()
         return_url = body.get('return_url', '')
@@ -183,7 +183,7 @@ async def portal(request: Request, user: dict = Depends(get_current_agent)):
         return_url = ''
 
     try:
-        return await create_billing_portal(workspace_owner_id, return_url)
+        return await create_billing_portal(scope.workspace_owner_id, return_url)
     except BillingNotConfiguredError:
         raise HTTPException(status_code=500, detail="Stripe is not configured")
     except ValueError as e:

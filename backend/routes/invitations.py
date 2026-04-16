@@ -17,7 +17,7 @@ from pydantic import BaseModel, EmailStr
 
 from database import db
 from core.auth import get_current_user, get_current_agent, create_access_token, JWT_EXPIRY_DAYS
-from core.access_control import get_workspace_owner_id, is_workspace_admin, is_workspace_owner
+from core.access_scope import resolve_agent_access_scope
 from core.audit import log_audit_event
 from services.email_service import send_email_async, send_notification_email, get_email_template
 
@@ -42,9 +42,10 @@ class TeamMemberRoleUpdate(BaseModel):
 @router.post("/team/invitations")
 async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(get_current_agent)):
     """Invite a new team member to the agent's workspace"""
-    if not is_workspace_admin(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
         raise HTTPException(status_code=403, detail="Only workspace admins can invite team members")
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
     normalized_email = data.email.lower().strip()
     cleaned_message = (data.message or "").strip()
 
@@ -126,7 +127,7 @@ async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(ge
 @router.get("/team/invitations")
 async def list_team_invitations(user: dict = Depends(get_current_agent)):
     """List all team invitations sent by this agent"""
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = (await resolve_agent_access_scope(user)).workspace_owner_id
     invitations = await db.team_invitations.find(
         {"invited_by": workspace_owner_id},
         {"_id": 0, "invitation_token": 0},
@@ -137,9 +138,10 @@ async def list_team_invitations(user: dict = Depends(get_current_agent)):
 @router.delete("/team/invitations/{invitation_id}")
 async def cancel_team_invitation(invitation_id: str, user: dict = Depends(get_current_agent)):
     """Cancel a pending team invitation"""
-    if not is_workspace_admin(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
         raise HTTPException(status_code=403, detail="Only workspace admins can cancel invitations")
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
     invitation = await db.team_invitations.find_one({
         "invitation_id": invitation_id,
         "invited_by": workspace_owner_id,
@@ -328,9 +330,10 @@ async def register_invited_user(
 @router.delete("/team/members/{member_id}")
 async def remove_team_member(member_id: str, user: dict = Depends(get_current_agent)):
     """Remove a team member from the workspace with role guards."""
-    if not is_workspace_admin(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
         raise HTTPException(status_code=403, detail="Only workspace admins can remove team members")
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
 
     member = await db.users.find_one({
         "user_id": member_id,
@@ -340,7 +343,7 @@ async def remove_team_member(member_id: str, user: dict = Depends(get_current_ag
         raise HTTPException(status_code=404, detail="Team member not found")
     if member_id == workspace_owner_id:
         raise HTTPException(status_code=400, detail="Cannot remove workspace owner")
-    if member.get("workspace_role") == "admin" and not is_workspace_owner(user):
+    if member.get("workspace_role") == "admin" and not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can remove another admin")
 
     await db.users.update_one(
@@ -371,12 +374,13 @@ async def update_team_member_role(
     user: dict = Depends(get_current_agent),
 ):
     """Update workspace role for a team member (owner only)."""
-    if not is_workspace_owner(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can change team roles")
     if data.role not in {"member", "admin"}:
         raise HTTPException(status_code=400, detail="Invalid role; must be 'member' or 'admin'")
 
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
     member = await db.users.find_one(
         {"user_id": member_id, "workspace_owner_id": workspace_owner_id, "role": "agent"},
         {"_id": 0, "user_id": 1},

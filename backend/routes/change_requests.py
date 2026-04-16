@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import get_workspace_owner_id, get_accessible_project_ids
+from core.access_scope import resolve_agent_access_scope
 from database import db
 from services import change_request_service
 from services.change_request_access import user_can_access_change_request, user_can_access_entity
@@ -67,7 +67,8 @@ async def create_change_request(body: CreateChangeRequestBody, user: dict = Depe
         return cr
 
     if role == "agent":
-        agent_id = get_workspace_owner_id(user)
+        scope = await resolve_agent_access_scope(user)
+        agent_id = scope.workspace_owner_id
     elif body.entity_type == "decision":
         dec = await db.decisions.find_one({"decision_id": body.entity_id}, {"_id": 0, "agent_id": 1})
         agent_id = (dec or {}).get("agent_id") or ""
@@ -105,9 +106,10 @@ async def list_change_requests(
     user: dict = Depends(get_current_agent),
 ):
     """List change requests for the current agent."""
+    scope = await resolve_agent_access_scope(user)
     return await change_request_service.list_change_requests(
-        agent_id=get_workspace_owner_id(user),
-        accessible_project_ids=await get_accessible_project_ids(user),
+        agent_id=scope.workspace_owner_id,
+        accessible_project_ids=scope.accessible_project_ids,
         entity_type=entity_type,
         entity_id=entity_id,
         status=status,
@@ -165,7 +167,7 @@ async def respond_to_change_request(
             author_id=user["user_id"],
             author_role=role,
             attachments=body.attachments,
-            agent_scope_id=get_workspace_owner_id(user) if role == "agent" else None,
+            agent_scope_id=(await resolve_agent_access_scope(user)).workspace_owner_id if role == "agent" else None,
         )
         return cr
     except HTTPException:
@@ -190,6 +192,7 @@ async def resolve_change_request(
     set_trace_request_summary({"change_request_id": change_request_id, "has_note": bool(body.resolution_note)})
     trace_service("routes.change_requests.resolve_change_request")
     try:
+        scope = await resolve_agent_access_scope(user)
         cr = await change_request_service.get_change_request(change_request_id)
         if cr and not await user_can_access_change_request(user, cr):
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -197,7 +200,7 @@ async def resolve_change_request(
             change_request_id=change_request_id,
             resolved_by=user["user_id"],
             resolution_note=body.resolution_note,
-            agent_scope_id=get_workspace_owner_id(user),
+            agent_scope_id=scope.workspace_owner_id,
         )
         return cr
     except HTTPException:
@@ -220,13 +223,14 @@ async def close_change_request(
     set_trace_entity("change_request", change_request_id)
     trace_service("routes.change_requests.close_change_request")
     try:
+        scope = await resolve_agent_access_scope(user)
         cr = await change_request_service.get_change_request(change_request_id)
         if cr and not await user_can_access_change_request(user, cr):
             raise HTTPException(status_code=403, detail="Forbidden")
         cr = await change_request_service.close_change_request(
             change_request_id=change_request_id,
             closed_by=user["user_id"],
-            agent_scope_id=get_workspace_owner_id(user),
+            agent_scope_id=scope.workspace_owner_id,
         )
         return cr
     except HTTPException:

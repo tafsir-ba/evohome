@@ -19,7 +19,8 @@ import openai
 import fitz
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project, get_workspace_owner_id, get_accessible_project_ids
+from core.access_control import can_access_project
+from core.access_scope import resolve_agent_access_scope
 from database import db
 from services import timeline_service, step_service
 from services.realtime_service import send_milestone_notification
@@ -216,8 +217,8 @@ class TemplateCreate(BaseModel):
 @router.post("/timeline/create")
 async def create_manual_timeline(data: ManualTimelineCreate, user=Depends(get_current_agent)):
     """Create a timeline manually with custom steps."""
-    if not await can_access_project(user, data.project_id):
-        raise HTTPException(status_code=403, detail="Access denied to this project")
+    scope = await resolve_agent_access_scope(user)
+    scope.ensure_project_access(data.project_id)
 
     existing = await timeline_service.get_timeline_by_project(data.project_id)
     if existing:
@@ -228,7 +229,7 @@ async def create_manual_timeline(data: ManualTimelineCreate, user=Depends(get_cu
 
     result = await timeline_service.create_timeline_with_steps(
         project_id=data.project_id,
-        agent_id=user['user_id'],
+        agent_id=scope.workspace_owner_id,
         name=data.name,
         steps_data=data.steps,
     )
@@ -248,8 +249,8 @@ async def get_project_timeline(project_id: Optional[str] = None, user=Depends(ge
     elif not project_id:
         raise HTTPException(status_code=400, detail="project_id required for agents")
 
-    if not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    if user["role"] == "agent":
+        (await resolve_agent_access_scope(user)).ensure_project_access(project_id)
 
     timeline = await timeline_service.get_enriched_timeline(project_id, user['role'])
     if not timeline:
@@ -265,8 +266,7 @@ async def delete_timeline(timeline_id: str, user=Depends(get_current_agent)):
     if not timeline:
         raise HTTPException(status_code=404, detail="Timeline not found")
 
-    if not await can_access_project(user, timeline['project_id']):
-        raise HTTPException(status_code=403, detail="Access denied")
+    (await resolve_agent_access_scope(user)).ensure_project_access(timeline["project_id"])
 
     await timeline_service.delete_timeline_cascade(timeline_id)
     return {"message": "Timeline deleted"}
@@ -279,9 +279,8 @@ async def extract_timeline_from_document(
     user=Depends(get_current_agent),
 ):
     """Extract simplified 6-7 phase timeline from document."""
-    if not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied to this project")
-    scope_agent_id = get_workspace_owner_id(user)
+    scope = await resolve_agent_access_scope(user)
+    scope.ensure_project_access(project_id)
 
     ext = os.path.splitext(file.filename or "")[1].lower()
     allowed = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xlsx", ".xls"}
@@ -303,7 +302,7 @@ async def extract_timeline_from_document(
         extraction_id = f"tlx_{uuid.uuid4().hex[:12]}"
         extraction_doc = {
             "extraction_id": extraction_id,
-            "agent_id": scope_agent_id,
+            "agent_id": scope.workspace_owner_id,
             "project_id": project_id,
             "source_filename": file.filename,
             "status": "pending_review",
@@ -336,11 +335,11 @@ async def list_timeline_extractions(
     status: Optional[str] = Query(None),
     user=Depends(get_current_agent),
 ):
-    query = {"agent_id": get_workspace_owner_id(user)}
-    accessible_project_ids = await get_accessible_project_ids(user)
-    if not accessible_project_ids:
+    scope = await resolve_agent_access_scope(user)
+    query = {"agent_id": scope.workspace_owner_id}
+    if not scope.accessible_project_ids:
         return []
-    query["project_id"] = {"$in": accessible_project_ids}
+    query["project_id"] = {"$in": scope.accessible_project_ids}
     if status:
         query["status"] = status
     rows = await db.timeline_extractions.find(query, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
@@ -349,14 +348,14 @@ async def list_timeline_extractions(
 
 @router.get("/timeline/extractions/{extraction_id}")
 async def get_timeline_extraction(extraction_id: str, user=Depends(get_current_agent)):
+    scope = await resolve_agent_access_scope(user)
     row = await db.timeline_extractions.find_one(
-        {"extraction_id": extraction_id, "agent_id": get_workspace_owner_id(user)},
+        {"extraction_id": extraction_id, "agent_id": scope.workspace_owner_id},
         {"_id": 0},
     )
     if not row:
         raise HTTPException(status_code=404, detail="Extraction not found")
-    if not await can_access_project(user, row.get("project_id")):
-        raise HTTPException(status_code=403, detail="Access denied")
+    scope.ensure_project_access(row.get("project_id"))
     return row
 
 
@@ -368,17 +367,16 @@ async def approve_timeline_extraction(
     user=Depends(get_current_agent),
 ):
     """Approve extracted timeline and create project timeline steps."""
-    if not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied to this project")
+    scope = await resolve_agent_access_scope(user)
+    scope.ensure_project_access(project_id)
 
     row = await db.timeline_extractions.find_one(
-        {"extraction_id": extraction_id, "agent_id": get_workspace_owner_id(user)},
+        {"extraction_id": extraction_id, "agent_id": scope.workspace_owner_id},
         {"_id": 0},
     )
     if not row:
         raise HTTPException(status_code=404, detail="Extraction not found")
-    if not await can_access_project(user, row.get("project_id")):
-        raise HTTPException(status_code=403, detail="Access denied")
+    scope.ensure_project_access(row.get("project_id"))
     if row.get("project_id") and row.get("project_id") != project_id:
         raise HTTPException(status_code=400, detail="Extraction does not belong to the selected project")
 
@@ -404,7 +402,7 @@ async def approve_timeline_extraction(
     ]
     created = await timeline_service.create_timeline_with_steps(
         project_id=project_id,
-        agent_id=get_workspace_owner_id(user),
+        agent_id=scope.workspace_owner_id,
         name="Project Timeline",
         steps_data=steps_data,
     )
@@ -436,8 +434,7 @@ async def update_timeline_step(step_id: str, data: TimelineStepUpdateRequest, us
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
 
-    if not await can_access_project(user, step['project_id']):
-        raise HTTPException(status_code=403, detail="Access denied")
+    (await resolve_agent_access_scope(user)).ensure_project_access(step["project_id"])
 
     try:
         updates = data.model_dump(exclude_none=True)
@@ -469,8 +466,7 @@ async def add_step_to_timeline(timeline_id: str, data: AddStepRequest, user=Depe
     if not timeline:
         raise HTTPException(status_code=404, detail="Timeline not found")
 
-    if not await can_access_project(user, timeline['project_id']):
-        raise HTTPException(status_code=403, detail="Access denied")
+    (await resolve_agent_access_scope(user)).ensure_project_access(timeline["project_id"])
 
     step = await step_service.add_step_to_timeline(
         timeline_id=timeline_id,
@@ -489,8 +485,7 @@ async def delete_timeline_step(step_id: str, user=Depends(get_current_agent)):
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
 
-    if not await can_access_project(user, step['project_id']):
-        raise HTTPException(status_code=403, detail="Access denied")
+    (await resolve_agent_access_scope(user)).ensure_project_access(step["project_id"])
 
     await step_service.delete_step(step_id)
     return {"message": "Step deleted", "step_id": step_id}
@@ -505,8 +500,7 @@ async def link_document_to_step(step_id: str, data: LinkDocumentRequest, user=De
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
 
-    if not await can_access_project(user, step['project_id']):
-        raise HTTPException(status_code=403, detail="Access denied")
+    (await resolve_agent_access_scope(user)).ensure_project_access(step["project_id"])
 
     activity = await db.activities.find_one(
         {"activity_id": data.activity_id}, {"_id": 0}
@@ -515,8 +509,7 @@ async def link_document_to_step(step_id: str, data: LinkDocumentRequest, user=De
         raise HTTPException(status_code=404, detail="Activity not found")
     if not activity.get("project_id") or activity.get("project_id") != step.get("project_id"):
         raise HTTPException(status_code=400, detail="Activity does not belong to this timeline project")
-    if not await can_access_project(user, activity.get("project_id")):
-        raise HTTPException(status_code=403, detail="Access denied")
+    (await resolve_agent_access_scope(user)).ensure_project_access(activity.get("project_id"))
 
     link_id = await step_service.link_document(step_id, data.activity_id)
     if link_id is None:
@@ -532,8 +525,7 @@ async def unlink_document_from_step(step_id: str, activity_id: str, user=Depends
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
 
-    if not await can_access_project(user, step['project_id']):
-        raise HTTPException(status_code=403, detail="Access denied")
+    (await resolve_agent_access_scope(user)).ensure_project_access(step["project_id"])
 
     deleted = await step_service.unlink_document(step_id, activity_id)
     if not deleted:
@@ -549,8 +541,7 @@ async def add_internal_note(step_id: str, data: AddNoteRequest, user=Depends(get
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
 
-    if not await can_access_project(user, step['project_id']):
-        raise HTTPException(status_code=403, detail="Access denied")
+    (await resolve_agent_access_scope(user)).ensure_project_access(step["project_id"])
 
     note = await step_service.add_note(
         step_id=step_id,
@@ -588,10 +579,10 @@ async def delete_template(template_id: str, user=Depends(get_current_agent)):
 @router.post("/timeline/templates/{template_id}/apply")
 async def apply_template(template_id: str, project_id: str, user=Depends(get_current_agent)):
     """Apply a template to create a project timeline."""
-    if not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    scope = await resolve_agent_access_scope(user)
+    scope.ensure_project_access(project_id)
 
-    result = await timeline_service.apply_template(template_id, project_id, user['user_id'])
+    result = await timeline_service.apply_template(template_id, project_id, scope.workspace_owner_id)
     if result is None:
         raise HTTPException(
             status_code=400,

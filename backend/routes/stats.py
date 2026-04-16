@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, EmailStr
 
 from database import db
 from core.auth import get_current_user, get_current_agent, get_current_buyer, verify_token
-from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer
+from core.access_scope import resolve_agent_access_scope
 from core.rate_limit import rate_limit_check, check_rate_limit
 from core.monitoring import capture_exception, capture_auth_failure, capture_payment_error, capture_email_error, capture_ai_error, capture_websocket_error, capture_document_error, ErrorContext
 from core.responses import AuthSessionResponse, AuthLoginResponse, AuthRefreshResponse, AuthLogoutResponse, DocumentResponse, VaultDocumentResponse, NotificationResponse, ActivityResponse, ActivitiesListResponse, SuccessResponse
@@ -44,38 +44,42 @@ router = APIRouter()
 @router.get("/stats/agent")
 async def get_agent_stats(user: dict = Depends(get_current_agent)):
     """Get agent dashboard stats"""
-    agent_id = user['user_id']
+    scope = await resolve_agent_access_scope(user)
+    agent_id = scope.workspace_owner_id
+    project_filter = scope.project_filter()
     
-    total_clients = await db.clients.count_documents({"agent_id": agent_id})
+    total_clients = await db.clients.count_documents({"agent_id": agent_id, **project_filter})
     
     # Pending quotes (Sent or Change Requested)
     pending_quotes = await db.documents.count_documents({
         "agent_id": agent_id, "type": "quote",
-        "status": {"$in": ["Sent", "Change Requested"]}
+        "status": {"$in": ["Sent", "Change Requested"]},
+        **project_filter,
     })
     
     # Pending invoices (Sent status)
     pending_invoices = await db.documents.count_documents({
         "agent_id": agent_id, "type": "invoice",
-        "status": "Sent"
+        "status": "Sent",
+        **project_filter,
     })
     
     # Revenue (paid invoices)
     paid_invoices = await db.documents.find(
-        {"agent_id": agent_id, "type": "invoice", "status": "Paid"},
+        {"agent_id": agent_id, "type": "invoice", "status": "Paid", **project_filter},
         {"_id": 0, "amount": 1}
     ).to_list(1000)
     total_revenue = sum(inv['amount'] for inv in paid_invoices)
     
     # Recent documents
     recent_docs = await db.documents.find(
-        {"agent_id": agent_id},
+        {"agent_id": agent_id, **project_filter},
         {"_id": 0}
     ).sort("updated_at", -1).limit(5).to_list(5)
     
     # Change requests (both quotes and invoices) - from documents
     change_requests = await db.documents.find(
-        {"agent_id": agent_id, "status": "Change Requested"},
+        {"agent_id": agent_id, "status": "Change Requested", **project_filter},
         {"_id": 0}
     ).to_list(20)
 
@@ -92,26 +96,26 @@ async def get_agent_stats(user: dict = Depends(get_current_agent)):
     
     # Open change requests from canonical system
     open_change_requests = await db.change_requests.count_documents(
-        {"agent_id": agent_id, "status": {"$in": ["open", "under_review"]}}
+        {"agent_id": agent_id, "status": {"$in": ["open", "under_review"]}, **project_filter}
     )
     
     # Approved quotes ready to convert
     approved_quotes = await db.documents.find(
-        {"agent_id": agent_id, "type": "quote", "status": "Approved"},
+        {"agent_id": agent_id, "type": "quote", "status": "Approved", **project_filter},
         {"_id": 0}
     ).to_list(10)
     
     # Decision stats
     pending_decisions = await db.decisions.count_documents(
-        {"agent_id": agent_id, "status": "pending"}
+        {"agent_id": agent_id, "status": "pending", **project_filter}
     )
     overdue_decisions = 0
     now_str = datetime.now(timezone.utc).isoformat()
     overdue_decisions = await db.decisions.count_documents(
-        {"agent_id": agent_id, "status": "pending", "deadline": {"$lt": now_str, "$ne": None}}
+        {"agent_id": agent_id, "status": "pending", "deadline": {"$lt": now_str, "$ne": None}, **project_filter}
     )
     challenged_decisions = await db.decisions.count_documents(
-        {"agent_id": agent_id, "status": "Change Requested"}
+        {"agent_id": agent_id, "status": "Change Requested", **project_filter}
     )
 
     return {

@@ -11,7 +11,8 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, R
 
 from database import db
 from core.auth import get_current_user, get_current_agent
-from core.access_control import get_workspace_owner_id, get_accessible_project_ids, can_access_project, can_access_vault_doc, can_access_client
+from core.access_control import can_access_project, can_access_vault_doc, can_access_client
+from core.access_scope import resolve_agent_access_scope
 from services import vault_service
 from services import file_service
 
@@ -57,10 +58,10 @@ async def upload_vault_document(
         "project_id": project_id or None,
         "client_count": len([c for c in client_ids.split(",") if c.strip()]),
     })
-    scope_agent_id = get_workspace_owner_id(user)
+    scope = await resolve_agent_access_scope(user)
+    scope_agent_id = scope.workspace_owner_id
     if project_id:
-        if not await can_access_project(user, project_id):
-            raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
+        scope.ensure_project_access(project_id)
 
     parsed_ids = [cid.strip() for cid in client_ids.split(",") if cid.strip()]
     for cid in parsed_ids:
@@ -101,12 +102,13 @@ async def list_vault_documents(
 ):
     if user["role"] == "buyer":
         return await vault_service.list_buyer_vault(user["user_id"])
-    if project_id and not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
+    scope = await resolve_agent_access_scope(user)
+    if project_id:
+        scope.ensure_project_access(project_id)
     return await vault_service.list_vault_documents(
-        get_workspace_owner_id(user),
+        scope.workspace_owner_id,
         project_id,
-        None if project_id else await get_accessible_project_ids(user),
+        None if project_id else scope.accessible_project_ids,
     )
 
 
@@ -134,7 +136,11 @@ async def update_vault_document(vault_document_id: str, request: Request, user: 
     if not await can_access_vault_doc(user, vault_document_id):
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
     body = await request.json()
-    result = await vault_service.update_vault_document(vault_document_id, get_workspace_owner_id(user), body)
+    result = await vault_service.update_vault_document(
+        vault_document_id,
+        (await resolve_agent_access_scope(user)).workspace_owner_id,
+        body,
+    )
     if not result:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Vault document not found"})
     return result
@@ -144,7 +150,10 @@ async def update_vault_document(vault_document_id: str, request: Request, user: 
 async def delete_vault_document(vault_document_id: str, user: dict = Depends(get_current_agent)):
     if not await can_access_vault_doc(user, vault_document_id):
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
-    stored_filename = await vault_service.delete_vault_document(vault_document_id, get_workspace_owner_id(user))
+    stored_filename = await vault_service.delete_vault_document(
+        vault_document_id,
+        (await resolve_agent_access_scope(user)).workspace_owner_id,
+    )
     if stored_filename is None:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Vault document not found"})
     file_service.delete_file(stored_filename)

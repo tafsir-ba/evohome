@@ -20,7 +20,8 @@ import bcrypt
 from database import db
 from core.auth import get_current_user, get_current_agent, get_current_buyer, verify_token
 from core.auth import invalidate_user_sessions, allow_user_sessions
-from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer, get_workspace_owner_id, is_workspace_admin, is_workspace_owner
+from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer
+from core.access_scope import resolve_agent_access_scope
 from core.audit import log_audit_event
 from core.rate_limit import rate_limit_check, check_rate_limit
 from core.monitoring import capture_exception, capture_auth_failure, capture_payment_error, capture_email_error, capture_ai_error, capture_websocket_error, capture_document_error, ErrorContext
@@ -279,9 +280,10 @@ async def list_workspace_users(
     user: dict = Depends(get_current_agent),
 ):
     """List agent users in current workspace."""
-    if not is_workspace_admin(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
         raise HTTPException(status_code=403, detail="Workspace admin access required")
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
 
     query: Dict[str, Any] = {
         "$or": [{"user_id": workspace_owner_id}, {"workspace_owner_id": workspace_owner_id}],
@@ -303,13 +305,14 @@ async def list_workspace_users(
 @router.post("/admin/users")
 async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Depends(get_current_agent)):
     """Create an agent account inside current workspace."""
-    if not is_workspace_admin(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     actor_email = (user.get("email") or "").strip().lower()
-    if data.workspace_role == "admin" and not is_workspace_owner(user) and actor_email != SUPER_ADMIN_EMAIL:
+    if data.workspace_role == "admin" and not scope.is_owner and actor_email != SUPER_ADMIN_EMAIL:
         raise HTTPException(status_code=403, detail="Only workspace owner can create admin users")
 
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
     assigned_project_ids = sorted({pid for pid in data.assigned_project_ids if pid})
     if assigned_project_ids:
         project_count = await db.projects.count_documents({
@@ -400,9 +403,10 @@ async def update_workspace_user_role(
     user: dict = Depends(get_current_agent),
 ):
     """Update workspace role for an agent member."""
-    if not is_workspace_owner(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can change roles")
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
     if member_id == workspace_owner_id:
         raise HTTPException(status_code=400, detail="Cannot change workspace owner role")
 
@@ -429,9 +433,10 @@ async def update_workspace_user_role(
 @router.post("/admin/users/{member_id}/deactivate")
 async def deactivate_workspace_user(member_id: str, user: dict = Depends(get_current_agent)):
     """Deactivate a team member and revoke active sessions."""
-    if not is_workspace_admin(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
         raise HTTPException(status_code=403, detail="Workspace admin access required")
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
     if member_id == workspace_owner_id:
         raise HTTPException(status_code=400, detail="Cannot deactivate workspace owner")
 
@@ -441,7 +446,7 @@ async def deactivate_workspace_user(member_id: str, user: dict = Depends(get_cur
     )
     if not member:
         raise HTTPException(status_code=404, detail="Team member not found")
-    if member.get("workspace_role") == "admin" and not is_workspace_owner(user):
+    if member.get("workspace_role") == "admin" and not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can deactivate an admin")
 
     await db.users.update_one(
@@ -463,16 +468,17 @@ async def deactivate_workspace_user(member_id: str, user: dict = Depends(get_cur
 @router.post("/admin/users/{member_id}/reactivate")
 async def reactivate_workspace_user(member_id: str, user: dict = Depends(get_current_agent)):
     """Reactivate a team member."""
-    if not is_workspace_admin(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
         raise HTTPException(status_code=403, detail="Workspace admin access required")
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
     member = await db.users.find_one(
         {"user_id": member_id, "workspace_owner_id": workspace_owner_id, "role": "agent"},
         {"_id": 0},
     )
     if not member:
         raise HTTPException(status_code=404, detail="Team member not found")
-    if member.get("workspace_role") == "admin" and not is_workspace_owner(user):
+    if member.get("workspace_role") == "admin" and not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can reactivate an admin")
 
     await db.users.update_one(
@@ -493,9 +499,10 @@ async def reactivate_workspace_user(member_id: str, user: dict = Depends(get_cur
 @router.get("/admin/users/{member_id}/delete-impact")
 async def get_workspace_user_delete_impact(member_id: str, user: dict = Depends(get_current_agent)):
     """Preview linked records before hard-deleting a user."""
-    if not is_workspace_owner(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can preview hard delete impact")
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
     if member_id == workspace_owner_id:
         raise HTTPException(status_code=400, detail="Cannot delete workspace owner")
 
@@ -517,9 +524,10 @@ async def hard_delete_workspace_user(
     user: dict = Depends(get_current_agent),
 ):
     """Hard delete team user (owner only, with impact guard)."""
-    if not is_workspace_owner(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_owner:
         raise HTTPException(status_code=403, detail="Only workspace owner can hard delete users")
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
     if member_id == workspace_owner_id:
         raise HTTPException(status_code=400, detail="Cannot delete workspace owner")
 
@@ -563,9 +571,10 @@ async def list_audit_logs(
     user: dict = Depends(get_current_agent),
 ):
     """List workspace audit logs."""
-    if not is_workspace_admin(user):
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
         raise HTTPException(status_code=403, detail="Workspace admin access required")
-    workspace_owner_id = get_workspace_owner_id(user)
+    workspace_owner_id = scope.workspace_owner_id
     rows = await db.audit_logs.find(
         {"workspace_owner_id": workspace_owner_id}, {"_id": 0}
     ).sort("created_at", -1).limit(limit).to_list(limit)

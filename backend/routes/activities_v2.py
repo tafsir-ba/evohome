@@ -17,7 +17,8 @@ from pydantic import BaseModel
 
 from database import db
 from core.auth import get_current_user, get_current_agent
-from core.access_control import get_workspace_owner_id, get_accessible_project_ids, can_access_project, can_access_client
+from core.access_scope import resolve_agent_access_scope
+from core.access_control import can_access_client
 from services import activity_service, file_service
 
 logger = logging.getLogger(__name__)
@@ -66,8 +67,7 @@ async def _ensure_agent_activity_access(user: dict, activity_id: str) -> dict:
     activity = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
-    if not await can_access_project(user, activity.get("project_id")):
-        raise HTTPException(status_code=403, detail="Access denied")
+    (await resolve_agent_access_scope(user)).ensure_project_access(activity.get("project_id"))
     return activity
 
 
@@ -105,9 +105,9 @@ async def create_activity(
     if not recipient_ids:
         raise HTTPException(status_code=400, detail="At least one client_id is required")
 
-    scope_agent_id = get_workspace_owner_id(user)
-    if not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    scope = await resolve_agent_access_scope(user)
+    scope_agent_id = scope.workspace_owner_id
+    scope.ensure_project_access(project_id)
 
     for cid in recipient_ids:
         c = await db.clients.find_one({"client_id": cid, "agent_id": scope_agent_id}, {"_id": 0})
@@ -161,10 +161,11 @@ async def get_activities(
     user: dict = Depends(get_current_user),
 ):
     """List activities scoped by role."""
+    agent_scope = None
     if user['role'] == 'agent':
+        agent_scope = await resolve_agent_access_scope(user)
         if project_id:
-            if not await can_access_project(user, project_id):
-                raise HTTPException(status_code=403, detail="Access denied")
+            agent_scope.ensure_project_access(project_id)
         if client_id:
             if not await can_access_client(user, client_id):
                 raise HTTPException(status_code=403, detail="Access denied")
@@ -172,8 +173,8 @@ async def get_activities(
     return await activity_service.list_activities(
         user_id=user['user_id'],
         role=user['role'],
-        agent_scope_id=get_workspace_owner_id(user) if user['role'] == 'agent' else None,
-        accessible_project_ids=await get_accessible_project_ids(user) if user['role'] == 'agent' else None,
+        agent_scope_id=agent_scope.workspace_owner_id if agent_scope else None,
+        accessible_project_ids=agent_scope.accessible_project_ids if agent_scope else None,
         project_id=project_id,
         client_id=client_id,
         unit_id=unit_id,
@@ -193,11 +194,12 @@ async def mark_activities_seen(user: dict = Depends(get_current_user)):
 @router.get("/activities/unread-count")
 async def get_unread_count(user: dict = Depends(get_current_user)):
     """Get unread activity count."""
+    scope = await resolve_agent_access_scope(user) if user["role"] == "agent" else None
     return await activity_service.get_unread_count(
         user['user_id'],
         user['role'],
-        get_workspace_owner_id(user) if user['role'] == 'agent' else None,
-        await get_accessible_project_ids(user) if user['role'] == 'agent' else None,
+        scope.workspace_owner_id if scope else None,
+        scope.accessible_project_ids if scope else None,
     )
 
 
@@ -295,8 +297,9 @@ async def send_draft_activity(activity_id: str, user: dict = Depends(get_current
     recipients = activity.get('draft_recipients', [])
     if not recipients:
         raise HTTPException(status_code=400, detail="No recipients specified")
+    scope = await resolve_agent_access_scope(user)
     for cid in recipients:
-        c = await db.clients.find_one({"client_id": cid, "agent_id": get_workspace_owner_id(user)}, {"_id": 0})
+        c = await db.clients.find_one({"client_id": cid, "agent_id": scope.workspace_owner_id}, {"_id": 0})
         if not c:
             raise HTTPException(status_code=400, detail=f"Client {cid} not found")
         if not await can_access_client(user, cid):
@@ -370,11 +373,11 @@ async def update_activity(
     activity = await _ensure_agent_activity_access(user, activity_id)
     update_payload = data.model_dump(exclude_none=True)
     target_project_id = update_payload.get("project_id") or activity.get("project_id")
-    scope_agent_id = get_workspace_owner_id(user)
+    scope = await resolve_agent_access_scope(user)
+    scope_agent_id = scope.workspace_owner_id
 
     if "project_id" in update_payload:
-        if not await can_access_project(user, update_payload["project_id"]):
-            raise HTTPException(status_code=403, detail="Access denied to project")
+        scope.ensure_project_access(update_payload["project_id"])
         if "client_ids" not in update_payload:
             existing_recipients = await db.activity_recipients.find(
                 {"activity_id": activity_id},
