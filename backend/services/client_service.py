@@ -285,8 +285,14 @@ async def get_client_preview(client_id: str) -> Dict[str, Any]:
     ).sort("created_at", -1).to_list(20)
 
     # Get recent activities involving this client
+    recipient_rows = await db.activity_recipients.find(
+        {"client_id": client_id},
+        {"_id": 0, "activity_id": 1},
+    ).to_list(200)
+    activity_ids = [row.get("activity_id") for row in recipient_rows if row.get("activity_id")]
     activities = await db.activities.find(
-        {"client_ids": client_id}, {"_id": 0}
+        {"activity_id": {"$in": activity_ids}},
+        {"_id": 0},
     ).sort("created_at", -1).to_list(10)
 
     # Get unit info

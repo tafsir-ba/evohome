@@ -321,6 +321,11 @@ async def _list_agent_activities(
 ):
     query = {}
     scoped_project_ids = list(accessible_project_ids or [])
+    has_explicit_scope = accessible_project_ids is not None
+    if has_explicit_scope and not scoped_project_ids:
+        return {"activities": [], "total": 0, "limit": limit, "offset": offset}
+    if scoped_project_ids:
+        query["project_id"] = {"$in": scoped_project_ids}
     if project_id:
         query["project_id"] = project_id
     if client_id:
@@ -333,7 +338,7 @@ async def _list_agent_activities(
     if not project_id and not client_id and not unit_id:
         if scoped_project_ids:
             query["project_id"] = {"$in": scoped_project_ids}
-        elif agent_scope_id:
+        elif agent_scope_id and not has_explicit_scope:
             projects = await db.projects.find(
                 {"agent_id": agent_scope_id}, {"_id": 0, "project_id": 1}
             ).to_list(2000)
@@ -341,8 +346,6 @@ async def _list_agent_activities(
             query["project_id"] = {"$in": project_ids}
         else:
             query["author_id"] = user_id
-    elif scoped_project_ids and not project_id:
-        query["project_id"] = {"$in": scoped_project_ids}
     if activity_type:
         query["type"] = activity_type
 

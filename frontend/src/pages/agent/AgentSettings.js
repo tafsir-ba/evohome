@@ -219,6 +219,10 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
       toast.error('Name, email and password are required');
       return;
     }
+    if (adminForm.workspace_role === 'member' && adminForm.assigned_project_ids.length === 0) {
+      toast.error('Members must be assigned to at least one project');
+      return;
+    }
     setCreatingAdminUser(true);
     try {
       const res = await fetch(`${API}/admin/users`, {
@@ -1206,7 +1210,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
                   <div className="space-y-2">
                     <Label>Project Access</Label>
                     <p className="text-sm text-muted-foreground">
-                      Select the projects this user can access. Leave empty to keep full workspace access.
+                      Members must have at least one assigned project. Admin users can keep full workspace access.
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {adminProjects.map((project) => {

@@ -76,7 +76,13 @@ async def resolve_recipient_client_ids_for_send(decision: Dict[str, Any], agent_
         return []
 
     if ctype == "clients":
-        return list(dict.fromkeys(explicit)) if explicit else []
+        if not explicit:
+            return []
+        clients = await db.clients.find(
+            {"client_id": {"$in": explicit}, "project_id": pid, "agent_id": agent_id},
+            {"_id": 0, "client_id": 1},
+        ).to_list(len(explicit))
+        return list(dict.fromkeys(c["client_id"] for c in clients if c.get("client_id")))
 
     if ctype == "units" or unit_ids:
         if not unit_ids:
@@ -296,7 +302,13 @@ async def buyer_respond(
 
     now = datetime.now(timezone.utc).isoformat()
 
-    # Update recipient record
+    recipient = await db.decision_recipients.find_one(
+        {"decision_id": decision_id, "client_id": client_id},
+        {"_id": 0, "client_id": 1},
+    )
+    if not recipient:
+        raise ValueError("Buyer is not an authorized recipient for this decision")
+
     await db.decision_recipients.update_one(
         {"decision_id": decision_id, "client_id": client_id},
         {"$set": {
@@ -304,7 +316,7 @@ async def buyer_respond(
             "responded_at": now,
             "comment": comment,
         }},
-        upsert=True,
+        upsert=False,
     )
 
     # Determine overall decision status
@@ -454,6 +466,7 @@ async def get_decision_with_recipients(decision_id: str) -> Optional[Dict[str, A
 
 async def list_decisions(
     agent_id: str,
+    accessible_project_ids: Optional[List[str]] = None,
     project_id: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 50,
@@ -461,6 +474,10 @@ async def list_decisions(
 ) -> Dict[str, Any]:
     """List decisions for an agent."""
     query = {"agent_id": agent_id}
+    if accessible_project_ids is not None:
+        if not accessible_project_ids:
+            return {"decisions": [], "total": 0}
+        query["project_id"] = {"$in": accessible_project_ids}
     if project_id:
         query["project_id"] = project_id
     if status:
@@ -500,14 +517,7 @@ async def list_decisions(
 
 async def list_buyer_decisions(buyer_id: str) -> List[Dict[str, Any]]:
     """List decisions visible to a buyer."""
-    # Find client records for this buyer (by buyer_id or by email match)
-    buyer = await db.users.find_one({"user_id": buyer_id}, {"_id": 0, "email": 1})
-    buyer_email = buyer.get("email") if buyer else None
-
     query = {"buyer_id": buyer_id}
-    if buyer_email:
-        query = {"$or": [{"buyer_id": buyer_id}, {"email": buyer_email}]}
-
     clients = await db.clients.find(
         query, {"_id": 0, "client_id": 1, "project_id": 1}
     ).to_list(50)

@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { cn, formatContextSubtitle } from '../../lib/utils';
 import { SupplierAutocomplete } from '../../components/SupplierAutocomplete';
+import { useDataContext } from '../../context/DataContext';
 import {
   PdfUploadZone,
   LineItemsEditor,
@@ -31,6 +32,7 @@ export const AgentDocumentUpload = () => {
   const navigate = useNavigate();
   const { documentId } = useParams();
   const [searchParams] = useSearchParams();
+  const { projects, loading: projectsLoading } = useDataContext();
   const isEditMode = !!documentId;
   
   // Document type from URL param or from loaded document
@@ -66,8 +68,8 @@ export const AgentDocumentUpload = () => {
 
   useEffect(() => {
     fetchClients();
-    if (isEditMode) fetchExistingDoc();
-  }, [documentId]);
+    if (isEditMode && !projectsLoading) fetchExistingDoc();
+  }, [documentId, isEditMode, projectsLoading]);
 
   useEffect(() => {
     const selected = clients.find((c) => c.client_id === selectedClient);
@@ -103,6 +105,11 @@ export const AgentDocumentUpload = () => {
       const res = await fetch(`${API}/documents/${documentId}`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
+        if (data.project_id && !projects.some((p) => p.project_id === data.project_id)) {
+          toast.error('This document is outside your project access');
+          navigate('/agent/documents');
+          return;
+        }
         setDocData(data);
         setDocType(data.type || 'quote');
         setSelectedClient(data.client_id || '');

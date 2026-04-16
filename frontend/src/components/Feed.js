@@ -309,7 +309,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
                 ) : null}
               </div>
               <Button variant="outline" size="sm" className="flex-shrink-0" asChild>
-                <a href={fileUrlFull} target="_blank" rel="noopener noreferrer" data-testid={`download-file-${activity.activity_id}`}>
+                <a href={`${API}/activities/${activity.activity_id}/attachment`} target="_blank" rel="noopener noreferrer" data-testid={`download-file-${activity.activity_id}`}>
                   <Download className="w-4 h-4 sm:mr-1" />
                   <span className="hidden sm:inline">Open</span>
                 </a>
@@ -515,7 +515,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
                 asChild
                 data-testid={`download-file-${activity.activity_id}`}
               >
-                <a href={fileUrlFull || '#'} download target="_blank" rel="noopener noreferrer">
+                <a href={`${API}/activities/${activity.activity_id}/attachment`} target="_blank" rel="noopener noreferrer">
                   <Download className="w-4 h-4" />
                 </a>
               </Button>
@@ -714,7 +714,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
           if (!client) {
             setSearchParams((prev) => {
               const next = new URLSearchParams(prev);
-              next.delete('client_id');
+              next.delete('client');
               return next;
             }, { replace: true });
           }
@@ -734,7 +734,7 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           next.delete('project');
-          next.delete('client_id');
+          next.delete('client');
           return next;
         }, { replace: true });
       }

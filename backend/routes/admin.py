@@ -318,6 +318,8 @@ async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Dep
         })
         if project_count != len(assigned_project_ids):
             raise HTTPException(status_code=400, detail="One or more assigned projects do not belong to this workspace")
+    if data.workspace_role == "member" and not assigned_project_ids:
+        raise HTTPException(status_code=400, detail="Members must be assigned to at least one project")
     existing = await db.users.find_one({"email": data.email.lower(), "role": "agent"}, {"_id": 0})
     if existing:
         existing_workspace_owner = existing.get("workspace_owner_id") or existing.get("user_id")

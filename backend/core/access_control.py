@@ -51,6 +51,10 @@ def _normalized_assigned_project_ids(user: Dict[str, Any]) -> List[str]:
     return [project_id for project_id in assigned if project_id]
 
 
+def _uses_explicit_project_assignment(user: Dict[str, Any]) -> bool:
+    return "assigned_project_ids" in user
+
+
 # ── Project access ──
 
 async def can_access_project(user: Dict[str, Any], project_id: str) -> bool:
@@ -65,7 +69,11 @@ async def can_access_project(user: Dict[str, Any], project_id: str) -> bool:
         if is_workspace_owner(user):
             return True
         assigned_project_ids = _normalized_assigned_project_ids(user)
-        return not assigned_project_ids or project_id in assigned_project_ids
+        if not _uses_explicit_project_assignment(user):
+            return True
+        if user.get("workspace_role") == "admin" and not assigned_project_ids:
+            return True
+        return project_id in assigned_project_ids
     elif user['role'] == 'buyer':
         return await db.clients.find_one(
             {"buyer_id": user['user_id'], "project_id": project_id}
@@ -84,7 +92,9 @@ async def get_accessible_project_ids(user: Dict[str, Any]) -> List[str]:
         if is_workspace_owner(user):
             return project_ids
         assigned_project_ids = set(_normalized_assigned_project_ids(user))
-        if not assigned_project_ids:
+        if not _uses_explicit_project_assignment(user):
+            return project_ids
+        if user.get("workspace_role") == "admin" and not assigned_project_ids:
             return project_ids
         return [project_id for project_id in project_ids if project_id in assigned_project_ids]
     elif user['role'] == 'buyer':

@@ -58,7 +58,7 @@ const NEXT_STATUS = {
 };
 
 export const AgentWorkflow = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const projectFilter = searchParams.get('project');
   
   // SINGLE SOURCE OF TRUTH: DataContext for projects

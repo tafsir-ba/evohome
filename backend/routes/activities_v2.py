@@ -162,19 +162,12 @@ async def get_activities(
 ):
     """List activities scoped by role."""
     if user['role'] == 'agent':
-        scope_agent_id = get_workspace_owner_id(user)
         if project_id:
-            p = await db.projects.find_one(
-                {"project_id": project_id, "agent_id": scope_agent_id}
-            )
-            if not p:
-                raise HTTPException(status_code=404, detail="Project not found")
+            if not await can_access_project(user, project_id):
+                raise HTTPException(status_code=403, detail="Access denied")
         if client_id:
-            c = await db.clients.find_one(
-                {"client_id": client_id, "agent_id": scope_agent_id}
-            )
-            if not c:
-                raise HTTPException(status_code=404, detail="Client not found")
+            if not await can_access_client(user, client_id):
+                raise HTTPException(status_code=403, detail="Access denied")
 
     return await activity_service.list_activities(
         user_id=user['user_id'],
@@ -211,21 +204,13 @@ async def get_unread_count(user: dict = Depends(get_current_user)):
 @router.get("/activities/files/demo/{filename:path}")
 async def get_demo_activity_file(filename: str, user: dict = Depends(get_current_user)):
     """Serve demo activity file attachments."""
-    file_path = _resolve_safe_activity_path(f"demo/{filename}")
-    if not file_path.exists():
-        logger.warning("demo activity file missing path=%s", file_path)
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, media_type=_media_type(file_path), filename=file_path.name)
+    raise HTTPException(status_code=410, detail="Use /api/activities/{activity_id}/attachment instead")
 
 
 @router.get("/activities/files/{filename:path}")
 async def get_activity_file(filename: str, user: dict = Depends(get_current_user)):
     """Serve activity file attachments (path form supports legacy subpaths in file_url)."""
-    file_path = _resolve_safe_activity_path(filename)
-    if not file_path.exists():
-        logger.warning("activity file missing path=%s", file_path)
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, media_type=_media_type(file_path), filename=file_path.name)
+    raise HTTPException(status_code=410, detail="Use /api/activities/{activity_id}/attachment instead")
 
 
 @router.get("/activities/{activity_id}/attachment")
@@ -390,6 +375,12 @@ async def update_activity(
     if "project_id" in update_payload:
         if not await can_access_project(user, update_payload["project_id"]):
             raise HTTPException(status_code=403, detail="Access denied to project")
+        if "client_ids" not in update_payload:
+            existing_recipients = await db.activity_recipients.find(
+                {"activity_id": activity_id},
+                {"_id": 0, "client_id": 1},
+            ).to_list(200)
+            update_payload["client_ids"] = [r.get("client_id") for r in existing_recipients if r.get("client_id")]
 
     if "client_ids" in update_payload:
         client_ids = [

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
+import { useDataContext } from '../../context/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
@@ -42,17 +43,25 @@ const getAuthHeaders = () => {
  */
 export const ClientPreview = () => {
   const { clientId } = useParams();
+  const { projects, loading: projectsLoading } = useDataContext();
   const [loading, setLoading] = useState(true);
   const [previewData, setPreviewData] = useState(null);
   const [activeTab, setActiveTab] = useState('documents');
 
   useEffect(() => {
+    if (projectsLoading) return;
     const fetchPreviewData = async () => {
       try {
         const res = await fetch(`${API}/clients/${clientId}/preview`, { credentials: 'include', headers: getAuthHeaders() });
         
         if (res.ok) {
           const data = await res.json();
+          const previewProjectId = data?.client?.project_id;
+          if (previewProjectId && !projects.some((p) => p.project_id === previewProjectId)) {
+            toast.error('This client is outside your project access');
+            setPreviewData(null);
+            return;
+          }
           setPreviewData(data);
         } else {
           toast.error('Failed to load client preview');
@@ -66,7 +75,7 @@ export const ClientPreview = () => {
     };
 
     fetchPreviewData();
-  }, [clientId]);
+  }, [clientId, projectsLoading, projects.length]);
 
   if (loading) {
     return (

@@ -9,6 +9,9 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 from core.auth import get_current_user, get_current_agent, get_current_buyer
+from core.access_control import can_access_project, get_workspace_owner_id, get_accessible_project_ids
+from services.change_request_access import user_can_access_entity
+from services.recipient_scope_service import get_buyer_scope
 from services import decision_service, file_service
 from database import db
 
@@ -52,9 +55,12 @@ class BuyerRespondBody(BaseModel):
 @router.post("/decisions")
 async def create_decision(body: CreateDecisionBody, user: dict = Depends(get_current_agent)):
     """Create a new decision (agent only)."""
+    if not await can_access_project(user, body.project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    scope_agent_id = get_workspace_owner_id(user)
     try:
         decision = await decision_service.create_decision(
-            agent_id=user["user_id"],
+            agent_id=scope_agent_id,
             project_id=body.project_id,
             title=body.title,
             description=body.description,
@@ -81,8 +87,11 @@ async def list_decisions(
     user: dict = Depends(get_current_agent),
 ):
     """List decisions for the current agent."""
+    if project_id and not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     return await decision_service.list_decisions(
-        agent_id=user["user_id"],
+        agent_id=get_workspace_owner_id(user),
+        accessible_project_ids=await get_accessible_project_ids(user),
         project_id=project_id,
         status=status,
         limit=limit,
@@ -93,6 +102,8 @@ async def list_decisions(
 @router.get("/decisions/{decision_id}")
 async def get_decision(decision_id: str, user: dict = Depends(get_current_user)):
     """Get decision detail with recipients."""
+    if not await user_can_access_entity(user, "decision", decision_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     decision = await decision_service.get_decision_with_recipients(decision_id)
     if not decision:
         raise HTTPException(status_code=404, detail="Decision not found")
@@ -102,6 +113,9 @@ async def get_decision(decision_id: str, user: dict = Depends(get_current_user))
 @router.put("/decisions/{decision_id}")
 async def update_decision(decision_id: str, body: UpdateDecisionBody, user: dict = Depends(get_current_agent)):
     """Update a draft decision."""
+    if not await user_can_access_entity(user, "decision", decision_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    scope_agent_id = get_workspace_owner_id(user)
     try:
         updates = body.dict(exclude_none=True)
         if "coverage_type" in updates or "unit_ids" in updates or "client_ids" in updates:
@@ -110,7 +124,7 @@ async def update_decision(decision_id: str, body: UpdateDecisionBody, user: dict
                 "unit_ids": updates.pop("unit_ids", []),
                 "client_ids": updates.pop("client_ids", []),
             }
-        decision = await decision_service.update_decision(decision_id, user["user_id"], updates)
+        decision = await decision_service.update_decision(decision_id, scope_agent_id, updates)
         return decision
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -119,8 +133,10 @@ async def update_decision(decision_id: str, body: UpdateDecisionBody, user: dict
 @router.post("/decisions/{decision_id}/send")
 async def send_decision(decision_id: str, user: dict = Depends(get_current_agent)):
     """Send a decision to buyers."""
+    if not await user_can_access_entity(user, "decision", decision_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        decision = await decision_service.send_decision(decision_id, user["user_id"])
+        decision = await decision_service.send_decision(decision_id, get_workspace_owner_id(user))
         return decision
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -129,8 +145,10 @@ async def send_decision(decision_id: str, user: dict = Depends(get_current_agent
 @router.post("/decisions/{decision_id}/close")
 async def close_decision(decision_id: str, user: dict = Depends(get_current_agent)):
     """Close a decision (final state)."""
+    if not await user_can_access_entity(user, "decision", decision_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        decision = await decision_service.close_decision(decision_id, user["user_id"])
+        decision = await decision_service.close_decision(decision_id, get_workspace_owner_id(user))
         return decision
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -139,8 +157,10 @@ async def close_decision(decision_id: str, user: dict = Depends(get_current_agen
 @router.delete("/decisions/{decision_id}")
 async def delete_decision(decision_id: str, user: dict = Depends(get_current_agent)):
     """Delete a draft decision."""
+    if not await user_can_access_entity(user, "decision", decision_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        await decision_service.delete_decision(decision_id, user["user_id"])
+        await decision_service.delete_decision(decision_id, get_workspace_owner_id(user))
         return {"message": "Decision deleted"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -154,8 +174,10 @@ async def upload_attachment(
 ):
     """Upload an attachment for a decision."""
     decision = await decision_service.get_decision(decision_id)
-    if not decision or decision["agent_id"] != user["user_id"]:
+    if not decision or decision["agent_id"] != get_workspace_owner_id(user):
         raise HTTPException(status_code=404, detail="Decision not found")
+    if not await user_can_access_entity(user, "decision", decision_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     meta = await file_service.save_upload(
         file,
@@ -194,21 +216,22 @@ async def list_buyer_decisions(user: dict = Depends(get_current_buyer)):
 @router.post("/decisions/{decision_id}/respond")
 async def buyer_respond(decision_id: str, body: BuyerRespondBody, user: dict = Depends(get_current_buyer)):
     """Buyer responds to a decision."""
+    if not await user_can_access_entity(user, "decision", decision_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        # Find the buyer's client_id (by buyer_id or email match)
-        buyer = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "email": 1})
-        buyer_email = buyer.get("email") if buyer else None
-        query = {"buyer_id": user["user_id"]}
-        if buyer_email:
-            query = {"$or": [{"buyer_id": user["user_id"]}, {"email": buyer_email}]}
-        client = await db.clients.find_one(query, {"_id": 0, "client_id": 1})
-        if not client:
-            raise ValueError("No client record found for this buyer")
+        scope = await get_buyer_scope(user["user_id"], include_unit_peers=True)
+        peer_client_ids = scope.get("peer_client_ids", [])
+        recipient = await db.decision_recipients.find_one(
+            {"decision_id": decision_id, "client_id": {"$in": peer_client_ids}},
+            {"_id": 0, "client_id": 1},
+        )
+        if not recipient:
+            raise ValueError("Decision recipient not found for this buyer")
 
         decision = await decision_service.buyer_respond(
             decision_id=decision_id,
             buyer_id=user["user_id"],
-            client_id=client["client_id"],
+            client_id=recipient["client_id"],
             action=body.action,
             comment=body.comment,
         )

@@ -20,7 +20,7 @@ const getAuthHeaders = () => {
 export const AgentUnitDetail = () => {
   const { unitId } = useParams();
   const navigate = useNavigate();
-  const { projects } = useDataContext();
+  const { projects, loading: projectsLoading } = useDataContext();
   const [loading, setLoading] = useState(true);
   const [attaching, setAttaching] = useState(false);
   const [unit, setUnit] = useState(null);
@@ -37,7 +37,7 @@ export const AgentUnitDetail = () => {
         throw new Error('Unit not found');
       }
       const unitData = await unitRes.json();
-      if (unitData.project_id && projects.length > 0 && !projects.some((p) => p.project_id === unitData.project_id)) {
+      if (unitData.project_id && !projects.some((p) => p.project_id === unitData.project_id)) {
         throw new Error('This unit is outside your project access');
       }
       setUnit(unitData);
@@ -60,8 +60,9 @@ export const AgentUnitDetail = () => {
   };
 
   useEffect(() => {
+    if (projectsLoading) return;
     fetchData();
-  }, [unitId, projects.length]);
+  }, [unitId, projectsLoading, projects.length]);
 
   const candidateClients = useMemo(
     () => projectClients.filter((c) => c.client_id !== undefined && c.unit_id !== unitId),

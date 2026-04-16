@@ -49,7 +49,7 @@ const ROLE_SUGGESTIONS = [
 ];
 
 export const AgentTeam = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const projectFilter = searchParams.get('project');
   
   // SINGLE SOURCE OF TRUTH: DataContext for projects
@@ -232,7 +232,7 @@ export const AgentTeam = () => {
       if (res.ok) {
         toast.success(editingMember ? 'Team member updated' : 'Team member added');
         setDialogOpen(false);
-        fetchTeamMembers();
+        fetchTeamMembers(selectedProjectId);
       } else {
         const error = await res.json();
         throw new Error(error.detail || 'Failed to save');
@@ -255,7 +255,7 @@ export const AgentTeam = () => {
 
       if (res.ok) {
         toast.success('Team member removed');
-        fetchTeamMembers();
+        fetchTeamMembers(selectedProjectId);
       } else {
         throw new Error('Failed to delete');
       }

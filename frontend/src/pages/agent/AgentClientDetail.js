@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
 import { useSettings } from '../../context/SettingsContext';
+import { useDataContext } from '../../context/DataContext';
 import { formatContextSubtitle } from '../../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -40,9 +41,9 @@ export const AgentClientDetail = () => {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const { t } = useSettings();
+  const { projects, loading: projectsLoading } = useDataContext();
   const [client, setClient] = useState(null);
   const [project, setProject] = useState(null);
-  const [projects, setProjects] = useState([]);
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,30 +58,16 @@ export const AgentClientDetail = () => {
   });
 
   useEffect(() => {
-    fetchProjects();
-  }, [clientId]);
-
-  useEffect(() => {
+    if (projectsLoading) return;
     fetchClient();
-  }, [clientId, projects.length]);
-
-  const fetchProjects = async () => {
-    try {
-      const res = await fetch(`${API}/projects`, { credentials: 'include', headers: getAuthHeaders() });
-      if (res.ok) {
-        setProjects(await res.json());
-      }
-    } catch (error) {
-      console.error('Failed to fetch projects:', error);
-    }
-  };
+  }, [clientId, projectsLoading, projects.length]);
 
   const fetchClient = async () => {
     try {
       const response = await fetch(`${API}/clients/${clientId}`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const data = await response.json();
-        if (data.project_id && projects.length > 0 && !projects.some((p) => p.project_id === data.project_id)) {
+        if (data.project_id && !projects.some((p) => p.project_id === data.project_id)) {
           toast.error('This client is outside your project access');
           navigate('/agent/clients');
           return;

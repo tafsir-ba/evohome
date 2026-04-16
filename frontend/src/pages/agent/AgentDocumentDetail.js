@@ -25,7 +25,7 @@ const getAuthHeaders = () => {
 
 export const AgentDocumentDetail = () => {
   const { t } = useSettings();
-  const { projects } = useDataContext();
+  const { projects, loading: projectsLoading } = useDataContext();
   const { documentId, quoteId, invoiceId } = useParams();
   const id = documentId || quoteId || invoiceId;
   const navigate = useNavigate();
@@ -45,14 +45,17 @@ export const AgentDocumentDetail = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => { fetchDoc(); }, [id, projects.length]);
+  useEffect(() => {
+    if (projectsLoading) return;
+    fetchDoc();
+  }, [id, projectsLoading, projects.length]);
 
   const fetchDoc = async () => {
     try {
       const res = await fetch(`${API}/documents/${id}`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
-        if (data.project_id && projects.length > 0 && !projects.some((p) => p.project_id === data.project_id)) {
+        if (data.project_id && !projects.some((p) => p.project_id === data.project_id)) {
           toast.error('This document is outside your project access');
           navigate('/agent/documents');
           return;

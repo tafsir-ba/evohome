@@ -513,6 +513,10 @@ async def link_document_to_step(step_id: str, data: LinkDocumentRequest, user=De
     )
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
+    if not activity.get("project_id") or activity.get("project_id") != step.get("project_id"):
+        raise HTTPException(status_code=400, detail="Activity does not belong to this timeline project")
+    if not await can_access_project(user, activity.get("project_id")):
+        raise HTTPException(status_code=403, detail="Access denied")
 
     link_id = await step_service.link_document(step_id, data.activity_id)
     if link_id is None:
