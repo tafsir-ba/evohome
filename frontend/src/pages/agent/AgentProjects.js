@@ -70,6 +70,13 @@ export const AgentProjects = () => {
   const [newUnit, setNewUnit] = useState('');
   const [loadingUnits, setLoadingUnits] = useState(false);
 
+  // Project delete impact & confirmation
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteImpact, setDeleteImpact] = useState(null);
+  const [deleteProject, setDeleteProject] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   useEffect(() => {
     fetchSubscriptionStatus();
   }, []);
@@ -162,27 +169,89 @@ export const AgentProjects = () => {
     }
   };
 
-  const handleDelete = async (e, projectId) => {
+  const openDeleteDialog = async (e, project) => {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this project? This will also affect linked clients.')) {
-      return;
-    }
+    setDeleteProject(project);
+    setDeleteImpact(null);
+    setDeleteError('');
+    setDeleteDialogOpen(true);
+    setDeleteLoading(true);
 
     try {
-      const res = await fetch(`${API}/projects/${projectId}`, {
+      const res = await fetch(`${API}/projects/${project.project_id}/delete-impact`, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        setDeleteImpact(await res.json());
+      } else {
+        const error = await res.json();
+        setDeleteError(error.detail || 'Failed to load delete impact');
+      }
+    } catch (error) {
+      console.error('Failed to load delete impact:', error);
+      setDeleteError('Failed to load delete impact');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleImpactNavigate = (type, projectId) => {
+    switch (type) {
+      case 'clients':
+        navigate(`/agent/clients?project=${projectId}`);
+        break;
+      case 'units':
+        navigate(`/agent/clients?project=${projectId}`);
+        break;
+      case 'documents':
+        navigate('/agent/documents');
+        break;
+      case 'timeline':
+        navigate('/agent/timeline');
+        break;
+      case 'vault':
+        navigate('/agent/vault');
+        break;
+      case 'decisions':
+        navigate('/agent/decisions');
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteProject) return;
+    setDeleteLoading(true);
+    setDeleteError('');
+
+    try {
+      const res = await fetch(`${API}/projects/${deleteProject.project_id}?force=true`, {
         method: 'DELETE',
-        credentials: 'include'
+        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (res.ok) {
-        toast.success('Project deleted');
+        toast.success('Project and linked data deleted');
+        setDeleteDialogOpen(false);
+        setDeleteImpact(null);
+        setDeleteProject(null);
         refreshProjects();
       } else {
         const error = await res.json();
-        throw new Error(error.detail || 'Failed to delete project');
+        const message = error.detail || 'Failed to delete project';
+        setDeleteError(message);
+        toast.error(message);
       }
     } catch (error) {
-      toast.error(error.message);
+      console.error('Delete project failed:', error);
+      const message = error.message || 'Failed to delete project';
+      setDeleteError(message);
+      toast.error(message);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -409,7 +478,7 @@ export const AgentProjects = () => {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={(e) => handleDelete(e, project.project_id)}
+                        onClick={(e) => openDeleteDialog(e, project)}
                         data-testid={`delete-project-${project.project_id}`}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -545,6 +614,159 @@ export const AgentProjects = () => {
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
               ) : null}
               {editingProject ? 'Save Changes' : 'Create Project'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Project Impact & Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Delete project & linked data
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete the project
+              {deleteProject ? ` "${deleteProject.name}"` : ''} and all linked records listed below.
+              Review each dependency before proceeding.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            {deleteLoading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading linked data…
+              </div>
+            )}
+
+            {deleteError && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                {deleteError}
+              </div>
+            )}
+
+            {deleteImpact && (
+              <div className="space-y-3 max-h-64 overflow-y-auto border border-border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground mb-1">
+                  Click any item to inspect the impacted data before deletion.
+                </div>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('clients', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-muted-foreground" />
+                      <span>Clients</span>
+                    </span>
+                    <span className="font-medium">{deleteImpact.clients}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('units', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Home className="w-4 h-4 text-muted-foreground" />
+                      <span>Units</span>
+                    </span>
+                    <span className="font-medium">{deleteImpact.units}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('documents', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span>Documents (total / non-draft)</span>
+                    </span>
+                    <span className="font-medium">
+                      {deleteImpact.documents_total} / {deleteImpact.documents_non_draft}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('timeline', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                      <span>Timelines & steps</span>
+                    </span>
+                    <span className="font-medium">
+                      {deleteImpact.timelines} / {deleteImpact.timeline_steps}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('vault', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span>Vault documents</span>
+                    </span>
+                    <span className="font-medium">{deleteImpact.vault_documents}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('decisions', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-muted-foreground" />
+                      <span>Decisions & change requests</span>
+                    </span>
+                    <span className="font-medium">
+                      {deleteImpact.decisions} / {deleteImpact.change_requests}
+                    </span>
+                  </button>
+
+                  <div className="text-xs text-muted-foreground pt-1 border-t border-border mt-2">
+                    Team members: <span className="font-medium text-foreground">{deleteImpact.team_members}</span> •
+                    Activities: <span className="font-medium text-foreground">{deleteImpact.activities}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="text-xs text-muted-foreground">
+              Issued financial documents (Sent/Approved/Paid, etc.) prevent deletion. In that case, archive the project instead.
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleteLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={deleteLoading || !!deleteError}
+              data-testid="confirm-delete-project-btn"
+            >
+              {deleteLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                'Delete project & data'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
