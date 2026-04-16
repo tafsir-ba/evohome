@@ -121,7 +121,6 @@ async def get_workflow_template(template_id: str, user: dict = Depends(get_curre
 @router.post("/workflows/execute")
 async def execute_workflow(request: WorkflowExecuteRequest, user: dict = Depends(get_current_agent)):
     """Start executing a workflow. All mutations delegated to canonical services."""
-    service = get_workflow_service(db)
     scope = await resolve_agent_access_scope(user)
     agent_id = scope.workspace_owner_id
     context_project_id = request.context.get("project_id")
@@ -130,6 +129,8 @@ async def execute_workflow(request: WorkflowExecuteRequest, user: dict = Depends
     context_document_id = request.context.get("document_id")
     if context_document_id and not await can_access_document(user, context_document_id):
         raise HTTPException(status_code=403, detail="Access denied to this document")
+
+    service = get_workflow_service(db)
 
     # Resolve agent display name + email for outbound emails
     agent_name, agent_email = await _resolve_agent_identity(user)

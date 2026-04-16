@@ -4,7 +4,7 @@ Access control for change request APIs — mirrors document/decision ownership r
 from typing import Any, Dict
 
 from database import db
-from core.access_control import get_workspace_owner_id, get_accessible_project_ids
+from core.access_scope import resolve_agent_access_scope
 from services.recipient_scope_service import get_buyer_scope
 
 
@@ -26,13 +26,13 @@ async def user_can_access_entity(user: Dict[str, Any], entity_type: str, entity_
         if not doc:
             return False
         if role == "agent":
-            workspace_owner_id = get_workspace_owner_id(user)
-            if doc.get("agent_id") != workspace_owner_id:
+            scope = await resolve_agent_access_scope(user)
+            if doc.get("agent_id") != scope.workspace_owner_id:
                 return False
             project_id = doc.get("project_id")
             if not project_id:
                 return True
-            return project_id in set(await get_accessible_project_ids(user))
+            return scope.can_access_all_projects or project_id in set(scope.accessible_project_ids)
         cids = await _buyer_scope_client_ids(uid)
         return doc.get("client_id") in cids
 
@@ -44,13 +44,13 @@ async def user_can_access_entity(user: Dict[str, Any], entity_type: str, entity_
         if not dec:
             return False
         if role == "agent":
-            workspace_owner_id = get_workspace_owner_id(user)
-            if dec.get("agent_id") not in {uid, workspace_owner_id}:
+            scope = await resolve_agent_access_scope(user)
+            if dec.get("agent_id") != scope.workspace_owner_id:
                 return False
             project_id = dec.get("project_id")
             if not project_id:
                 return True
-            return project_id in set(await get_accessible_project_ids(user))
+            return scope.can_access_all_projects or project_id in set(scope.accessible_project_ids)
         # Buyer: must be a recipient client for this decision
         recs = await db.decision_recipients.find(
             {"decision_id": entity_id}, {"_id": 0, "client_id": 1}

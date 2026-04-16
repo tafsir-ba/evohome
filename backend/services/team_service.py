@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 
 from database import db
-from core.access_control import get_workspace_owner_id, can_access_project, get_accessible_project_ids
+from core.access_scope import resolve_agent_access_scope
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 async def _verify_project_access(project_id: str, user: dict) -> dict:
     """Verify user has access to the project. Returns project dict."""
     if user["role"] == "agent":
-        if not await can_access_project(user, project_id):
+        scope = await resolve_agent_access_scope(user)
+        if not scope.can_access_all_projects and project_id not in set(scope.accessible_project_ids):
             return None
-        scope_agent_id = get_workspace_owner_id(user)
         project = await db.projects.find_one(
-            {"project_id": project_id, "agent_id": scope_agent_id}, {"_id": 0}
+            {"project_id": project_id, "agent_id": scope.workspace_owner_id}, {"_id": 0}
         )
     else:
         client = await db.clients.find_one(
