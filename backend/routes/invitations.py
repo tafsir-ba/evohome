@@ -8,8 +8,9 @@ import uuid
 import secrets
 import logging
 import bcrypt
+import html
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, Literal
 
 from fastapi import APIRouter, HTTPException, Depends, Response, Form
 from pydantic import BaseModel, EmailStr
@@ -28,7 +29,7 @@ router = APIRouter()
 
 class TeamInviteCreate(BaseModel):
     email: EmailStr
-    role: str = "member"
+    role: Literal["member", "admin"] = "member"
     message: Optional[str] = None
 
 
@@ -44,8 +45,10 @@ async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(ge
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Only workspace admins can invite team members")
     workspace_owner_id = get_workspace_owner_id(user)
+    normalized_email = data.email.lower().strip()
+    cleaned_message = (data.message or "").strip()
 
-    existing_agent = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
+    existing_agent = await db.users.find_one({"email": normalized_email, "role": "agent"}, {"_id": 0})
     if existing_agent:
         if existing_agent.get('workspace_owner_id') == workspace_owner_id:
             raise HTTPException(status_code=400, detail="This user is already part of your team")
@@ -53,7 +56,7 @@ async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(ge
             raise HTTPException(status_code=400, detail="This user is already part of another workspace")
 
     existing_invite = await db.team_invitations.find_one({
-        "email": data.email,
+        "email": normalized_email,
         "invited_by": workspace_owner_id,
         "status": "pending",
     })
@@ -66,9 +69,9 @@ async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(ge
 
     invitation_doc = {
         "invitation_id": invitation_id,
-        "email": data.email.lower(),
+        "email": normalized_email,
         "role": data.role,
-        "message": data.message,
+        "message": cleaned_message if cleaned_message else None,
         "status": "pending",
         "invited_by": workspace_owner_id,
         "invited_by_name": user.get('name', 'Unknown'),
@@ -82,37 +85,41 @@ async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(ge
     frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://evohome.ch').replace('/api', '')
     invite_link = f"{frontend_url}/team/accept?token={invitation_token}"
     company_name = user.get('settings', {}).get('company_name') or user.get('name', 'Evohome')
+    inviter_name = user.get('name', 'Votre equipe')
 
-    subject = f"You've been invited to join {company_name} on Evohome"
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #2563EB;">Team Invitation</h2>
-        <p>Hi,</p>
-        <p><strong>{user.get('name', 'A team member')}</strong> has invited you to join <strong>{company_name}</strong> on Evohome as a <strong>{data.role}</strong>.</p>
-        {f'<p style="color: #666; font-style: italic;">"{data.message}"</p>' if data.message else ''}
-        <p style="text-align: center; margin: 30px 0;">
-            <a href="{invite_link}" style="background-color: #2563EB; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                Accept Invitation
-            </a>
-        </p>
-        <p style="color: #666; font-size: 14px;">This invitation will expire in 7 days.</p>
-        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-        <p style="color: #999; font-size: 12px;">Evohome - Real Estate Management</p>
-    </div>
-    """
+    subject, html_content = get_email_template("team_invitation", {
+        "company_name": html.escape(company_name),
+        "invited_by_name": html.escape(inviter_name),
+        "role": data.role,
+        "invite_link": invite_link,
+        "message": html.escape(cleaned_message) if cleaned_message else "",
+    })
 
-    await send_email_async(data.email, subject, html_content)
-    logger.info(f"Team invitation sent to {data.email} by {user['user_id']}")
+    email_result = await send_email_async(normalized_email, subject, html_content)
+    if email_result.get("status") != "success":
+        await db.team_invitations.delete_one({"invitation_id": invitation_id})
+        logger.error(
+            "Team invitation email failed; rolled back invite %s for %s (%s)",
+            invitation_id,
+            normalized_email,
+            email_result.get("reason") or email_result.get("error") or "unknown",
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Invitation email could not be delivered. Please verify email configuration and try again.",
+        )
+    logger.info(f"Team invitation sent to {normalized_email} by {user['user_id']}")
 
     return {
         "invitation_id": invitation_id,
-        "email": data.email,
+        "email": normalized_email,
         "role": data.role,
         "status": "pending",
         "invited_by": workspace_owner_id,
         "invited_by_name": user.get('name', 'Unknown'),
         "created_at": invitation_doc['created_at'],
         "expires_at": invitation_doc['expires_at'],
+        "delivery_status": "sent",
     }
 
 
@@ -247,10 +254,17 @@ async def register_invited_user(
     response: Response = None,
 ):
     """Register a new user from a team invitation"""
+    email_normalized = email.lower().strip()
+    name_cleaned = name.strip()
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if not name_cleaned:
+        raise HTTPException(status_code=400, detail="Name is required")
+
     invitation = await db.team_invitations.find_one({
         "invitation_token": token,
         "status": "pending",
-        "email": email.lower(),
+        "email": email_normalized,
     })
     if not invitation:
         raise HTTPException(status_code=404, detail="Invalid invitation token")
@@ -259,7 +273,7 @@ async def register_invited_user(
     if datetime.now(timezone.utc) > expires_at:
         raise HTTPException(status_code=400, detail="Invitation has expired")
 
-    existing = await db.users.find_one({"email": email.lower(), "role": "agent"})
+    existing = await db.users.find_one({"email": email_normalized, "role": "agent"})
     if existing:
         raise HTTPException(status_code=400, detail="Account already exists. Please login and accept the invitation.")
 
@@ -268,8 +282,8 @@ async def register_invited_user(
 
     user_doc = {
         "user_id": user_id,
-        "email": email.lower(),
-        "name": name,
+        "email": email_normalized,
+        "name": name_cleaned,
         "password_hash": hashed_password.decode('utf-8'),
         "role": "agent",
         "picture": None,
@@ -284,8 +298,8 @@ async def register_invited_user(
         {"invitation_id": invitation['invitation_id']},
         {"$set": {"status": "accepted", "accepted_at": datetime.now(timezone.utc).isoformat(), "accepted_by": user_id}},
     )
-    await send_notification_email("welcome_onboarding", email, {
-        "name": name,
+    await send_notification_email("welcome_onboarding", email_normalized, {
+        "name": name_cleaned,
         "role": "agent",
         "project_name": "your shared workspace",
         "agent_name": invitation.get("invited_by_name", "Your workspace owner"),
@@ -302,8 +316,8 @@ async def register_invited_user(
 
     return {
         "user_id": user_id,
-        "email": email,
-        "name": name,
+        "email": email_normalized,
+        "name": name_cleaned,
         "role": "agent",
         "workspace_owner_id": invitation['invited_by'],
         "workspace_role": invitation['role'],

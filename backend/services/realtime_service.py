@@ -108,6 +108,8 @@ async def send_milestone_notification(step: dict, project: dict, timeline: dict,
         completed_count = sum(1 for s in all_steps if s['status'] in ['completed', 'approved'])
         total_count = len(all_steps)
         progress_percent = round((completed_count / total_count) * 100) if total_count > 0 else 0
+        notified_buyer_ids = set()
+        emailed_addresses = set()
 
         for client in clients:
             buyer_id = client.get('buyer_id')
@@ -116,25 +118,26 @@ async def send_milestone_notification(step: dict, project: dict, timeline: dict,
 
             unit_ref = unit_refs.get(client.get('unit_id'), 'Your Unit')
 
-            # Lazy import to avoid circular dependency with notification_service
-            from services.notification_service import create_notification
-            from core.notification_routing import buyer_query
-            await create_notification(
-                user_id=buyer_id,
-                title=f"Milestone Reached: {step.get('title', 'Construction Update')}",
-                message=f"The '{step.get('title')}' phase has been completed for {unit_ref}. Overall progress: {progress_percent}%",
-                notification_type="milestone_completed",
-                link=buyer_query(
-                    "documents",
-                    milestone_step_id=step.get('step_id') or '',
-                    project_id=project.get('project_id') or '',
-                ),
-                metadata={
-                    "step_id": step.get('step_id'),
-                    "project_id": project.get('project_id'),
-                    "progress_percent": progress_percent
-                }
-            )
+            if buyer_id not in notified_buyer_ids:
+                # Lazy import to avoid circular dependency with notification_service
+                from services.notification_service import create_notification
+                from core.notification_routing import buyer_query
+                await create_notification(
+                    user_id=buyer_id,
+                    title=f"Milestone Reached: {step.get('title', 'Construction Update')}",
+                    message=f"The '{step.get('title')}' phase has been completed for {unit_ref}. Overall progress: {progress_percent}%",
+                    notification_type="milestone_completed",
+                    link=buyer_query(
+                        "documents",
+                        milestone_step_id=step.get('step_id') or '',
+                        project_id=project.get('project_id') or '',
+                    ),
+                    metadata={
+                        "step_id": step.get('step_id'),
+                        "project_id": project.get('project_id'),
+                        "progress_percent": progress_percent
+                    }
+                )
 
             if client.get('email'):
                 email_data = {
@@ -142,6 +145,9 @@ async def send_milestone_notification(step: dict, project: dict, timeline: dict,
                     "milestone_name": step.get('title', 'Construction Phase'),
                     "milestone_description": step.get('description', ''),
                     "project_name": project.get('name', 'Your Project'),
+                    "project_id": project.get('project_id'),
+                    "timeline_id": step.get('timeline_id'),
+                    "step_id": step.get('step_id'),
                     "unit_reference": unit_ref,
                     "progress_percent": progress_percent,
                     "agent_name": agent_settings.get('profile', {}).get('display_name') or user.get('name', 'Your Agent'),
@@ -149,21 +155,26 @@ async def send_milestone_notification(step: dict, project: dict, timeline: dict,
                     "agent_email": agent_settings.get('profile', {}).get('contact_email', ''),
                     "agent_phone": agent_settings.get('profile', {}).get('contact_phone', '')
                 }
-                try:
-                    await send_notification_email("milestone_completed", client['email'], email_data)
-                    logger.info(f"Sent milestone email to {client['email']} for step {step.get('step_id')}")
-                except Exception as e:
-                    logger.error(f"Failed to send milestone email to {client['email']}: {e}")
+                recipient_email = (client.get("email") or "").strip().lower()
+                if recipient_email and recipient_email not in emailed_addresses:
+                    emailed_addresses.add(recipient_email)
+                    try:
+                        await send_notification_email("milestone_completed", recipient_email, email_data)
+                        logger.info(f"Sent milestone email to {recipient_email} for step {step.get('step_id')}")
+                    except Exception as e:
+                        logger.error(f"Failed to send milestone email to {recipient_email}: {e}")
 
-            await notify_realtime(
-                [buyer_id],
-                "milestone_completed",
-                {
-                    "step_id": step.get('step_id'),
-                    "step_title": step.get('title'),
-                    "progress_percent": progress_percent
-                }
-            )
+            if buyer_id not in notified_buyer_ids:
+                await notify_realtime(
+                    [buyer_id],
+                    "milestone_completed",
+                    {
+                        "step_id": step.get('step_id'),
+                        "step_title": step.get('title'),
+                        "progress_percent": progress_percent
+                    }
+                )
+                notified_buyer_ids.add(buyer_id)
 
         logger.info(f"Sent milestone notifications to {len(clients)} clients for step: {step.get('title')}")
 

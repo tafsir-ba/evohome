@@ -31,27 +31,45 @@ NON_CRITICAL_TEMPLATES = {
     "new_message",
     "welcome_onboarding",
 }
+NON_CRITICAL_COOLDOWN_TEMPLATES = {
+    "welcome_onboarding",
+}
+
+
+def _normalize_email(email: str) -> str:
+    return (email or "").lower().strip()
+
+
+def _resolved_frontend_url() -> str:
+    # Prefer explicit frontend URL; fallback to backend URL without /api.
+    base = (FRONTEND_URL or os.environ.get("REACT_APP_BACKEND_URL", "")).strip()
+    if base.endswith("/api"):
+        base = base[:-4]
+    return base.rstrip("/") or "https://evohome.ch"
 
 
 def _email_entity_scope(data: dict) -> str:
-    for k in ("document_id", "project_id", "timeline_id", "client_id", "user_id"):
+    for k in ("step_id", "document_id", "timeline_id", "project_id", "client_id", "user_id"):
         if data.get(k):
             return f"{k}:{data.get(k)}"
+    if data.get("milestone_name"):
+        return f"milestone:{data.get('milestone_name')}"
     return "global"
 
 
 def _dedupe_lock_key(template_type: str, to_email: str, data: dict) -> str:
     scope = _email_entity_scope(data or {})
-    raw = f"{template_type}|{to_email.lower().strip()}|{scope}"
+    raw = f"{template_type}|{_normalize_email(to_email)}|{scope}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-async def _should_throttle_noncritical(to_email: str) -> bool:
+async def _should_throttle_noncritical(to_email: str, template_type: str) -> bool:
     cutoff = datetime.now(timezone.utc).timestamp() - (NON_CRITICAL_COOLDOWN_HOURS * 3600)
     recent = await db.email_send_locks.find_one(
         {
-            "email": to_email.lower().strip(),
+            "email": _normalize_email(to_email),
             "category": "noncritical",
+            "template_type": template_type,
             "sent_ts": {"$gte": cutoff},
         },
         {"_id": 0, "lock_key": 1},
@@ -72,7 +90,7 @@ async def _store_send_lock(lock_key: str, template_type: str, to_email: str, cat
             "$set": {
                 "lock_key": lock_key,
                 "template_type": template_type,
-                "email": to_email.lower().strip(),
+                "email": _normalize_email(to_email),
                 "category": category,
                 "sent_at": now.isoformat(),
                 "sent_ts": now.timestamp(),
@@ -123,7 +141,7 @@ async def send_email_async(to_email: str, subject: str, html_content: str, reque
 
 def get_email_template(template_type: str, data: dict) -> tuple[str, str]:
     """Generate email subject and HTML content based on template type"""
-    frontend_url = FRONTEND_URL.rstrip('/')
+    frontend_url = _resolved_frontend_url()
 
     agent_company = data.get('company_name') or data.get('agent_name') or 'Evohome'
     agent_name = data.get('agent_name') or 'Your Agent'
@@ -189,6 +207,23 @@ def get_email_template(template_type: str, data: dict) -> tuple[str, str]:
         progress_percent = data.get('progress_percent', 0)
         html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0; background-color: #f5f5f5;"><div style="max-width: 600px; margin: 0 auto; padding: 20px;"><div style="background-color: #16a34a; color: #FFFFFF; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;"><h1 style="margin: 0; color: #FFFFFF; font-size: 24px;">Milestone Completed</h1></div><div style="background-color: #FFFFFF; padding: 32px; border: 1px solid #e5e7eb; border-top: none;"><p style="margin-top: 0;">Hi {data.get('buyer_name', 'there')},</p><p>Great news! A construction milestone for your property has been completed.</p><div style="background-color: #f0fdf4; padding: 20px; border-radius: 8px; margin: 24px 0; border: 1px solid #bbf7d0;"><h3 style="margin-top: 0; color: #166534;">{data.get('milestone_name', 'Milestone')}</h3><p style="color: #666666; margin-bottom: 12px;">{data.get('milestone_description', '')}</p><p style="font-size: 14px; color: #166534; margin: 0;"><strong>Project:</strong> {data.get('project_name', 'N/A')} - <strong>Unit:</strong> {data.get('unit_reference', 'N/A')}</p></div><div style="margin: 24px 0;"><p style="margin-bottom: 8px; font-weight: 600;">Overall Progress: {progress_percent}%</p><div style="background-color: #e5e7eb; border-radius: 9999px; height: 12px; overflow: hidden;"><div style="background-color: #16a34a; height: 100%; width: {progress_percent}%; border-radius: 9999px;"></div></div></div><p>Log in to view the full construction timeline and details.</p><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 24px auto;"><tr><td style="border-radius: 6px; background-color: #2563EB;"><a href="{frontend_url}/buyer/dashboard" target="_blank" style="{cta_button_style}">{cta_text}</a></td></tr></table><hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;"><p style="font-size: 14px; color: #666666; margin-bottom: 0;">{agent_signature}</p></div><div style="padding: 16px; text-align: center; color: #9ca3af; font-size: 12px;"><p style="margin: 0;">Evohome - Real Estate Management</p></div></div></body></html>"""
 
+    elif template_type == "team_invitation":
+        company_name = data.get("company_name") or "Evohome"
+        invited_by_name = data.get("invited_by_name") or "Votre equipe"
+        role_value = data.get("role") or "member"
+        role_label_fr = "administrateur" if role_value == "admin" else "membre"
+        invite_link = data.get("invite_link") or frontend_url
+        personal_message = data.get("message") or ""
+        subject = f"Invitation Evohome - Rejoignez l'equipe {company_name}"
+        cta_text = "Accepter l'invitation"
+        personal_note_block = (
+            f'<div style="background-color:#f9fafb; border-left:4px solid #2563EB; padding:14px; margin:20px 0;">'
+            f'<p style="margin:0; color:#374151;"><strong>Message personnel :</strong><br>{personal_message}</p>'
+            f'</div>'
+            if personal_message else ""
+        )
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0; background-color: #f5f5f5;"><div style="max-width: 620px; margin: 0 auto; padding: 20px;"><div style="background-color: #2563EB; color: #FFFFFF; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;"><h1 style="margin: 0; color: #FFFFFF; font-size: 24px;">Invitation Evohome</h1></div><div style="background-color: #FFFFFF; padding: 28px; border: 1px solid #e5e7eb; border-top: none;"><p style="margin-top: 0;"><strong>{invited_by_name}</strong> vous invite a rejoindre <strong>{company_name}</strong> sur Evohome en tant que <strong>{role_label_fr}</strong>.</p><p><strong>En 2 minutes :</strong><br>1) Cliquez sur le bouton ci-dessous<br>2) Creez votre mot de passe (ou connectez-vous)<br>3) Vous serez redirige directement vers votre espace agent</p>{personal_note_block}<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 26px auto;"><tr><td style="border-radius: 6px; background-color: #2563EB;"><a href="{invite_link}" target="_blank" style="{cta_button_style}">{cta_text}</a></td></tr></table><p style="font-size: 13px; color: #6b7280;">Ce lien expire dans 7 jours.</p><hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;"><p style="font-size: 12px; color: #6b7280; margin-bottom: 0;">Need help? Open the link above and follow the quick steps to activate your account.</p></div><div style="padding: 16px; text-align: center; color: #9ca3af; font-size: 12px;"><p style="margin: 0;">Powered by Evohome</p></div></div></body></html>"""
+
     elif template_type == "welcome_onboarding":
         role_label = (data.get("role") or "user").capitalize()
         project_hint = data.get("project_name") or "your workspace"
@@ -210,7 +245,10 @@ async def send_notification_email(template_type: str, to_email: str, data: dict)
         lock_key = _dedupe_lock_key(template_type, to_email, data or {})
         if await _already_sent_deduped(lock_key):
             return {"status": "skipped", "reason": "duplicate_notification_email"}
-        if await _should_throttle_noncritical(to_email):
+        if (
+            template_type in NON_CRITICAL_COOLDOWN_TEMPLATES
+            and await _should_throttle_noncritical(to_email, template_type)
+        ):
             return {"status": "skipped", "reason": "noncritical_cooldown_active"}
 
     subject, html = get_email_template(template_type, data)

@@ -378,12 +378,13 @@ async def send_document(
         raise ValueError(f"Cannot send document from status: {doc['status']}")
 
     recipient_rows: List[Dict[str, Any]] = []
-    if doc.get("unit_id"):
+    unit_id = doc.get("unit_id") or client.get("unit_id")
+    if unit_id:
         recipient_rows = await db.clients.find(
             {
                 "agent_id": agent_id,
                 "project_id": doc.get("project_id"),
-                "unit_id": doc.get("unit_id"),
+                "unit_id": unit_id,
             },
             {"_id": 0},
         ).to_list(200)
@@ -452,10 +453,12 @@ async def send_document(
     realtime_sent = 0
     email_sent = 0
     warned = []
+    notified_buyer_ids = set()
+    emailed_addresses = set()
 
     for recipient in recipient_rows:
         buyer_id = recipient.get('buyer_id')
-        if buyer_id:
+        if buyer_id and buyer_id not in notified_buyer_ids:
             try:
                 from core.notification_routing import buyer_query
                 await emit_notification(
@@ -471,6 +474,7 @@ async def send_document(
                     },
                 )
                 notification_sent += 1
+                notified_buyer_ids.add(buyer_id)
             except Exception as e:
                 warned.append(f"notification:{recipient.get('client_id')}:{str(e)[:40]}")
             try:
@@ -482,8 +486,10 @@ async def send_document(
             except Exception:
                 pass
 
-        if recipient.get('email'):
-            result = await emit_email("document_sent", recipient['email'], {
+        recipient_email = (recipient.get('email') or "").strip().lower()
+        if recipient_email and recipient_email not in emailed_addresses:
+            emailed_addresses.add(recipient_email)
+            result = await emit_email("document_sent", recipient_email, {
                 "doc_type": doc['type'],
                 "buyer_name": recipient.get('name', 'there'),
                 "agent_name": agent_profile.get('display_name') or agent_user.get('name', 'Your agent'),
@@ -501,7 +507,10 @@ async def send_document(
             if isinstance(result, dict) and result.get("status") == "success":
                 email_sent += 1
             elif result is not None:
-                warned.append(f"email:{recipient.get('email')}")
+                reason = result.get("reason") or result.get("error") or "unknown"
+                warned.append(f"email:{recipient_email}:{reason}")
+                if not delivery.get("email_error"):
+                    delivery["email_error"] = str(reason)
 
     delivery["notification_created"] = notification_sent > 0
     delivery["websocket_sent"] = realtime_sent > 0

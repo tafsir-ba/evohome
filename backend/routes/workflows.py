@@ -433,7 +433,7 @@ def _build_action_executor(
                 for c in clients:
                     if c.get("email"):
                         try:
-                            await send_email_async(
+                            email_result = await send_email_async(
                                 c["email"],
                                 f"Project Update: {message_title}",
                                 _announcement_email_html(
@@ -443,7 +443,10 @@ def _build_action_executor(
                                     agent_name=agent_name,
                                 ),
                             )
-                            sent += 1
+                            if isinstance(email_result, dict) and email_result.get("status") == "success":
+                                sent += 1
+                            else:
+                                failures.append(c["email"])
                         except Exception as e:
                             failures.append(c["email"])
                             logger.warning(f"Failed announcement to {c['email']}: {e}")
@@ -537,8 +540,16 @@ async def _send_workflow_email(
         step_warnings[step_name] = "Email service not configured"
         return {"sent": False, "warning": "Email service not configured"}
     try:
-        await send_email_async(to, subject, html)
-        return {"sent": True}
+        result = await send_email_async(to, subject, html)
+        if isinstance(result, dict) and result.get("status") == "success":
+            return {"sent": True}
+        warning = "Email delivery skipped or failed"
+        if isinstance(result, dict) and result.get("reason"):
+            warning = f"Email delivery skipped: {result.get('reason')}"
+        elif isinstance(result, dict) and result.get("error"):
+            warning = f"Email delivery failed: {str(result.get('error'))[:100]}"
+        step_warnings[step_name] = warning
+        return {"sent": False, "warning": warning}
     except Exception as e:
         warning = f"Email delivery failed: {str(e)[:100]}"
         step_warnings[step_name] = warning
