@@ -134,19 +134,18 @@ async def get_project_delete_impact(project_id: str) -> Dict[str, Any]:
 async def delete_project(project_id: str, agent_id: str, force: bool = False) -> Dict[str, Any]:
     """
     Delete a project with dependency guards.
-    - Blocks deletion when non-draft financial documents exist.
     - Requires force=true when linked records exist.
-    - Cascades cleanup for draft-only project data.
+    - With force=true, cascades cleanup for all project-linked data.
     """
     project = await db.projects.find_one({"project_id": project_id, "agent_id": agent_id}, {"_id": 0})
     if not project:
         return {"deleted": False, "reason": "not_found"}
 
     impact = await get_project_delete_impact(project_id)
-    if impact["documents_non_draft"] > 0:
+    if impact["documents_non_draft"] > 0 and not force:
         raise ValueError(
             "Cannot delete project with issued documents (Sent/Approved/Paid/etc). "
-            "Archive the project instead."
+            "Re-run delete with force=true to permanently remove project and all linked records."
         )
 
     if impact["has_linked_data"] and not force:
@@ -154,14 +153,14 @@ async def delete_project(project_id: str, agent_id: str, force: bool = False) ->
             "Project has linked data. Re-run delete with force=true after reviewing delete impact."
         )
 
-    # Delete draft document files before DB cleanup.
+    # Delete project document files before DB cleanup.
     from services.file_service import delete_file
-    draft_docs = await db.documents.find(
-        {"project_id": project_id, "status": "Draft"},
+    project_docs = await db.documents.find(
+        {"project_id": project_id},
         {"_id": 0, "document_id": 1, "pdf_stored_filename": 1, "hero_image_stored_filename": 1},
     ).to_list(10000)
-    draft_doc_ids = _collect_string_ids(draft_docs, "document_id")
-    for doc in draft_docs:
+    project_doc_ids = _collect_string_ids(project_docs, "document_id")
+    for doc in project_docs:
         for fk in ("pdf_stored_filename", "hero_image_stored_filename"):
             if doc.get(fk):
                 delete_file(doc[fk])
@@ -205,8 +204,8 @@ async def delete_project(project_id: str, agent_id: str, force: bool = False) ->
 
     # Remove project-scoped records
     await db.documents.delete_many({"project_id": project_id})
-    if draft_doc_ids:
-        await db.change_requests.delete_many({"entity_id": {"$in": draft_doc_ids}})
+    if project_doc_ids:
+        await db.change_requests.delete_many({"entity_id": {"$in": project_doc_ids}})
     await db.change_requests.delete_many({"project_id": project_id})
     await db.decisions.delete_many({"project_id": project_id})
     await db.team_members.delete_many({"project_id": project_id})

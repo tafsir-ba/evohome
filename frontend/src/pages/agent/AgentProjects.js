@@ -742,7 +742,7 @@ export const AgentProjects = () => {
             )}
 
             <div className="text-xs text-muted-foreground">
-              Issued financial documents (Sent/Approved/Paid, etc.) prevent deletion. In that case, archive the project instead.
+              If issued financial documents exist, deletion requires force and will permanently remove those records too.
             </div>
           </div>
 

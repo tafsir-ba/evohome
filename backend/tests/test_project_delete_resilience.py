@@ -204,3 +204,50 @@ def test_delete_project_does_not_issue_empty_recipient_deletes():
     assert fake_db.timeline_step_internal_notes.delete_many_calls == []
     assert fake_db.decision_recipients.delete_many_calls == []
     assert fake_db.change_requests.delete_many_calls == [{"project_id": "p2"}]
+
+
+def test_delete_project_requires_force_when_non_draft_documents_exist():
+    project_service = _load_project_service_module()
+    fake_db = _FakeDb(
+        projects=[{"project_id": "p3", "agent_id": "owner_1"}],
+        documents=[],
+        vault_documents=[],
+        activities=[],
+        timelines=[],
+        timeline_steps=[],
+        decisions=[],
+    )
+
+    async def _impact(_project_id):
+        return {"project_id": "p3", "documents_non_draft": 1, "has_linked_data": True}
+
+    project_service.db = fake_db
+    project_service.get_project_delete_impact = _impact
+
+    try:
+        _run(project_service.delete_project("p3", "owner_1", force=False))
+        assert False, "Expected ValueError when deleting issued documents without force"
+    except ValueError as exc:
+        assert "force=true" in str(exc)
+
+
+def test_delete_project_allows_force_when_non_draft_documents_exist():
+    project_service = _load_project_service_module()
+    fake_db = _FakeDb(
+        projects=[{"project_id": "p4", "agent_id": "owner_1"}],
+        documents=[{"project_id": "p4", "status": "Sent", "document_id": "doc_sent"}],
+        vault_documents=[],
+        activities=[],
+        timelines=[],
+        timeline_steps=[],
+        decisions=[],
+    )
+
+    async def _impact(_project_id):
+        return {"project_id": "p4", "documents_non_draft": 1, "has_linked_data": True}
+
+    project_service.db = fake_db
+    project_service.get_project_delete_impact = _impact
+
+    result = _run(project_service.delete_project("p4", "owner_1", force=True))
+    assert result["deleted"] is True
