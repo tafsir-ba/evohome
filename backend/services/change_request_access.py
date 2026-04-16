@@ -4,6 +4,7 @@ Access control for change request APIs — mirrors document/decision ownership r
 from typing import Any, Dict
 
 from database import db
+from core.access_control import get_workspace_owner_id, get_accessible_project_ids
 from services.recipient_scope_service import get_buyer_scope
 
 
@@ -18,20 +19,38 @@ async def user_can_access_entity(user: Dict[str, Any], entity_type: str, entity_
     uid = user.get("user_id", "")
 
     if entity_type in ("quote", "invoice", "document"):
-        doc = await db.documents.find_one({"document_id": entity_id}, {"_id": 0, "agent_id": 1, "client_id": 1})
+        doc = await db.documents.find_one(
+            {"document_id": entity_id},
+            {"_id": 0, "agent_id": 1, "client_id": 1, "project_id": 1},
+        )
         if not doc:
             return False
         if role == "agent":
-            return doc.get("agent_id") == uid
+            workspace_owner_id = get_workspace_owner_id(user)
+            if doc.get("agent_id") != workspace_owner_id:
+                return False
+            project_id = doc.get("project_id")
+            if not project_id:
+                return True
+            return project_id in set(await get_accessible_project_ids(user))
         cids = await _buyer_scope_client_ids(uid)
         return doc.get("client_id") in cids
 
     if entity_type == "decision":
-        dec = await db.decisions.find_one({"decision_id": entity_id}, {"_id": 0, "agent_id": 1})
+        dec = await db.decisions.find_one(
+            {"decision_id": entity_id},
+            {"_id": 0, "agent_id": 1, "project_id": 1},
+        )
         if not dec:
             return False
         if role == "agent":
-            return dec.get("agent_id") == uid
+            workspace_owner_id = get_workspace_owner_id(user)
+            if dec.get("agent_id") not in {uid, workspace_owner_id}:
+                return False
+            project_id = dec.get("project_id")
+            if not project_id:
+                return True
+            return project_id in set(await get_accessible_project_ids(user))
         # Buyer: must be a recipient client for this decision
         recs = await db.decision_recipients.find(
             {"decision_id": entity_id}, {"_id": 0, "client_id": 1}

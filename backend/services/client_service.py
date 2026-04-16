@@ -120,10 +120,13 @@ async def get_client(client_id: str) -> Optional[Dict[str, Any]]:
     return client
 
 
-async def list_clients_by_agent(agent_id: str) -> List[Dict[str, Any]]:
-    clients = await db.clients.find(
-        {"agent_id": agent_id}, {"_id": 0}
-    ).sort("created_at", -1).to_list(1000)
+async def list_clients_by_agent(agent_id: str, project_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    query: Dict[str, Any] = {"agent_id": agent_id}
+    if project_ids is not None:
+        if not project_ids:
+            return []
+        query["project_id"] = {"$in": project_ids}
+    clients = await db.clients.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
     # Batch-enrich with project names
     project_ids = list({c["project_id"] for c in clients if c.get("project_id")})

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 from core.auth import get_current_user, get_current_agent
+from core.access_control import get_workspace_owner_id, get_accessible_project_ids
 from database import db
 from services import change_request_service
 from services.change_request_access import user_can_access_change_request, user_can_access_entity
@@ -66,7 +67,7 @@ async def create_change_request(body: CreateChangeRequestBody, user: dict = Depe
         return cr
 
     if role == "agent":
-        agent_id = user["user_id"]
+        agent_id = get_workspace_owner_id(user)
     elif body.entity_type == "decision":
         dec = await db.decisions.find_one({"decision_id": body.entity_id}, {"_id": 0, "agent_id": 1})
         agent_id = (dec or {}).get("agent_id") or ""
@@ -105,7 +106,8 @@ async def list_change_requests(
 ):
     """List change requests for the current agent."""
     return await change_request_service.list_change_requests(
-        agent_id=user["user_id"],
+        agent_id=get_workspace_owner_id(user),
+        accessible_project_ids=await get_accessible_project_ids(user),
         entity_type=entity_type,
         entity_id=entity_id,
         status=status,
@@ -163,6 +165,7 @@ async def respond_to_change_request(
             author_id=user["user_id"],
             author_role=role,
             attachments=body.attachments,
+            agent_scope_id=get_workspace_owner_id(user) if role == "agent" else None,
         )
         return cr
     except HTTPException:
@@ -194,6 +197,7 @@ async def resolve_change_request(
             change_request_id=change_request_id,
             resolved_by=user["user_id"],
             resolution_note=body.resolution_note,
+            agent_scope_id=get_workspace_owner_id(user),
         )
         return cr
     except HTTPException:
@@ -222,6 +226,7 @@ async def close_change_request(
         cr = await change_request_service.close_change_request(
             change_request_id=change_request_id,
             closed_by=user["user_id"],
+            agent_scope_id=get_workspace_owner_id(user),
         )
         return cr
     except HTTPException:

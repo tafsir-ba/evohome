@@ -73,8 +73,15 @@ export const AgentClients = () => {
     if (projectFilter && projects.length > 0) {
       const proj = projects.find(p => p.project_id === projectFilter);
       setFilterProject(proj || null);
+      if (!proj) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('project');
+          return next;
+        }, { replace: true });
+      }
     }
-  }, [projectFilter, projects]);
+  }, [projectFilter, projects, setSearchParams]);
 
   const fetchClients = async () => {
     setLoading(true);

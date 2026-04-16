@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, R
 
 from database import db
 from core.auth import get_current_user, get_current_agent
-from core.access_control import get_workspace_owner_id
+from core.access_control import get_workspace_owner_id, get_accessible_project_ids, can_access_project, can_access_vault_doc, can_access_client
 from services import vault_service
 from services import file_service
 
@@ -59,17 +59,18 @@ async def upload_vault_document(
     })
     scope_agent_id = get_workspace_owner_id(user)
     if project_id:
-        project = await db.projects.find_one(
-            {"project_id": project_id, "agent_id": scope_agent_id}
-        )
-        if not project:
-            raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Project not found"})
+        if not await can_access_project(user, project_id):
+            raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
 
     parsed_ids = [cid.strip() for cid in client_ids.split(",") if cid.strip()]
     for cid in parsed_ids:
         c = await db.clients.find_one({"client_id": cid, "agent_id": scope_agent_id})
         if not c:
             raise HTTPException(status_code=400, detail={"error": "not_found", "message": f"Client {cid} not found"})
+        if not await can_access_client(user, cid):
+            raise HTTPException(status_code=403, detail={"error": "forbidden", "message": f"Access denied to client {cid}"})
+        if project_id and c.get("project_id") != project_id:
+            raise HTTPException(status_code=400, detail={"error": "invalid_request", "message": f"Client {cid} is not in the selected project"})
 
     result = await file_service.save_vault_file(file)
     trace_service("services.file_service.save_vault_file")
@@ -100,7 +101,13 @@ async def list_vault_documents(
 ):
     if user["role"] == "buyer":
         return await vault_service.list_buyer_vault(user["user_id"])
-    return await vault_service.list_vault_documents(get_workspace_owner_id(user), project_id)
+    if project_id and not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
+    return await vault_service.list_vault_documents(
+        get_workspace_owner_id(user),
+        project_id,
+        None if project_id else await get_accessible_project_ids(user),
+    )
 
 
 @router.get("/vault/categories")
@@ -114,7 +121,7 @@ async def get_vault_document(vault_document_id: str, user: dict = Depends(get_cu
     if not doc:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Vault document not found"})
 
-    if user["role"] == "agent" and doc.get("agent_id") != get_workspace_owner_id(user):
+    if user["role"] == "agent" and not await can_access_vault_doc(user, vault_document_id):
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
     if user["role"] == "buyer" and not await _buyer_can_access_vault(user["user_id"], doc):
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
@@ -124,6 +131,8 @@ async def get_vault_document(vault_document_id: str, user: dict = Depends(get_cu
 
 @router.put("/vault/documents/{vault_document_id}")
 async def update_vault_document(vault_document_id: str, request: Request, user: dict = Depends(get_current_agent)):
+    if not await can_access_vault_doc(user, vault_document_id):
+        raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
     body = await request.json()
     result = await vault_service.update_vault_document(vault_document_id, get_workspace_owner_id(user), body)
     if not result:
@@ -133,6 +142,8 @@ async def update_vault_document(vault_document_id: str, request: Request, user: 
 
 @router.delete("/vault/documents/{vault_document_id}")
 async def delete_vault_document(vault_document_id: str, user: dict = Depends(get_current_agent)):
+    if not await can_access_vault_doc(user, vault_document_id):
+        raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
     stored_filename = await vault_service.delete_vault_document(vault_document_id, get_workspace_owner_id(user))
     if stored_filename is None:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Vault document not found"})
@@ -146,7 +157,7 @@ async def download_vault_document(vault_document_id: str, user: dict = Depends(g
     if not doc:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Vault document not found"})
 
-    if user["role"] == "agent" and doc.get("agent_id") != get_workspace_owner_id(user):
+    if user["role"] == "agent" and not await can_access_vault_doc(user, vault_document_id):
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})
     if user["role"] == "buyer" and not await _buyer_can_access_vault(user["user_id"], doc):
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Access denied"})

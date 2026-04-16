@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse, FileResponse
 
 from database import db
 from core.auth import get_current_user, get_current_agent
-from core.access_control import get_workspace_owner_id
+from core.access_control import get_workspace_owner_id, get_accessible_project_ids, can_access_document, can_access_client
 from services import document_service
 from services import file_service
 from services.ai_service import extract_document_from_pdf
@@ -31,6 +31,12 @@ def _effective_user_id(user: dict) -> str:
     if user.get("role") == "agent":
         return get_workspace_owner_id(user)
     return user["user_id"]
+
+
+async def _effective_project_scope(user: dict):
+    if user.get("role") != "agent":
+        return None
+    return await get_accessible_project_ids(user)
 
 
 # ── Upload + preview (AI extraction is assistive only) ──
@@ -52,6 +58,8 @@ async def upload_document(
     )
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
+    if not await can_access_client(user, client_id):
+        raise HTTPException(status_code=403, detail="Access denied")
 
     result = await file_service.save_pdf(file)
 
@@ -94,6 +102,8 @@ async def create_document_from_preview(request: Request, user: dict = Depends(ge
     client_id = body.get("client_id")
     if not client_id:
         raise HTTPException(status_code=400, detail="client_id is required")
+    if not await can_access_client(user, client_id):
+        raise HTTPException(status_code=403, detail="Access denied")
 
     doc_type = body.get("type", "quote")
     if doc_type not in ("quote", "invoice"):
@@ -128,6 +138,8 @@ async def reupload_document_pdf(
     document_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_agent),
 ):
     """Upload a revised PDF with version tracking."""
+    if not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     query = {"document_id": document_id, "agent_id": get_workspace_owner_id(user)}
     doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
@@ -158,6 +170,8 @@ async def reupload_document_pdf(
 
 @router.put("/documents/{document_id}")
 async def update_document(document_id: str, data: DocumentUpdate, user: dict = Depends(get_current_agent)):
+    if not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         updates = data.model_dump(exclude_none=False)
         result = await document_service.update_document(document_id, get_workspace_owner_id(user), updates)
@@ -170,6 +184,8 @@ async def update_document(document_id: str, data: DocumentUpdate, user: dict = D
 
 @router.delete("/documents/{document_id}")
 async def delete_document(document_id: str, force: bool = False, user: dict = Depends(get_current_agent)):
+    if not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         deleted = await document_service.delete_document(document_id, get_workspace_owner_id(user), force)
     except ValueError as e:
@@ -181,6 +197,8 @@ async def delete_document(document_id: str, force: bool = False, user: dict = De
 
 @router.post("/documents/{document_id}/revert-to-draft")
 async def revert_document_to_draft(document_id: str, user: dict = Depends(get_current_agent)):
+    if not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         status = await document_service.revert_to_draft(document_id, get_workspace_owner_id(user))
     except ValueError as e:
@@ -195,11 +213,19 @@ async def get_documents(
     doc_type: Optional[str] = None, status: Optional[str] = None,
     user: dict = Depends(get_current_user),
 ):
-    return await document_service.list_documents(_effective_user_id(user), user["role"], doc_type, status)
+    return await document_service.list_documents(
+        _effective_user_id(user),
+        user["role"],
+        doc_type,
+        status,
+        await _effective_project_scope(user),
+    )
 
 
 @router.get("/documents/{document_id}")
 async def get_document(document_id: str, user: dict = Depends(get_current_user)):
+    if user.get("role") == "agent" and not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     doc = await document_service.get_document(document_id, _effective_user_id(user), user["role"])
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -208,6 +234,8 @@ async def get_document(document_id: str, user: dict = Depends(get_current_user))
 
 @router.get("/documents/{document_id}/source-pdf")
 async def get_document_source_pdf(document_id: str, user: dict = Depends(get_current_user)):
+    if user.get("role") == "agent" and not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     doc = await document_service.get_document(document_id, _effective_user_id(user), user["role"])
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -237,6 +265,8 @@ async def get_document_source_pdf(document_id: str, user: dict = Depends(get_cur
 @router.post("/documents/{document_id}/hero-image")
 async def upload_hero_image(document_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_agent)):
     """Upload a hero/banner image for a document."""
+    if not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     from core.trace import set_trace_action, set_trace_entity, trace_db_mutation, trace_service, set_trace_response_summary
     set_trace_action("hero_image_upload")
     set_trace_entity("document", document_id)
@@ -268,6 +298,8 @@ async def upload_hero_image(document_id: str, file: UploadFile = File(...), user
 
 @router.get("/documents/{document_id}/hero-image")
 async def get_hero_image(document_id: str, user: dict = Depends(get_current_user)):
+    if user.get("role") == "agent" and not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     doc = await document_service.get_document(document_id, _effective_user_id(user), user["role"])
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -301,6 +333,8 @@ async def get_hero_image(document_id: str, user: dict = Depends(get_current_user
 
 @router.delete("/documents/{document_id}/hero-image")
 async def delete_hero_image(document_id: str, user: dict = Depends(get_current_agent)):
+    if not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     query = {"document_id": document_id, "agent_id": get_workspace_owner_id(user)}
     doc = await db.documents.find_one(query, {"_id": 0})
     if not doc:
@@ -331,6 +365,8 @@ async def delete_hero_image(document_id: str, user: dict = Depends(get_current_a
 
 @router.get("/documents/{document_id}/qr-code")
 async def get_document_qr_code(document_id: str, user: dict = Depends(get_current_user)):
+    if user.get("role") == "agent" and not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     doc = await document_service.get_document(document_id, _effective_user_id(user), user["role"])
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -369,6 +405,8 @@ async def get_document_qr_code(document_id: str, user: dict = Depends(get_curren
 
 @router.post("/documents/{document_id}/send")
 async def send_document(document_id: str, request: Request, user: dict = Depends(get_current_agent)):
+    if not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         send_config = {}
         try:
@@ -390,6 +428,8 @@ async def send_document(document_id: str, request: Request, user: dict = Depends
 
 @router.post("/documents/{document_id}/action")
 async def perform_document_action(document_id: str, action_data: DocumentAction, user: dict = Depends(get_current_user)):
+    if user.get("role") == "agent" and not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         return await document_service.document_action(
             document_id, action_data.action, _effective_user_id(user), user["role"],
@@ -401,13 +441,19 @@ async def perform_document_action(document_id: str, action_data: DocumentAction,
 
 @router.get("/timeline")
 async def get_document_timeline(user: dict = Depends(get_current_user)):
-    return await document_service.get_document_timeline(_effective_user_id(user), user["role"])
+    return await document_service.get_document_timeline(
+        _effective_user_id(user),
+        user["role"],
+        await _effective_project_scope(user),
+    )
 
 
 # ── PDF generation ──
 
 @router.get("/documents/{document_id}/pdf")
 async def get_document_pdf(document_id: str, user: dict = Depends(get_current_user)):
+    if user.get("role") == "agent" and not await can_access_document(user, document_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     doc = await document_service.get_document(document_id, _effective_user_id(user), user["role"])
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")

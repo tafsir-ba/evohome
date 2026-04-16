@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
 from pydantic import BaseModel
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import get_workspace_owner_id
+from core.access_control import get_workspace_owner_id, can_access_project, get_accessible_project_ids
 from services import team_service
 from services.ai_service import OPENAI_API_KEY
 
@@ -66,6 +66,8 @@ async def get_team_members(project_id: str, user: dict = Depends(get_current_use
 @router.post("/projects/{project_id}/team")
 async def create_team_member(project_id: str, data: TeamMemberCreateBody, user: dict = Depends(get_current_agent)):
     """Add a team member to a project."""
+    if not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     from database import db
     scope_agent_id = get_workspace_owner_id(user)
     project = await db.projects.find_one(
@@ -90,6 +92,8 @@ async def create_team_member(project_id: str, data: TeamMemberCreateBody, user: 
 @router.put("/projects/{project_id}/team/{member_id}")
 async def update_team_member(project_id: str, member_id: str, data: TeamMemberUpdateBody, user: dict = Depends(get_current_agent)):
     """Update a team member."""
+    if not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     result = await team_service.update_team_member(
         member_id=member_id,
         project_id=project_id,
@@ -104,6 +108,8 @@ async def update_team_member(project_id: str, member_id: str, data: TeamMemberUp
 @router.delete("/projects/{project_id}/team/{member_id}")
 async def delete_team_member(project_id: str, member_id: str, user: dict = Depends(get_current_agent)):
     """Delete a team member."""
+    if not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     if not await team_service.delete_team_member(member_id, project_id, get_workspace_owner_id(user)):
         raise HTTPException(status_code=404, detail="Team member not found")
     return {"message": "Team member deleted"}
@@ -112,6 +118,8 @@ async def delete_team_member(project_id: str, member_id: str, user: dict = Depen
 @router.post("/projects/{project_id}/team/bulk")
 async def create_team_members_bulk(project_id: str, request: BulkContactsBody, user: dict = Depends(get_current_agent)):
     """Bulk import team members after AI extraction review."""
+    if not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     from database import db
     scope_agent_id = get_workspace_owner_id(user)
     project = await db.projects.find_one(
@@ -136,8 +144,14 @@ async def get_team_directory(
     user: dict = Depends(get_current_agent),
 ):
     """Global supplier/contact directory for an agent."""
+    if project_id and not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     return await team_service.get_directory(
-        agent_id=get_workspace_owner_id(user), search=search, project_id=project_id, limit=limit
+        agent_id=get_workspace_owner_id(user),
+        accessible_project_ids=None if project_id else await get_accessible_project_ids(user),
+        search=search,
+        project_id=project_id,
+        limit=limit,
     )
 
 

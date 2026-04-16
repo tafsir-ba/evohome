@@ -19,7 +19,7 @@ import openai
 import fitz
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project, get_workspace_owner_id
+from core.access_control import can_access_project, get_workspace_owner_id, get_accessible_project_ids
 from database import db
 from services import timeline_service, step_service
 from services.realtime_service import send_milestone_notification
@@ -337,6 +337,10 @@ async def list_timeline_extractions(
     user=Depends(get_current_agent),
 ):
     query = {"agent_id": get_workspace_owner_id(user)}
+    accessible_project_ids = await get_accessible_project_ids(user)
+    if not accessible_project_ids:
+        return []
+    query["project_id"] = {"$in": accessible_project_ids}
     if status:
         query["status"] = status
     rows = await db.timeline_extractions.find(query, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
@@ -351,6 +355,8 @@ async def get_timeline_extraction(extraction_id: str, user=Depends(get_current_a
     )
     if not row:
         raise HTTPException(status_code=404, detail="Extraction not found")
+    if not await can_access_project(user, row.get("project_id")):
+        raise HTTPException(status_code=403, detail="Access denied")
     return row
 
 
@@ -371,6 +377,10 @@ async def approve_timeline_extraction(
     )
     if not row:
         raise HTTPException(status_code=404, detail="Extraction not found")
+    if not await can_access_project(user, row.get("project_id")):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if row.get("project_id") and row.get("project_id") != project_id:
+        raise HTTPException(status_code=400, detail="Extraction does not belong to the selected project")
 
     existing = await timeline_service.get_timeline_by_project(project_id)
     if existing:

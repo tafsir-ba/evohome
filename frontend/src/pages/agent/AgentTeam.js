@@ -93,9 +93,15 @@ export const AgentTeam = () => {
       const projectExists = projects.some(p => p.project_id === projectFilter);
       if (projectExists) {
         setSelectedProjectId(projectFilter);
+      } else {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('project');
+          return next;
+        }, { replace: true });
       }
     }
-  }, [projectFilter, projects.length]); // Only depend on length, not full array
+  }, [projectFilter, projects.length, selectedProjectId, setSearchParams]); // Only depend on length, not full array
 
   const fetchTeamMembers = async (projectId) => {
     if (!projectId) {

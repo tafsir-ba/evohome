@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project, can_access_client, is_agent, get_workspace_owner_id
+from core.access_control import can_access_project, can_access_client, is_agent, get_workspace_owner_id, get_accessible_project_ids
 from services import client_service
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,10 @@ async def list_clients(project_id: Optional[str] = None, user=Depends(get_curren
         if not await can_access_project(user, project_id):
             raise HTTPException(status_code=403, detail="Access denied to this project")
         return await client_service.list_clients_by_project(project_id)
-    return await client_service.list_clients_by_agent(get_workspace_owner_id(user))
+    return await client_service.list_clients_by_agent(
+        get_workspace_owner_id(user),
+        await get_accessible_project_ids(user),
+    )
 
 
 @router.get("/clients/{client_id}")

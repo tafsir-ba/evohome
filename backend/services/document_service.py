@@ -193,11 +193,16 @@ async def get_document(document_id: str, user_id: str, role: str) -> Optional[Di
 async def list_documents(
     user_id: str, role: str,
     doc_type: Optional[str] = None, status: Optional[str] = None,
+    project_ids: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """List documents for a user, role-scoped."""
     query = {}
     if role == 'agent':
         query["agent_id"] = user_id
+        if project_ids is not None:
+            if not project_ids:
+                return []
+            query["project_id"] = {"$in": project_ids}
     else:
         client_ids = await _get_buyer_client_ids(user_id)
         query["$or"] = [
@@ -792,7 +797,11 @@ async def reupload_document(
     return result
 
 
-async def get_document_timeline(user_id: str, role: str) -> Dict[str, Any]:
+async def get_document_timeline(
+    user_id: str,
+    role: str,
+    project_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Get unified document timeline for buyer or agent."""
     if role == 'buyer':
         clients = await db.clients.find(
@@ -843,9 +852,12 @@ async def get_document_timeline(user_id: str, role: str) -> Dict[str, Any]:
         } for d in docs]
         return {"documents": events, "project_info": project}
     else:
-        docs = await db.documents.find(
-            {"agent_id": user_id}, {"_id": 0}
-        ).sort("created_at", -1).to_list(100)
+        query: Dict[str, Any] = {"agent_id": user_id}
+        if project_ids is not None:
+            if not project_ids:
+                return {"documents": []}
+            query["project_id"] = {"$in": project_ids}
+        docs = await db.documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
         return {"documents": docs}
 
 

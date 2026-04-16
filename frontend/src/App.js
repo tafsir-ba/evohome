@@ -39,10 +39,11 @@ import "./App.css";
 
 // Feature flag for new agent homepage - set to false to rollback to legacy dashboard
 const USE_NEW_AGENT_HOME = true;
+const SUPER_ADMIN_EMAIL = 'tafsir@evo-home.ch';
 
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const ProtectedRoute = ({ children, allowedRoles, requirePlatformAdmin = false }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
   
@@ -70,6 +71,10 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
       return <Navigate to={USE_NEW_AGENT_HOME ? "/agent/home" : "/agent/dashboard-legacy"} replace />;
     }
     return <Navigate to="/login" replace />;
+  }
+
+  if (requirePlatformAdmin && (user?.email || '').toLowerCase() !== SUPER_ADMIN_EMAIL) {
+    return <Navigate to="/agent/settings" replace />;
   }
   
   return children;
@@ -216,7 +221,7 @@ const AppRouter = () => {
         </ProtectedRoute>
       } />
       <Route path="/agent/admin" element={
-        <ProtectedRoute allowedRoles={['agent']}>
+        <ProtectedRoute allowedRoles={['agent']} requirePlatformAdmin>
           <AgentSettings defaultTab="admin" />
         </ProtectedRoute>
       } />

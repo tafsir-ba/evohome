@@ -300,6 +300,7 @@ async def list_activities(
     user_id: str,
     role: str,
     agent_scope_id: Optional[str] = None,
+    accessible_project_ids: Optional[List[str]] = None,
     project_id: Optional[str] = None,
     client_id: Optional[str] = None,
     unit_id: Optional[str] = None,
@@ -311,14 +312,15 @@ async def list_activities(
     if role == 'buyer':
         return await _list_buyer_activities(user_id, activity_type, limit, offset)
     return await _list_agent_activities(
-        user_id, agent_scope_id, project_id, client_id, unit_id, activity_type, limit, offset
+        user_id, agent_scope_id, accessible_project_ids, project_id, client_id, unit_id, activity_type, limit, offset
     )
 
 
 async def _list_agent_activities(
-    user_id, agent_scope_id, project_id, client_id, unit_id, activity_type, limit, offset
+    user_id, agent_scope_id, accessible_project_ids, project_id, client_id, unit_id, activity_type, limit, offset
 ):
     query = {}
+    scoped_project_ids = list(accessible_project_ids or [])
     if project_id:
         query["project_id"] = project_id
     if client_id:
@@ -329,7 +331,9 @@ async def _list_agent_activities(
     if unit_id:
         query["unit_id"] = unit_id
     if not project_id and not client_id and not unit_id:
-        if agent_scope_id:
+        if scoped_project_ids:
+            query["project_id"] = {"$in": scoped_project_ids}
+        elif agent_scope_id:
             projects = await db.projects.find(
                 {"agent_id": agent_scope_id}, {"_id": 0, "project_id": 1}
             ).to_list(2000)
@@ -337,6 +341,8 @@ async def _list_agent_activities(
             query["project_id"] = {"$in": project_ids}
         else:
             query["author_id"] = user_id
+    elif scoped_project_ids and not project_id:
+        query["project_id"] = {"$in": scoped_project_ids}
     if activity_type:
         query["type"] = activity_type
 
@@ -606,7 +612,12 @@ async def mark_seen(user_id: str) -> str:
     return now
 
 
-async def get_unread_count(user_id: str, role: str, agent_scope_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_unread_count(
+    user_id: str,
+    role: str,
+    agent_scope_id: Optional[str] = None,
+    accessible_project_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Count activities newer than last_seen_at."""
     tracking = await db.user_activity_tracking.find_one(
         {"user_id": user_id}, {"_id": 0}
@@ -620,7 +631,9 @@ async def get_unread_count(user_id: str, role: str, agent_scope_id: Optional[str
             return {"unread_count": 0, "last_seen_at": last_seen}
         query = {"activity_id": {"$in": ids}}
     else:
-        if agent_scope_id:
+        if accessible_project_ids is not None:
+            query = {"project_id": {"$in": list(accessible_project_ids)}}
+        elif agent_scope_id:
             projects = await db.projects.find(
                 {"agent_id": agent_scope_id}, {"_id": 0, "project_id": 1}
             ).to_list(2000)

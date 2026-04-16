@@ -11,6 +11,7 @@ import {
 } from '../../components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { useSettings } from '../../context/SettingsContext';
+import { useDataContext } from '../../context/DataContext';
 import { 
   ArrowLeft, Download, Send, Pencil, Trash2, Building2, MapPin,
   Calendar, MessageSquare, User, CheckCircle, CreditCard, AlertCircle
@@ -24,6 +25,7 @@ const getAuthHeaders = () => {
 
 export const AgentDocumentDetail = () => {
   const { t } = useSettings();
+  const { projects } = useDataContext();
   const { documentId, quoteId, invoiceId } = useParams();
   const id = documentId || quoteId || invoiceId;
   const navigate = useNavigate();
@@ -43,13 +45,20 @@ export const AgentDocumentDetail = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => { fetchDoc(); }, [id]);
+  useEffect(() => { fetchDoc(); }, [id, projects.length]);
 
   const fetchDoc = async () => {
     try {
       const res = await fetch(`${API}/documents/${id}`, { credentials: 'include', headers: getAuthHeaders() });
-      if (res.ok) setDoc(await res.json());
-      else { toast.error('Document not found'); navigate('/agent/documents'); }
+      if (res.ok) {
+        const data = await res.json();
+        if (data.project_id && projects.length > 0 && !projects.some((p) => p.project_id === data.project_id)) {
+          toast.error('This document is outside your project access');
+          navigate('/agent/documents');
+          return;
+        }
+        setDoc(data);
+      } else { toast.error('Document not found'); navigate('/agent/documents'); }
     } catch { toast.error('Failed to load document'); }
     finally { setLoading(false); }
   };

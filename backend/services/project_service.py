@@ -58,11 +58,14 @@ async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
     return await db.projects.find_one({"project_id": project_id}, {"_id": 0})
 
 
-async def list_projects_by_agent(agent_id: str) -> List[Dict[str, Any]]:
+async def list_projects_by_agent(agent_id: str, project_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """List all projects for an agent, enriched with counts."""
-    projects = await db.projects.find(
-        {"agent_id": agent_id}, {"_id": 0}
-    ).sort("created_at", -1).to_list(500)
+    query: Dict[str, Any] = {"agent_id": agent_id}
+    if project_ids is not None:
+        if not project_ids:
+            return []
+        query["project_id"] = {"$in": project_ids}
+    projects = await db.projects.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
 
     for p in projects:
         pid = p['project_id']

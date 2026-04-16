@@ -221,6 +221,7 @@ async def respond_to_change_request(
     author_id: str,
     author_role: str,
     attachments: Optional[List[dict]] = None,
+    agent_scope_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Add a response message to a change request."""
     cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0})
@@ -229,7 +230,7 @@ async def respond_to_change_request(
     if cr["status"] not in ("open", "under_review"):
         raise ValueError(f"Cannot respond to change request in status '{cr['status']}'")
 
-    if author_role == "agent" and cr.get("agent_id") != author_id:
+    if author_role == "agent" and cr.get("agent_id") not in {author_id, agent_scope_id}:
         raise ValueError("Not authorized to respond to this change request")
     if author_role == "buyer":
         buyer_ref = cr.get("buyer_id") or cr.get("created_by")
@@ -293,13 +294,14 @@ async def resolve_change_request(
     change_request_id: str,
     resolved_by: str,
     resolution_note: Optional[str] = None,
+    agent_scope_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Mark a change request as resolved. Document reverts to Sent (NEVER Draft)."""
     # Verify current status allows transition
     cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0, "status": 1, "agent_id": 1})
     if not cr:
         raise ValueError(f"Change request {change_request_id} not found")
-    if cr.get("agent_id") != resolved_by:
+    if cr.get("agent_id") not in {resolved_by, agent_scope_id}:
         raise ValueError("Not authorized to resolve this change request")
     if not _can_transition(cr["status"], "resolved"):
         raise ValueError(f"Cannot resolve change request in status '{cr['status']}'")
@@ -370,12 +372,13 @@ async def resolve_change_request(
 async def close_change_request(
     change_request_id: str,
     closed_by: str,
+    agent_scope_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Close a change request (final state). No notification."""
     cr = await db.change_requests.find_one({"change_request_id": change_request_id}, {"_id": 0, "status": 1, "agent_id": 1})
     if not cr:
         raise ValueError(f"Change request {change_request_id} not found")
-    if cr.get("agent_id") != closed_by:
+    if cr.get("agent_id") not in {closed_by, agent_scope_id}:
         raise ValueError("Not authorized to close this change request")
     if not _can_transition(cr["status"], "closed"):
         raise ValueError(f"Cannot close change request in status '{cr['status']}'")
@@ -400,6 +403,7 @@ async def close_change_request(
 
 async def list_change_requests(
     agent_id: str,
+    accessible_project_ids: Optional[List[str]] = None,
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
     status: Optional[str] = None,
@@ -408,6 +412,10 @@ async def list_change_requests(
 ) -> Dict[str, Any]:
     """List change requests for an agent with optional filters."""
     query = {"agent_id": agent_id}
+    if accessible_project_ids is not None:
+        if not accessible_project_ids:
+            return {"change_requests": [], "total": 0}
+        query["project_id"] = {"$in": accessible_project_ids}
     if entity_type:
         query["entity_type"] = entity_type
     if entity_id:

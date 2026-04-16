@@ -111,10 +111,18 @@ async def create_vault_document(
     return doc
 
 
-async def list_vault_documents(agent_id: str, project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+async def list_vault_documents(
+    agent_id: str,
+    project_id: Optional[str] = None,
+    project_ids: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
     query = {"agent_id": agent_id}
     if project_id:
         query["project_id"] = project_id
+    elif project_ids is not None:
+        if not project_ids:
+            return []
+        query["project_id"] = {"$in": project_ids}
     docs = await db.vault_documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
     return _enrich_urls(_sort_vault_docs(docs))
 

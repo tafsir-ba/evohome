@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from database import db
 from core.auth import get_current_user, get_current_agent
-from core.access_control import get_workspace_owner_id
+from core.access_control import get_workspace_owner_id, get_accessible_project_ids, can_access_project, can_access_client
 from services import activity_service, file_service
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,15 @@ def _resolve_safe_activity_path(rel: str) -> Path:
 router = APIRouter()
 
 
+async def _ensure_agent_activity_access(user: dict, activity_id: str) -> dict:
+    activity = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    if not await can_access_project(user, activity.get("project_id")):
+        raise HTTPException(status_code=403, detail="Access denied")
+    return activity
+
+
 # ── Request schemas ──
 
 class ActivityReplyCreate(BaseModel):
@@ -97,18 +106,17 @@ async def create_activity(
         raise HTTPException(status_code=400, detail="At least one client_id is required")
 
     scope_agent_id = get_workspace_owner_id(user)
-    project = await db.projects.find_one(
-        {"project_id": project_id, "agent_id": scope_agent_id}, {"_id": 0}
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    if not await can_access_project(user, project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
 
     for cid in recipient_ids:
-        c = await db.clients.find_one(
-            {"client_id": cid, "agent_id": scope_agent_id}, {"_id": 0}
-        )
+        c = await db.clients.find_one({"client_id": cid, "agent_id": scope_agent_id}, {"_id": 0})
         if not c:
             raise HTTPException(status_code=400, detail=f"Client {cid} not found or not owned by you")
+        if not await can_access_client(user, cid):
+            raise HTTPException(status_code=403, detail=f"Access denied to client {cid}")
+        if c.get("project_id") != project_id:
+            raise HTTPException(status_code=400, detail=f"Client {cid} is not in the selected project")
 
     if type in ("message", "status") and not content:
         raise HTTPException(status_code=400, detail="Content is required for message/status activities")
@@ -172,6 +180,7 @@ async def get_activities(
         user_id=user['user_id'],
         role=user['role'],
         agent_scope_id=get_workspace_owner_id(user) if user['role'] == 'agent' else None,
+        accessible_project_ids=await get_accessible_project_ids(user) if user['role'] == 'agent' else None,
         project_id=project_id,
         client_id=client_id,
         unit_id=unit_id,
@@ -195,6 +204,7 @@ async def get_unread_count(user: dict = Depends(get_current_user)):
         user['user_id'],
         user['role'],
         get_workspace_owner_id(user) if user['role'] == 'agent' else None,
+        await get_accessible_project_ids(user) if user['role'] == 'agent' else None,
     )
 
 
@@ -233,13 +243,7 @@ async def get_activity_attachment(activity_id: str, user: dict = Depends(get_cur
         if not await activity_service.can_buyer_access_activity(user["user_id"], activity_id):
             raise HTTPException(status_code=403, detail="Access denied")
     else:
-        if activity.get("author_id") != user["user_id"]:
-            scope_agent_id = get_workspace_owner_id(user)
-            p = await db.projects.find_one(
-                {"project_id": activity.get("project_id"), "agent_id": scope_agent_id}
-            )
-            if not p:
-                raise HTTPException(status_code=403, detail="Access denied")
+        await _ensure_agent_activity_access(user, activity_id)
 
     fu = (activity.get("file_url") or "").strip()
     stored = activity.get("stored_filename")
@@ -288,16 +292,7 @@ async def get_activity(activity_id: str, user: dict = Depends(get_current_user))
         if not await activity_service.can_buyer_access_activity(user['user_id'], activity_id):
             raise HTTPException(status_code=403, detail="Access denied")
     else:
-        act = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0, "author_id": 1, "project_id": 1})
-        if not act:
-            raise HTTPException(status_code=404, detail="Activity not found")
-        if act['author_id'] != user['user_id']:
-            scope_agent_id = get_workspace_owner_id(user)
-            p = await db.projects.find_one(
-                {"project_id": act['project_id'], "agent_id": scope_agent_id}
-            )
-            if not p:
-                raise HTTPException(status_code=403, detail="Access denied")
+        await _ensure_agent_activity_access(user, activity_id)
 
     detail = await activity_service.get_activity_detail(activity_id)
     if not detail:
@@ -308,15 +303,7 @@ async def get_activity(activity_id: str, user: dict = Depends(get_current_user))
 @router.post("/activities/{activity_id}/send")
 async def send_draft_activity(activity_id: str, user: dict = Depends(get_current_agent)):
     """Send a draft activity to recipients."""
-    activity = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-    if activity.get("author_id") != user["user_id"]:
-        p = await db.projects.find_one(
-            {"project_id": activity.get("project_id"), "agent_id": get_workspace_owner_id(user)}
-        )
-        if not p:
-            raise HTTPException(status_code=403, detail="Access denied")
+    activity = await _ensure_agent_activity_access(user, activity_id)
     if not activity.get('is_draft'):
         raise HTTPException(status_code=400, detail="Activity is not a draft")
 
@@ -327,6 +314,8 @@ async def send_draft_activity(activity_id: str, user: dict = Depends(get_current
         c = await db.clients.find_one({"client_id": cid, "agent_id": get_workspace_owner_id(user)}, {"_id": 0})
         if not c:
             raise HTTPException(status_code=400, detail=f"Client {cid} not found")
+        if not await can_access_client(user, cid):
+            raise HTTPException(status_code=403, detail=f"Access denied to client {cid}")
 
     result = await activity_service.send_draft_activity(activity_id, activity.get("author_id"), user)
     if not result:
@@ -349,13 +338,7 @@ async def reply_to_activity(
         if not await activity_service.can_buyer_access_activity(user['user_id'], activity_id):
             raise HTTPException(status_code=403, detail="Access denied")
     else:
-        if activity['author_id'] != user['user_id']:
-            scope_agent_id = get_workspace_owner_id(user)
-            p = await db.projects.find_one(
-                {"project_id": activity['project_id'], "agent_id": scope_agent_id}
-            )
-            if not p:
-                raise HTTPException(status_code=403, detail="Access denied")
+        await _ensure_agent_activity_access(user, activity_id)
 
     return await activity_service.create_reply(
         activity_id, user['user_id'], user['role'], reply_data.content
@@ -385,15 +368,7 @@ async def request_activity_change(activity_id: str, user: dict = Depends(get_cur
 @router.delete("/activities/{activity_id}")
 async def delete_activity(activity_id: str, user: dict = Depends(get_current_agent)):
     """Delete an activity. Agent only."""
-    activity = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0, "author_id": 1, "project_id": 1})
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-    if activity.get("author_id") != user["user_id"]:
-        p = await db.projects.find_one(
-            {"project_id": activity.get("project_id"), "agent_id": get_workspace_owner_id(user)}
-        )
-        if not p:
-            raise HTTPException(status_code=403, detail="Access denied")
+    activity = await _ensure_agent_activity_access(user, activity_id)
     deleted = await activity_service.delete_activity(activity_id, activity.get("author_id"))
     if not deleted:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -407,25 +382,14 @@ async def update_activity(
     user: dict = Depends(get_current_agent),
 ):
     """Update an activity. Agent only."""
-    activity = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0, "author_id": 1, "project_id": 1})
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-    if activity.get("author_id") != user["user_id"]:
-        p = await db.projects.find_one(
-            {"project_id": activity.get("project_id"), "agent_id": get_workspace_owner_id(user)}
-        )
-        if not p:
-            raise HTTPException(status_code=403, detail="Access denied")
+    activity = await _ensure_agent_activity_access(user, activity_id)
     update_payload = data.model_dump(exclude_none=True)
     target_project_id = update_payload.get("project_id") or activity.get("project_id")
     scope_agent_id = get_workspace_owner_id(user)
 
     if "project_id" in update_payload:
-        project = await db.projects.find_one(
-            {"project_id": update_payload["project_id"], "agent_id": scope_agent_id}, {"_id": 0}
-        )
-        if not project:
-            raise HTTPException(status_code=400, detail="Invalid project")
+        if not await can_access_project(user, update_payload["project_id"]):
+            raise HTTPException(status_code=403, detail="Access denied to project")
 
     if "client_ids" in update_payload:
         client_ids = [
@@ -447,6 +411,9 @@ async def update_activity(
         missing = [cid for cid in client_ids if cid not in found]
         if missing:
             raise HTTPException(status_code=400, detail=f"Invalid recipients for selected project: {', '.join(missing)}")
+        for cid in client_ids:
+            if not await can_access_client(user, cid):
+                raise HTTPException(status_code=403, detail=f"Access denied to client {cid}")
         update_payload["client_ids"] = client_ids
 
     result = await activity_service.update_activity(

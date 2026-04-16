@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project, get_workspace_owner_id
+from core.access_control import can_access_project, get_workspace_owner_id, get_accessible_project_ids
 from services import project_service
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,10 @@ class UpdateProjectRequest(BaseModel):
 async def list_projects(user=Depends(get_current_user)):
     """List projects. Agents see theirs; buyers see linked projects."""
     if user['role'] == 'agent':
-        return await project_service.list_projects_by_agent(get_workspace_owner_id(user))
+        return await project_service.list_projects_by_agent(
+            get_workspace_owner_id(user),
+            await get_accessible_project_ids(user),
+        )
     elif user['role'] == 'buyer':
         return await project_service.list_projects_for_buyer(user['user_id'])
     return []

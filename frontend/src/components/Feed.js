@@ -709,7 +709,15 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
         const clientsData = await clientsRes.json();
         setClients(clientsData);
         if (clientFilter) {
-          setFilterClient(clientsData.find(c => c.client_id === clientFilter));
+          const client = clientsData.find(c => c.client_id === clientFilter);
+          setFilterClient(client);
+          if (!client) {
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete('client_id');
+              return next;
+            }, { replace: true });
+          }
         }
       }
     } catch (error) {
@@ -720,9 +728,18 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
   // Set filter project from URL when projects are loaded
   useEffect(() => {
     if (isAgent && projectFilter && projects.length > 0) {
-      setFilterProject(projects.find(p => p.project_id === projectFilter) || null);
+      const project = projects.find(p => p.project_id === projectFilter) || null;
+      setFilterProject(project);
+      if (!project) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('project');
+          next.delete('client_id');
+          return next;
+        }, { replace: true });
+      }
     }
-  }, [isAgent, projectFilter, projects]);
+  }, [isAgent, projectFilter, projects, setSearchParams]);
 
   useEffect(() => {
     fetchClients();

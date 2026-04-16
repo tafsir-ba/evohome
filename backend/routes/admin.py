@@ -5,7 +5,6 @@ import json
 import uuid
 import base64
 import logging
-import hashlib
 import secrets
 import tempfile
 from datetime import datetime, timezone, timedelta
@@ -41,25 +40,6 @@ UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 router = APIRouter()
-DEBUG_LOG_PATH = "/Users/tafpro/WD Dropbox/Tafsir Ba/Repo Cursor/evohome/.cursor/debug-b8cd8a.log"
-DEBUG_SESSION_ID = "b8cd8a"
-
-
-def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict):
-    payload = {
-        "sessionId": DEBUG_SESSION_ID,
-        "runId": run_id,
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data,
-        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
-    }
-    try:
-        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(payload, ensure_ascii=True) + "\n")
-    except Exception:
-        pass
 
 
 def _require_super_admin(user: Dict[str, Any]) -> None:
@@ -286,6 +266,7 @@ class AdminCreateAgentUserBody(BaseModel):
     name: str
     password: str = Field(min_length=8)
     workspace_role: Literal["member", "admin"] = "member"
+    assigned_project_ids: List[str] = Field(default_factory=list)
 
 
 class AdminUpdateAgentRoleBody(BaseModel):
@@ -322,22 +303,6 @@ async def list_workspace_users(
 @router.post("/admin/users")
 async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Depends(get_current_agent)):
     """Create an agent account inside current workspace."""
-    # region agent log
-    recipient = data.email.lower().strip()
-    _debug_log(
-        run_id="run-2",
-        hypothesis_id="H5",
-        location="backend/routes/admin.py:create_workspace_user:entry",
-        message="admin user create endpoint invoked",
-        data={
-            "recipient_domain": recipient.split("@", 1)[1] if "@" in recipient else "invalid",
-            "recipient_hash": hashlib.sha256(recipient.encode("utf-8")).hexdigest()[:12],
-            "actor_user_id": user.get("user_id"),
-            "workspace_role": data.workspace_role,
-            "sends_invitation_email": False,
-        },
-    )
-    # endregion
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     actor_email = (user.get("email") or "").strip().lower()
@@ -345,6 +310,14 @@ async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Dep
         raise HTTPException(status_code=403, detail="Only workspace owner can create admin users")
 
     workspace_owner_id = get_workspace_owner_id(user)
+    assigned_project_ids = sorted({pid for pid in data.assigned_project_ids if pid})
+    if assigned_project_ids:
+        project_count = await db.projects.count_documents({
+            "agent_id": workspace_owner_id,
+            "project_id": {"$in": assigned_project_ids},
+        })
+        if project_count != len(assigned_project_ids):
+            raise HTTPException(status_code=400, detail="One or more assigned projects do not belong to this workspace")
     existing = await db.users.find_one({"email": data.email.lower(), "role": "agent"}, {"_id": 0})
     if existing:
         existing_workspace_owner = existing.get("workspace_owner_id") or existing.get("user_id")
@@ -364,6 +337,7 @@ async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Dep
         "picture": None,
         "workspace_owner_id": workspace_owner_id,
         "workspace_role": data.workspace_role,
+        "assigned_project_ids": assigned_project_ids,
         "is_active": True,
         "created_at": now,
         "created_by": user.get("user_id"),
@@ -377,7 +351,11 @@ async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Dep
         target_type="user",
         target_id=user_id,
         workspace_owner_id=workspace_owner_id,
-        metadata={"workspace_role": data.workspace_role, "email": data.email.lower()},
+        metadata={
+            "workspace_role": data.workspace_role,
+            "email": data.email.lower(),
+            "assigned_project_ids": assigned_project_ids,
+        },
     )
     frontend_url = (FRONTEND_URL or os.environ.get("REACT_APP_BACKEND_URL", "https://evohome.ch")).rstrip("/")
     if frontend_url.endswith("/api"):
@@ -404,20 +382,6 @@ async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Dep
     </div>
     """
     email_result = await send_email_async(data.email.lower(), subject, html_content)
-    # region agent log
-    _debug_log(
-        run_id="run-4",
-        hypothesis_id="H5",
-        location="backend/routes/admin.py:create_workspace_user:email_result",
-        message="admin user onboarding email result",
-        data={
-            "recipient_domain": (data.email.lower().split("@", 1)[1] if "@" in data.email.lower() else "invalid"),
-            "status": email_result.get("status"),
-            "reason": email_result.get("reason"),
-            "error_prefix": str(email_result.get("error", ""))[:120],
-        },
-    )
-    # endregion
 
     row = _clean_user_row(user_doc)
     row["email_delivery"] = {

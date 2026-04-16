@@ -7,6 +7,7 @@ import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Badge } from '../../components/ui/badge';
 import { toast } from 'sonner';
+import { useDataContext } from '../../context/DataContext';
 import { ArrowLeft, Home, UserPlus, Unlink2, Loader2, Users, Building2 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
@@ -19,6 +20,7 @@ const getAuthHeaders = () => {
 export const AgentUnitDetail = () => {
   const { unitId } = useParams();
   const navigate = useNavigate();
+  const { projects } = useDataContext();
   const [loading, setLoading] = useState(true);
   const [attaching, setAttaching] = useState(false);
   const [unit, setUnit] = useState(null);
@@ -35,6 +37,9 @@ export const AgentUnitDetail = () => {
         throw new Error('Unit not found');
       }
       const unitData = await unitRes.json();
+      if (unitData.project_id && projects.length > 0 && !projects.some((p) => p.project_id === unitData.project_id)) {
+        throw new Error('This unit is outside your project access');
+      }
       setUnit(unitData);
 
       const [projectRes, assignedRes, clientsRes] = await Promise.all([
@@ -56,7 +61,7 @@ export const AgentUnitDetail = () => {
 
   useEffect(() => {
     fetchData();
-  }, [unitId]);
+  }, [unitId, projects.length]);
 
   const candidateClients = useMemo(
     () => projectClients.filter((c) => c.client_id !== undefined && c.unit_id !== unitId),

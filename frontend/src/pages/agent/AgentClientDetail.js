@@ -57,9 +57,12 @@ export const AgentClientDetail = () => {
   });
 
   useEffect(() => {
-    fetchClient();
     fetchProjects();
   }, [clientId]);
+
+  useEffect(() => {
+    fetchClient();
+  }, [clientId, projects.length]);
 
   const fetchProjects = async () => {
     try {
@@ -77,6 +80,11 @@ export const AgentClientDetail = () => {
       const response = await fetch(`${API}/clients/${clientId}`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const data = await response.json();
+        if (data.project_id && projects.length > 0 && !projects.some((p) => p.project_id === data.project_id)) {
+          toast.error('This client is outside your project access');
+          navigate('/agent/clients');
+          return;
+        }
         setClient(data);
         setFormData({
           name: data.name,

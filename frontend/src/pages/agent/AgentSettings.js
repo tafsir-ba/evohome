@@ -99,6 +99,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
   // Platform admin tab state (super-admin only)
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminAuditLogs, setAdminAuditLogs] = useState([]);
+  const [adminProjects, setAdminProjects] = useState([]);
   const [loadingAdmin, setLoadingAdmin] = useState(false);
   const [creatingAdminUser, setCreatingAdminUser] = useState(false);
   const [adminForm, setAdminForm] = useState({
@@ -106,6 +107,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
     email: '',
     password: '',
     workspace_role: 'member',
+    assigned_project_ids: [],
   });
 
   const isPlatformAdmin = (user?.email || '').toLowerCase() === SUPER_ADMIN_EMAIL;
@@ -173,9 +175,10 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
     if (!isPlatformAdmin) return;
     setLoadingAdmin(true);
     try {
-      const [usersRes, logsRes] = await Promise.all([
+      const [usersRes, logsRes, projectsRes] = await Promise.all([
         fetch(`${API}/admin/users?include_inactive=true`, { credentials: 'include', headers: getAuthHeaders() }),
         fetch(`${API}/admin/audit-logs?limit=50`, { credentials: 'include', headers: getAuthHeaders() }),
+        fetch(`${API}/projects`, { credentials: 'include', headers: getAuthHeaders() }),
       ]);
 
       if (usersRes.ok) {
@@ -189,11 +192,26 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
       } else {
         throw new Error((await parseApiError(logsRes)).message || 'Failed to load audit logs');
       }
+
+      if (projectsRes.ok) {
+        setAdminProjects(await projectsRes.json());
+      } else {
+        throw new Error((await parseApiError(projectsRes)).message || 'Failed to load projects');
+      }
     } catch (error) {
       toast.error(error.message);
     } finally {
       setLoadingAdmin(false);
     }
+  };
+
+  const toggleAssignedProject = (projectId) => {
+    setAdminForm((prev) => ({
+      ...prev,
+      assigned_project_ids: prev.assigned_project_ids.includes(projectId)
+        ? prev.assigned_project_ids.filter((id) => id !== projectId)
+        : [...prev.assigned_project_ids, projectId],
+    }));
   };
 
   const handleCreateAdminUser = async () => {
@@ -218,7 +236,7 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
       } else {
         toast.success('Admin user created and invitation email sent');
       }
-      setAdminForm({ name: '', email: '', password: '', workspace_role: 'member' });
+      setAdminForm({ name: '', email: '', password: '', workspace_role: 'member', assigned_project_ids: [] });
       fetchAdminData();
     } catch (error) {
       toast.error(error.message);
@@ -1185,6 +1203,28 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
                       </Select>
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label>Project Access</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Select the projects this user can access. Leave empty to keep full workspace access.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {adminProjects.map((project) => {
+                        const selected = adminForm.assigned_project_ids.includes(project.project_id);
+                        return (
+                          <Button
+                            key={project.project_id}
+                            type="button"
+                            variant={selected ? 'default' : 'outline'}
+                            className="justify-start"
+                            onClick={() => toggleAssignedProject(project.project_id)}
+                          >
+                            {project.name}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <Button onClick={handleCreateAdminUser} disabled={creatingAdminUser}>
                     {creatingAdminUser ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
                     Create User
@@ -1211,6 +1251,13 @@ export const AgentSettings = ({ defaultTab = 'account' }) => {
                             <p className="text-sm text-muted-foreground">{member.email}</p>
                             <p className="text-xs text-muted-foreground mt-1">
                               Status: {member.is_active === false ? 'inactive' : 'active'}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Projects: {member.assigned_project_ids?.length
+                                ? member.assigned_project_ids
+                                    .map((projectId) => adminProjects.find((project) => project.project_id === projectId)?.name || projectId)
+                                    .join(', ')
+                                : 'all'}
                             </p>
                           </div>
                           {member.team_role !== 'owner' && (
