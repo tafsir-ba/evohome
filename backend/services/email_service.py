@@ -7,6 +7,7 @@ import uuid
 import asyncio
 import logging
 import hashlib
+import json
 import resend
 from datetime import datetime, timezone, timedelta
 from fastapi import Request
@@ -15,6 +16,8 @@ from database import db
 from core.monitoring import capture_email_error
 
 logger = logging.getLogger("evohome.email")
+DEBUG_LOG_PATH = "/Users/tafpro/WD Dropbox/Tafsir Ba/Repo Cursor/evohome/.cursor/debug-b8cd8a.log"
+DEBUG_SESSION_ID = "b8cd8a"
 
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', '')
@@ -46,6 +49,30 @@ def _resolved_frontend_url() -> str:
     if base.endswith("/api"):
         base = base[:-4]
     return base.rstrip("/") or "https://evohome.ch"
+
+
+def _recipient_meta(email: str) -> dict:
+    normalized = _normalize_email(email)
+    domain = normalized.split("@", 1)[1] if "@" in normalized else "invalid"
+    recipient_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12] if normalized else "empty"
+    return {"domain": domain, "recipient_hash": recipient_hash}
+
+
+def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict):
+    payload = {
+        "sessionId": DEBUG_SESSION_ID,
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+    }
+    try:
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
 
 
 def _email_entity_scope(data: dict) -> str:
@@ -103,12 +130,44 @@ async def _store_send_lock(lock_key: str, template_type: str, to_email: str, cat
 
 async def send_email_async(to_email: str, subject: str, html_content: str, request: Request = None) -> dict:
     """Send email asynchronously using Resend with error monitoring"""
+    # region agent log
+    _debug_log(
+        run_id="run-1",
+        hypothesis_id="H1",
+        location="backend/services/email_service.py:send_email_async:entry",
+        message="send_email_async called",
+        data={
+            "recipient": _recipient_meta(to_email),
+            "subject_prefix": (subject or "")[:40],
+            "resend_configured": bool(RESEND_API_KEY),
+            "sender_configured": bool(SENDER_EMAIL),
+        },
+    )
+    # endregion
     if not RESEND_API_KEY:
         logger.warning(f"RESEND_API_KEY not configured. Would send email to {to_email}: {subject}")
+        # region agent log
+        _debug_log(
+            run_id="run-1",
+            hypothesis_id="H1",
+            location="backend/services/email_service.py:send_email_async:no_api_key",
+            message="email skipped due to missing RESEND_API_KEY",
+            data={"recipient": _recipient_meta(to_email)},
+        )
+        # endregion
         return {"status": "skipped", "reason": "No API key configured"}
 
     if not SENDER_EMAIL:
         logger.warning(f"SENDER_EMAIL not configured. Cannot send email to {to_email}")
+        # region agent log
+        _debug_log(
+            run_id="run-1",
+            hypothesis_id="H1",
+            location="backend/services/email_service.py:send_email_async:no_sender",
+            message="email skipped due to missing SENDER_EMAIL",
+            data={"recipient": _recipient_meta(to_email)},
+        )
+        # endregion
         return {"status": "skipped", "reason": "No sender email configured"}
 
     params = {
@@ -121,6 +180,19 @@ async def send_email_async(to_email: str, subject: str, html_content: str, reque
     try:
         result = await asyncio.to_thread(resend.Emails.send, params)
         logger.info(f"Email sent to {to_email}: {subject}")
+        # region agent log
+        _debug_log(
+            run_id="run-1",
+            hypothesis_id="H3",
+            location="backend/services/email_service.py:send_email_async:success",
+            message="resend call completed",
+            data={
+                "recipient": _recipient_meta(to_email),
+                "status": "success",
+                "email_id_present": bool(result.get("id")) if isinstance(result, dict) else bool(result),
+            },
+        )
+        # endregion
         # Record side effect in trace
         try:
             from core.trace import trace_side_effect
@@ -131,6 +203,19 @@ async def send_email_async(to_email: str, subject: str, html_content: str, reque
     except Exception as e:
         capture_email_error(e, recipient=to_email, template=subject[:50], request=request)
         logger.error(f"Failed to send email to {to_email}: {str(e)}")
+        # region agent log
+        _debug_log(
+            run_id="run-1",
+            hypothesis_id="H3",
+            location="backend/services/email_service.py:send_email_async:error",
+            message="resend call failed",
+            data={
+                "recipient": _recipient_meta(to_email),
+                "error_type": type(e).__name__,
+                "error_prefix": str(e)[:120],
+            },
+        )
+        # endregion
         try:
             from core.trace import trace_side_effect
             trace_side_effect("email", target=to_email, detail=f"failed: {subject[:50]}: {str(e)[:30]}")
@@ -241,18 +326,71 @@ def get_email_template(template_type: str, data: dict) -> tuple[str, str]:
 
 async def send_notification_email(template_type: str, to_email: str, data: dict) -> dict:
     """Send a notification email using a template"""
+    # region agent log
+    _debug_log(
+        run_id="run-1",
+        hypothesis_id="H2",
+        location="backend/services/email_service.py:send_notification_email:entry",
+        message="notification email pipeline entered",
+        data={
+            "template_type": template_type,
+            "recipient": _recipient_meta(to_email),
+            "scope": _email_entity_scope(data or {}),
+        },
+    )
+    # endregion
     if template_type in NON_CRITICAL_TEMPLATES:
         lock_key = _dedupe_lock_key(template_type, to_email, data or {})
         if await _already_sent_deduped(lock_key):
+            # region agent log
+            _debug_log(
+                run_id="run-1",
+                hypothesis_id="H2",
+                location="backend/services/email_service.py:send_notification_email:dedupe_skip",
+                message="notification email skipped by dedupe lock",
+                data={
+                    "template_type": template_type,
+                    "recipient": _recipient_meta(to_email),
+                    "scope": _email_entity_scope(data or {}),
+                },
+            )
+            # endregion
             return {"status": "skipped", "reason": "duplicate_notification_email"}
         if (
             template_type in NON_CRITICAL_COOLDOWN_TEMPLATES
             and await _should_throttle_noncritical(to_email, template_type)
         ):
+            # region agent log
+            _debug_log(
+                run_id="run-1",
+                hypothesis_id="H2",
+                location="backend/services/email_service.py:send_notification_email:cooldown_skip",
+                message="notification email skipped by cooldown",
+                data={
+                    "template_type": template_type,
+                    "recipient": _recipient_meta(to_email),
+                },
+            )
+            # endregion
             return {"status": "skipped", "reason": "noncritical_cooldown_active"}
 
     subject, html = get_email_template(template_type, data)
     result = await send_email_async(to_email, subject, html)
+    # region agent log
+    _debug_log(
+        run_id="run-1",
+        hypothesis_id="H4",
+        location="backend/services/email_service.py:send_notification_email:result",
+        message="notification email send result",
+        data={
+            "template_type": template_type,
+            "recipient": _recipient_meta(to_email),
+            "status": (result or {}).get("status"),
+            "reason": (result or {}).get("reason"),
+            "error_prefix": str((result or {}).get("error", ""))[:80],
+        },
+    )
+    # endregion
     if result and result.get("status") == "success":
         category = "noncritical" if template_type in NON_CRITICAL_TEMPLATES else "critical"
         lock_key = _dedupe_lock_key(template_type, to_email, data or {})

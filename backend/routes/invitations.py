@@ -9,6 +9,8 @@ import secrets
 import logging
 import bcrypt
 import html
+import json
+import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Literal
 
@@ -23,6 +25,25 @@ from services.email_service import send_email_async, send_notification_email, ge
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+DEBUG_LOG_PATH = "/Users/tafpro/WD Dropbox/Tafsir Ba/Repo Cursor/evohome/.cursor/debug-b8cd8a.log"
+DEBUG_SESSION_ID = "b8cd8a"
+
+
+def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict):
+    payload = {
+        "sessionId": DEBUG_SESSION_ID,
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+    }
+    try:
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
 
 
 # ── Schemas ──
@@ -42,6 +63,21 @@ class TeamMemberRoleUpdate(BaseModel):
 @router.post("/team/invitations")
 async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(get_current_agent)):
     """Invite a new team member to the agent's workspace"""
+    # region agent log
+    recipient = data.email.lower().strip()
+    _debug_log(
+        run_id="run-2",
+        hypothesis_id="H5",
+        location="backend/routes/invitations.py:create_team_invitation:entry",
+        message="team invitation endpoint invoked",
+        data={
+            "recipient_domain": recipient.split("@", 1)[1] if "@" in recipient else "invalid",
+            "recipient_hash": hashlib.sha256(recipient.encode("utf-8")).hexdigest()[:12],
+            "actor_user_id": user.get("user_id"),
+            "role": data.role,
+        },
+    )
+    # endregion
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Only workspace admins can invite team members")
     workspace_owner_id = get_workspace_owner_id(user)

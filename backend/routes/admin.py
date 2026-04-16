@@ -5,6 +5,7 @@ import json
 import uuid
 import base64
 import logging
+import hashlib
 import secrets
 import tempfile
 from datetime import datetime, timezone, timedelta
@@ -40,6 +41,25 @@ UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 router = APIRouter()
+DEBUG_LOG_PATH = "/Users/tafpro/WD Dropbox/Tafsir Ba/Repo Cursor/evohome/.cursor/debug-b8cd8a.log"
+DEBUG_SESSION_ID = "b8cd8a"
+
+
+def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict):
+    payload = {
+        "sessionId": DEBUG_SESSION_ID,
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+    }
+    try:
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
 
 
 def _require_super_admin(user: Dict[str, Any]) -> None:
@@ -302,6 +322,22 @@ async def list_workspace_users(
 @router.post("/admin/users")
 async def create_workspace_user(data: AdminCreateAgentUserBody, user: dict = Depends(get_current_agent)):
     """Create an agent account inside current workspace."""
+    # region agent log
+    recipient = data.email.lower().strip()
+    _debug_log(
+        run_id="run-2",
+        hypothesis_id="H5",
+        location="backend/routes/admin.py:create_workspace_user:entry",
+        message="admin user create endpoint invoked",
+        data={
+            "recipient_domain": recipient.split("@", 1)[1] if "@" in recipient else "invalid",
+            "recipient_hash": hashlib.sha256(recipient.encode("utf-8")).hexdigest()[:12],
+            "actor_user_id": user.get("user_id"),
+            "workspace_role": data.workspace_role,
+            "sends_invitation_email": False,
+        },
+    )
+    # endregion
     if not is_workspace_admin(user):
         raise HTTPException(status_code=403, detail="Workspace admin access required")
     actor_email = (user.get("email") or "").strip().lower()
