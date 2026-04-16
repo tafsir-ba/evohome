@@ -23,6 +23,7 @@ import {
   Plus, 
   Edit2, 
   Trash2, 
+  FileText,
   MapPin,
   Calendar,
   Users,
