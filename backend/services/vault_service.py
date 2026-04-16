@@ -17,6 +17,16 @@ logger = logging.getLogger(__name__)
 VAULT_CATEGORIES = ["architect_plans", "contracts", "plans", "permits", "reports", "other"]
 
 
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs safely from DB rows."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
+
+
 def _sort_vault_docs(docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Pin architect plans first, then newest documents."""
     def _key(doc: Dict[str, Any]):
@@ -132,7 +142,7 @@ async def list_buyer_vault(buyer_id: str) -> List[Dict[str, Any]]:
     buyer_clients = await db.clients.find(
         {"buyer_id": buyer_id}, {"_id": 0, "client_id": 1}
     ).to_list(100)
-    buyer_client_ids = [c["client_id"] for c in buyer_clients]
+    buyer_client_ids = _collect_string_ids(buyer_clients, "client_id")
 
     # Match by buyer_ids OR by client_ids (handles race condition where buyer registered after doc was shared)
     query = {"access_level": "shared"}

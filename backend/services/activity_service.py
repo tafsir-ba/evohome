@@ -23,6 +23,15 @@ VALID_ACTIVITY_TYPES = {"message", "image", "pdf", "status"}
 
 # ── Helpers ──
 
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs from row dicts without raising KeyError."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
+
 async def get_buyer_context(buyer_id: str) -> Optional[Dict[str, Any]]:
     """Get unit/project context for a buyer via client linkage."""
     client = await db.clients.find_one(
@@ -124,8 +133,8 @@ async def batch_enrich_activities(activities: List[dict]) -> List[dict]:
         return []
 
     # Collect unique IDs
-    activity_ids = [a['activity_id'] for a in activities]
-    author_ids = list({a['author_id'] for a in activities})
+    activity_ids = _collect_string_ids(activities, "activity_id")
+    author_ids = list(set(_collect_string_ids(activities, "author_id")))
     project_ids = list({a['project_id'] for a in activities if a.get('project_id')})
     unit_ids = list({a['unit_id'] for a in activities if a.get('unit_id')})
 
@@ -151,7 +160,7 @@ async def batch_enrich_activities(activities: List[dict]) -> List[dict]:
     ).to_list(1000)
 
     # Batch fetch client names for all recipients
-    recipient_client_ids = list({r['client_id'] for r in all_recipients})
+    recipient_client_ids = list(set(_collect_string_ids(all_recipients, "client_id")))
     clients_list = await db.clients.find(
         {"client_id": {"$in": recipient_client_ids}}, {"_id": 0, "client_id": 1, "name": 1}
     ).to_list(len(recipient_client_ids)) if recipient_client_ids else []
@@ -160,8 +169,12 @@ async def batch_enrich_activities(activities: List[dict]) -> List[dict]:
     # Group recipients by activity_id
     recipients_by_activity = {}
     for r in all_recipients:
-        r['client_name'] = client_map.get(r['client_id'], 'Unknown')
-        recipients_by_activity.setdefault(r['activity_id'], []).append(r)
+        client_id = r.get("client_id")
+        activity_id = r.get("activity_id")
+        if not isinstance(activity_id, str) or not activity_id:
+            continue
+        r['client_name'] = client_map.get(client_id, 'Unknown') if isinstance(client_id, str) else 'Unknown'
+        recipients_by_activity.setdefault(activity_id, []).append(r)
 
     # Batch count replies using aggregation
     reply_counts_pipeline = [
@@ -332,7 +345,7 @@ async def _list_agent_activities(
         recs = await db.activity_recipients.find(
             {"client_id": client_id}, {"_id": 0, "activity_id": 1}
         ).to_list(1000)
-        query["activity_id"] = {"$in": [r['activity_id'] for r in recs]} if recs else {"$in": []}
+        query["activity_id"] = {"$in": _collect_string_ids(recs, "activity_id")} if recs else {"$in": []}
     if unit_id:
         query["unit_id"] = unit_id
     if not project_id and not client_id and not unit_id:
@@ -342,7 +355,7 @@ async def _list_agent_activities(
             projects = await db.projects.find(
                 {"agent_id": agent_scope_id}, {"_id": 0, "project_id": 1}
             ).to_list(2000)
-            project_ids = [p["project_id"] for p in projects]
+            project_ids = _collect_string_ids(projects, "project_id")
             query["project_id"] = {"$in": project_ids}
         else:
             query["author_id"] = user_id
@@ -640,7 +653,7 @@ async def get_unread_count(
             projects = await db.projects.find(
                 {"agent_id": agent_scope_id}, {"_id": 0, "project_id": 1}
             ).to_list(2000)
-            project_ids = [p["project_id"] for p in projects]
+            project_ids = _collect_string_ids(projects, "project_id")
             query = {"project_id": {"$in": project_ids}}
         else:
             query = {"author_id": user_id}

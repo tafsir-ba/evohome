@@ -17,6 +17,16 @@ from services.recipient_scope_service import expand_client_ids_to_unit_peers
 logger = logging.getLogger(__name__)
 
 
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs from rows without raising KeyError."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
+
+
 def _sanitize_contact_person(contact_person: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not contact_person or not isinstance(contact_person, dict):
         return None
@@ -91,14 +101,14 @@ async def resolve_recipient_client_ids_for_send(decision: Dict[str, Any], agent_
             {"project_id": pid, "agent_id": agent_id, "unit_id": {"$in": unit_ids}},
             {"_id": 0, "client_id": 1},
         ).to_list(200)
-        return [c["client_id"] for c in clients]
+        return _collect_string_ids(clients, "client_id")
 
     # project-wide
     clients = await db.clients.find(
         {"project_id": pid, "agent_id": agent_id},
         {"_id": 0, "client_id": 1},
     ).to_list(200)
-    return [c["client_id"] for c in clients]
+    return _collect_string_ids(clients, "client_id")
 
 
 def _client_should_receive_open_decision(client: Dict[str, Any], decision: Dict[str, Any]) -> bool:
@@ -357,7 +367,7 @@ async def buyer_respond(
     logger.info(f"Decision {decision_id}: buyer {buyer_id} action={action}, new_status={new_status}")
 
     recs = await db.decision_recipients.find({"decision_id": decision_id}, {"_id": 0, "client_id": 1}).to_list(200)
-    cids = [r["client_id"] for r in recs]
+    cids = _collect_string_ids(recs, "client_id")
     notify_buyers = await _buyer_user_ids_from_client_ids(cids)
     await _emit_decision_updated(
         decision_id,
@@ -385,7 +395,7 @@ async def close_decision(decision_id: str, agent_id: str) -> Dict[str, Any]:
 
     decision["status"] = "closed"
     recs = await db.decision_recipients.find({"decision_id": decision_id}, {"_id": 0, "client_id": 1}).to_list(200)
-    cids = [r["client_id"] for r in recs]
+    cids = _collect_string_ids(recs, "client_id")
     buyer_ids = await _buyer_user_ids_from_client_ids(cids)
     await _emit_decision_updated(
         decision_id,
@@ -440,14 +450,15 @@ async def get_decision_with_recipients(decision_id: str) -> Optional[Dict[str, A
     ).to_list(100)
 
     # Enrich with client names
-    client_ids = [r["client_id"] for r in recipients]
+    client_ids = _collect_string_ids(recipients, "client_id")
     if client_ids:
         clients = await db.clients.find(
             {"client_id": {"$in": client_ids}}, {"_id": 0, "client_id": 1, "name": 1, "email": 1}
         ).to_list(len(client_ids))
         client_map = {c["client_id"]: c for c in clients}
         for r in recipients:
-            cl = client_map.get(r["client_id"], {})
+            rid = r.get("client_id")
+            cl = client_map.get(rid, {})
             r["client_name"] = cl.get("name", "Unknown")
             r["client_email"] = cl.get("email", "")
 
@@ -499,7 +510,7 @@ async def list_decisions(
             d["project_name"] = proj_map.get(d.get("project_id"))
 
     # Batch count recipients per decision
-    dec_ids = [d["decision_id"] for d in items]
+    dec_ids = _collect_string_ids(items, "decision_id")
     if dec_ids:
         pipeline = [
             {"$match": {"decision_id": {"$in": dec_ids}}},
@@ -534,7 +545,11 @@ async def list_buyer_decisions(buyer_id: str) -> List[Dict[str, Any]]:
         {"client_id": {"$in": scope_client_ids}}, {"_id": 0}
     ).to_list(200)
 
-    decision_ids = list({r["decision_id"] for r in recipient_records})
+    decision_ids = list({
+        r.get("decision_id")
+        for r in recipient_records
+        if isinstance(r.get("decision_id"), str) and r.get("decision_id")
+    })
     if not decision_ids:
         return []
 
@@ -545,8 +560,9 @@ async def list_buyer_decisions(buyer_id: str) -> List[Dict[str, Any]]:
 
     # Enrich
     for d in decisions:
-        recs = [r for r in recipient_records if r["decision_id"] == d["decision_id"]]
-        buyer_rec = next((r for r in recs if r["client_id"] in scope_client_ids), None)
+        did = d.get("decision_id")
+        recs = [r for r in recipient_records if r.get("decision_id") == did]
+        buyer_rec = next((r for r in recs if r.get("client_id") in scope_client_ids), None)
         d["buyer_status"] = buyer_rec["status"] if buyer_rec else "pending"
         d["buyer_comment"] = buyer_rec.get("comment") if buyer_rec else None
 

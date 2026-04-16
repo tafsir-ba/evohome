@@ -18,6 +18,16 @@ def _make_timeline_id() -> str:
     return f"tl_{uuid.uuid4().hex[:12]}"
 
 
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs from row dicts without raising KeyError."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
+
+
 async def create_timeline(
     project_id: str,
     agent_id: str,
@@ -123,14 +133,23 @@ async def get_enriched_timeline(project_id: str, user_role: str) -> Optional[Dic
 
     # Enrich steps
     for step in steps:
+        step_id = step.get("step_id")
+        if not isinstance(step_id, str) or not step_id:
+            step['documents'] = []
+            step['internal_notes'] = [] if user_role == 'agent' else []
+            continue
+
         # Linked documents
         doc_links = await db.timeline_step_documents.find(
-            {"timeline_step_id": step['step_id']}, {"_id": 0}
+            {"timeline_step_id": step_id}, {"_id": 0}
         ).to_list(50)
         documents = []
         for link in doc_links:
+            activity_id = link.get("activity_id")
+            if not isinstance(activity_id, str) or not activity_id:
+                continue
             activity = await db.activities.find_one(
-                {"activity_id": link['activity_id']},
+                {"activity_id": activity_id},
                 {"_id": 0, "activity_id": 1, "title": 1, "type": 1,
                  "file_name": 1, "file_url": 1, "created_at": 1}
             )
@@ -141,11 +160,15 @@ async def get_enriched_timeline(project_id: str, user_role: str) -> Optional[Dic
         # Internal notes (agent only)
         if user_role == 'agent':
             notes = await db.timeline_step_internal_notes.find(
-                {"timeline_step_id": step['step_id']}, {"_id": 0}
+                {"timeline_step_id": step_id}, {"_id": 0}
             ).sort("created_at", -1).to_list(50)
             for note in notes:
+                author_id = note.get("author_id")
+                if not isinstance(author_id, str) or not author_id:
+                    note['author_name'] = 'Unknown'
+                    continue
                 author = await db.users.find_one(
-                    {"user_id": note['author_id']}, {"_id": 0, "name": 1}
+                    {"user_id": author_id}, {"_id": 0, "name": 1}
                 )
                 note['author_name'] = author['name'] if author else 'Unknown'
             step['internal_notes'] = notes
@@ -161,7 +184,7 @@ async def delete_timeline_cascade(timeline_id: str) -> bool:
     steps = await db.timeline_steps.find(
         {"timeline_id": timeline_id}, {"step_id": 1}
     ).to_list(200)
-    step_ids = [s['step_id'] for s in steps]
+    step_ids = _collect_string_ids(steps, "step_id")
 
     if step_ids:
         await db.timeline_step_documents.delete_many(

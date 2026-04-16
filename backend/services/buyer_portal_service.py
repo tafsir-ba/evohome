@@ -14,6 +14,16 @@ from services.decision_service import sync_missing_decision_recipients_for_clien
 logger = logging.getLogger(__name__)
 
 
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs from rows without KeyError."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
+
+
 def _pick_buyer_decision_status(
     recipient_rows: List[Dict[str, Any]],
     own_client_ids: List[str],
@@ -120,7 +130,7 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
     vault_files = [_format_vault_doc(v) for v in vault_docs]
 
     # ── Step 5: Change requests on buyer-visible documents + decisions ──
-    doc_ids = [d["document_id"] for d in docs]
+    doc_ids = _collect_string_ids(docs, "document_id")
     recipient_rows_for_cr = await db.decision_recipients.find(
         {"client_id": {"$in": peer_client_ids}},
         {"_id": 0, "decision_id": 1},
@@ -214,13 +224,16 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
             {"_id": 0}
         ).sort("created_at", -1).to_list(50)
         for d in decisions_raw:
+            decision_id = d.get("decision_id")
+            if not isinstance(decision_id, str) or not decision_id:
+                continue
             recs = [
-                r for r in by_decision.get(d["decision_id"], [])
+                r for r in by_decision.get(decision_id, [])
                 if r.get("client_id") in peer_client_ids
             ]
             buyer_status = _pick_buyer_decision_status(recs, client_ids)
             decisions.append({
-                "decision_id": d["decision_id"],
+                "decision_id": decision_id,
                 "title": d.get("title", ""),
                 "description": d.get("description", ""),
                 "options": d.get("options", []),
@@ -255,18 +268,22 @@ async def get_buyer_portal(buyer_id: str) -> Dict[str, Any]:
             steps = await db.timeline_steps.find(
                 {"timeline_id": timeline["timeline_id"]}, {"_id": 0}
             ).sort("order", 1).to_list(100)
-            construction_timeline = {
-                "timeline_id": timeline["timeline_id"],
+            timeline_id = timeline.get("timeline_id")
+            if not isinstance(timeline_id, str) or not timeline_id:
+                construction_timeline = None
+            else:
+                construction_timeline = {
+                "timeline_id": timeline_id,
                 "name": timeline.get("name", ""),
                 "steps": [{
-                    "step_id": s["step_id"],
+                    "step_id": s.get("step_id"),
                     "title": s.get("title", ""),
                     "status": s.get("status", "pending"),
                     "order": s.get("order", 0),
                     "start_date": s.get("start_date"),
                     "end_date": s.get("end_date"),
                     "notes": s.get("notes", ""),
-                } for s in steps],
+                } for s in steps if isinstance(s.get("step_id"), str) and s.get("step_id")],
             }
 
     # ── Step 9: Notifications / unread count ──
@@ -310,10 +327,18 @@ def _format_document(d: Dict[str, Any]) -> Dict[str, Any]:
         if stored:
             hero_url = file_service.get_file_url(stored)
 
+    document_id = d.get("document_id")
+    if not isinstance(document_id, str) or not document_id:
+        return {}
+
+    doc_type = d.get("type")
+    if not isinstance(doc_type, str) or not doc_type:
+        doc_type = "quote"
+
     return {
-        "id": d["document_id"],
+        "id": document_id,
         "documentNumber": d.get("document_number", ""),
-        "type": d["type"],
+        "type": doc_type,
         "title": d.get("title", ""),
         "status": d.get("status", ""),
         "amount": d.get("amount", 0),
@@ -326,8 +351,8 @@ def _format_document(d: Dict[str, Any]) -> Dict[str, Any]:
         "dueDate": d.get("due_date"),
         "changeComment": d.get("change_request_comment"),
         "actionRequired": (
-            (d["type"] == "quote" and d.get("status") == "Sent") or
-            (d["type"] == "invoice" and d.get("status") == "Sent")
+            (doc_type == "quote" and d.get("status") == "Sent") or
+            (doc_type == "invoice" and d.get("status") == "Sent")
         ),
         "parentDocumentId": d.get("parent_document_id"),
         "date": d.get("updated_at") or d.get("created_at"),
@@ -343,9 +368,13 @@ def _format_vault_doc(v: Dict[str, Any]) -> Dict[str, Any]:
     """
     url = None
 
+    vault_document_id = v.get("vault_document_id")
+    if not isinstance(vault_document_id, str) or not vault_document_id:
+        return {}
+
     return {
-        "vault_id": v["vault_document_id"],
-        "vault_document_id": v["vault_document_id"],
+        "vault_id": vault_document_id,
+        "vault_document_id": vault_document_id,
         "title": v.get("title", ""),
         "category": v.get("category", ""),
         "doc_type": v.get("doc_type", ""),

@@ -19,6 +19,16 @@ def _make_client_id() -> str:
     return f"client_{uuid.uuid4().hex[:12]}"
 
 
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs from row dicts without KeyError."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
+
+
 def _normalize_unit_id(unit_id: Optional[str]) -> Optional[str]:
     if not unit_id:
         return None
@@ -241,7 +251,7 @@ async def delete_client(client_id: str, force: bool = False) -> bool:
         {"client_id": client_id, "status": "Draft"},
         {"_id": 0, "document_id": 1, "pdf_stored_filename": 1, "hero_image_stored_filename": 1},
     ).to_list(10000)
-    draft_doc_ids = [d["document_id"] for d in draft_docs]
+    draft_doc_ids = _collect_string_ids(draft_docs, "document_id")
     for doc in draft_docs:
         for fk in ("pdf_stored_filename", "hero_image_stored_filename"):
             if doc.get(fk):
