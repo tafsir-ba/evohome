@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { parseApiError } from '../lib/api';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
@@ -86,8 +87,8 @@ export const AuthProvider = ({ children }) => {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Login failed');
+      const error = await parseApiError(response);
+      throw new Error(error.message || 'Login failed');
     }
 
     const data = await response.json();
@@ -108,8 +109,8 @@ export const AuthProvider = ({ children }) => {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Registration failed');
+      const error = await parseApiError(response);
+      throw new Error(error.message || 'Registration failed');
     }
 
     const data = await response.json();
@@ -157,8 +158,8 @@ export const AuthProvider = ({ children }) => {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Session exchange failed');
+      const error = await parseApiError(response);
+      throw new Error(error.message || 'Session exchange failed');
     }
 
     const data = await response.json();

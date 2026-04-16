@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { toast } from 'sonner';
 import { useSettings } from '../../context/SettingsContext';
 import { useDataContext } from '../../context/DataContext';
+import { parseApiError } from '../../lib/api';
 import { 
   Plus, 
   Search, 
@@ -147,8 +148,8 @@ export const AgentClients = () => {
         fetchClients();
         refreshProjects(); // Update client_count on project cards
       } else {
-        const error = await response.json();
-        toast.error(error.detail);
+        const error = await parseApiError(response);
+        toast.error(error.message || 'Failed to create client');
       }
     } catch (error) {
       toast.error('Failed to create client');
@@ -176,8 +177,8 @@ export const AgentClients = () => {
         refreshProjects(); // Refresh projects in DataContext
         fetchClients();
       } else {
-        const error = await response.json();
-        toast.error(error.detail);
+        const error = await parseApiError(response);
+        toast.error(error.message || 'Failed to create project');
       }
     } catch (error) {
       toast.error('Failed to create project');

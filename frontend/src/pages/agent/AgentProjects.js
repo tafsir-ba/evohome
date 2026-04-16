@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { useSettings } from '../../context/SettingsContext';
 import { useDataContext } from '../../context/DataContext';
+import { parseApiError } from '../../lib/api';
 import { 
   Building2, 
   Plus, 
@@ -153,15 +154,15 @@ export const AgentProjects = () => {
         refreshProjects();
         fetchSubscriptionStatus(); // Refresh usage count
       } else {
-        const error = await res.json();
+        const error = await parseApiError(res);
         // Check if it's a property limit error
-        if (res.status === 403 && error.detail?.includes('Property limit')) {
+        if (res.status === 403 && error.message?.includes('Property limit')) {
           setShowDialog(false);
           setShowLimitModal(true);
           fetchSubscriptionStatus(); // Refresh to get latest status
           return;
         }
-        throw new Error(error.detail || 'Failed to save project');
+        throw new Error(error.message || 'Failed to save project');
       }
     } catch (error) {
       toast.error(error.message);
@@ -186,8 +187,8 @@ export const AgentProjects = () => {
       if (res.ok) {
         setDeleteImpact(await res.json());
       } else {
-        const error = await res.json();
-        setDeleteError(error.message || error.detail || 'Failed to load delete impact');
+        const error = await parseApiError(res);
+        setDeleteError(error.message || 'Failed to load delete impact');
       }
     } catch (error) {
       console.error('Failed to load delete impact:', error);
@@ -241,8 +242,8 @@ export const AgentProjects = () => {
         setDeleteProject(null);
         refreshProjects();
       } else {
-        const error = await res.json();
-        const message = error.message || error.detail || 'Failed to delete project';
+        const error = await parseApiError(res);
+        const message = error.message || 'Failed to delete project';
         setDeleteError(message);
         toast.error(message);
       }
@@ -297,8 +298,8 @@ export const AgentProjects = () => {
         toast.success('Unit added');
         refreshProjects(); // Update unit_count on project cards
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to add unit');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to add unit');
       }
     } catch (error) {
       toast.error(error.message);
@@ -318,8 +319,8 @@ export const AgentProjects = () => {
         toast.success('Unit removed');
         refreshProjects(); // Update unit_count on project cards
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to remove unit');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to remove unit');
       }
     } catch (error) {
       toast.error(error.message);

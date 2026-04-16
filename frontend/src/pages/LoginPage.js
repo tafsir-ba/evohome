@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
+import { parseApiError } from '../lib/api';
 import { User, Briefcase, Building2, ShoppingBag, Mail, Lock, Loader2, ArrowLeft, Sparkles } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { cn } from '../lib/utils';
@@ -76,8 +77,8 @@ export const LoginPage = () => {
         toast.success(isRegister ? 'Account created successfully!' : 'Login successful!');
         navigate(selectedRole === 'agent' ? '/agent/home' : '/buyer/dashboard');
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Authentication failed');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Authentication failed');
       }
     } catch (error) {
       toast.error(error.message);

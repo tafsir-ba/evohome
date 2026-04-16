@@ -28,6 +28,7 @@ import {
   Loader2,
   Plus
 } from 'lucide-react';
+import { parseApiError } from '../../lib/api';
 import { cn } from '../../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
@@ -150,8 +151,8 @@ export const AgentClientDetail = () => {
         body: JSON.stringify({ unit_reference: newUnitReference.trim() }),
       });
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to create unit');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to create unit');
       }
       const created = await res.json();
       setNewUnitReference('');
@@ -187,8 +188,8 @@ export const AgentClientDetail = () => {
         toast.success('Client updated successfully');
         fetchClient();
       } else {
-        const error = await response.json();
-        toast.error(error.detail || 'Failed to update client');
+        const error = await parseApiError(response);
+        toast.error(error.message || 'Failed to update client');
       }
     } catch (error) {
       toast.error('Failed to update client');

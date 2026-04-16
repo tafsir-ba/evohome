@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { useDataContext } from '../../context/DataContext';
+import { parseApiError } from '../../lib/api';
 import { 
   Plus, 
   CheckCircle2,
@@ -233,8 +234,8 @@ export const AgentWorkflow = () => {
         fetchWorkflow(selectedProjectId);
         setTemplateDialog(false);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to apply template');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to apply template');
       }
     } catch (error) {
       toast.error(error.message);
@@ -340,8 +341,8 @@ export const AgentWorkflow = () => {
         fetchWorkflow(selectedProjectId);
         setStepDialog({ open: false, step: null });
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to update');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to update');
       }
     } catch (error) {
       toast.error(error.message);
@@ -382,8 +383,8 @@ export const AgentWorkflow = () => {
         setNewStep({ title: '', description: '', planned_date: '' });
         fetchWorkflow(selectedProjectId);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to add step');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to add step');
       }
     } catch (error) {
       toast.error(error.message);
@@ -405,8 +406,8 @@ export const AgentWorkflow = () => {
         toast.success('Step deleted');
         fetchWorkflow(selectedProjectId);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to delete step');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to delete step');
       }
     } catch (error) {
       toast.error(error.message);
@@ -451,8 +452,8 @@ export const AgentWorkflow = () => {
         setManualSteps([{ name: '', description: '', planned_date: '' }]);
         fetchWorkflow(selectedProjectId);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to create timeline');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to create timeline');
       }
     } catch (error) {
       toast.error(error.message);
@@ -492,8 +493,8 @@ export const AgentWorkflow = () => {
         fetchWorkflow(selectedProjectId);
         setLinkDialog({ open: false, step: null });
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to link');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to link');
       }
     } catch (error) {
       toast.error(error.message);
@@ -570,8 +571,8 @@ export const AgentWorkflow = () => {
         setEditingPhases(data.extracted_data.phases || []);
         toast.success('Timeline extracted! Review and approve below.');
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Extraction failed');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Extraction failed');
       }
     } catch (error) {
       toast.error(error.message);
@@ -607,8 +608,8 @@ export const AgentWorkflow = () => {
         setExtractFile(null);
         fetchWorkflow(selectedProjectId);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to approve');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to approve');
       }
     } catch (error) {
       toast.error(error.message);

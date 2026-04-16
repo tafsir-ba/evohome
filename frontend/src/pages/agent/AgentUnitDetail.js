@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
+import { parseApiError } from '../../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Label } from '../../components/ui/label';
@@ -79,8 +80,8 @@ export const AgentUnitDetail = () => {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to attach client');
+        const error = await parseApiError(response);
+        throw new Error(error.message || 'Failed to attach client');
       }
       setSelectedClientId('');
       toast.success('Client attached to unit');
@@ -101,8 +102,8 @@ export const AgentUnitDetail = () => {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to detach client');
+        const error = await parseApiError(response);
+        throw new Error(error.message || 'Failed to detach client');
       }
       toast.success('Client detached');
       fetchData();

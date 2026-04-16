@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { TeamContactImport } from '../../components/TeamContactImport';
 import { useDataContext } from '../../context/DataContext';
 import { toast } from 'sonner';
+import { parseApiError } from '../../lib/api';
 import { 
   Plus, 
   Search, 
@@ -234,8 +235,8 @@ export const AgentTeam = () => {
         setDialogOpen(false);
         fetchTeamMembers(selectedProjectId);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to save');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to save');
       }
     } catch (error) {
       toast.error(error.message);

@@ -15,6 +15,7 @@ import {
 } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { useSettings } from '../../context/SettingsContext';
+import { parseApiError } from '../../lib/api';
 import { 
   CreditCard, 
   Check, 
@@ -124,8 +125,8 @@ export const AgentBilling = () => {
           toast.info(result.message);
         }
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to sync subscription');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to sync subscription');
       }
     } catch (error) {
       toast.error(error.message);
@@ -158,8 +159,8 @@ export const AgentBilling = () => {
           throw new Error('No checkout URL received from server');
         }
       } else {
-        const error = await res.json().catch(() => ({ detail: `Server error (${res.status})` }));
-        throw new Error(error.detail || `Checkout failed (${res.status})`);
+        const error = await parseApiError(res);
+        throw new Error(error.message || `Checkout failed (${res.status})`);
       }
     } catch (error) {
       console.error('Checkout error:', error);
@@ -186,8 +187,8 @@ export const AgentBilling = () => {
           window.location.href = data.portal_url;
         }
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to open billing portal');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to open billing portal');
       }
     } catch (error) {
       toast.error(error.message);

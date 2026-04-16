@@ -9,6 +9,7 @@ import { Label } from '../../components/ui/label';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { cn, formatContextSubtitle } from '../../lib/utils';
+import { parseApiError } from '../../lib/api';
 import { SupplierAutocomplete } from '../../components/SupplierAutocomplete';
 import { useDataContext } from '../../context/DataContext';
 import {
@@ -192,8 +193,8 @@ export const AgentDocumentUpload = () => {
         });
         toast.success('PDF uploaded and analyzed');
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Upload failed');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Upload failed');
       }
     } catch (error) {
       console.error('Upload error:', error);

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useDataContext } from '../context/DataContext';
+import { parseApiError } from '../lib/api';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
@@ -815,8 +816,8 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
         toast.success('Reply sent');
         fetchActivities();
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to send reply');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to send reply');
       }
     } catch (error) {
       toast.error(error.message);
@@ -834,8 +835,8 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
         toast.success('Message sent to client');
         fetchActivities();
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to send message');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to send message');
       }
     } catch (error) {
       toast.error(error.message);
@@ -883,8 +884,8 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
         setEditRecipientsResetNotice(false);
         fetchActivities();
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to update activity');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to update activity');
       }
     } catch (error) {
       toast.error(error.message);
@@ -905,8 +906,8 @@ export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = 
         setDeleteConfirm({ open: false, activity: null });
         fetchActivities();
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to delete activity');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to delete activity');
       }
     } catch (error) {
       toast.error(error.message);
