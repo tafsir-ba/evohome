@@ -332,12 +332,12 @@ export const AgentDecisions = () => {
     <AgentLayout>
       <div className="space-y-6" data-testid="decisions-page">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-outfit font-semibold">Decisions</h1>
             <p className="text-sm text-muted-foreground mt-0.5">{decisions.length} decision{decisions.length !== 1 ? 's' : ''}</p>
           </div>
-          <Button onClick={() => setCreateOpen(true)} data-testid="new-decision-btn">
+          <Button className="w-full sm:w-auto" onClick={() => setCreateOpen(true)} data-testid="new-decision-btn">
             <Plus className="w-4 h-4 mr-2" /> New Decision
           </Button>
         </div>
@@ -376,24 +376,24 @@ export const AgentDecisions = () => {
                   data-testid={`decision-card-${d.decision_id}`}
                 >
                   <CardContent className="py-4 px-5">
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                       <StatusIcon className={cn('w-5 h-5 flex-shrink-0', d.status === 'approved' ? 'text-emerald-600' : d.status === 'pending' ? 'text-amber-600' : d.status === 'rejected' ? 'text-red-600' : 'text-muted-foreground')} />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-medium truncate">{d.title}</p>
                           <Badge variant="outline" className={cn('text-[10px]', config.color)}>{config.label}</Badge>
                           {isOverdue && <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-700 bg-red-500/10">Overdue</Badge>}
                         </div>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-muted-foreground">
                           {d.project_name && <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{d.project_name}</span>}
                           {d.deadline && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(d.deadline).toLocaleDateString('de-CH')}</span>}
                           {d.recipient_count > 0 && <span className="flex items-center gap-1"><Users className="w-3 h-3" />{d.approved_count}/{d.recipient_count} approved</span>}
                         </div>
                       </div>
-                      <div className="flex gap-2 flex-shrink-0">
+                      <div className="flex w-full gap-2 sm:w-auto sm:flex-shrink-0">
                         {d.status === 'draft' && (
                           <>
-                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleSend(d.decision_id); }} disabled={sendingId === d.decision_id} data-testid={`send-decision-${d.decision_id}`}>
+                            <Button className="flex-1 sm:flex-initial" size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleSend(d.decision_id); }} disabled={sendingId === d.decision_id} data-testid={`send-decision-${d.decision_id}`}>
                               {sendingId === d.decision_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4 mr-1" />Send</>}
                             </Button>
                             <Button size="sm" variant="ghost" className="text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(d.decision_id); }}>
@@ -402,7 +402,7 @@ export const AgentDecisions = () => {
                           </>
                         )}
                         {d.status === 'Change Requested' && (
-                          <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleSend(d.decision_id); }} disabled={sendingId === d.decision_id}>
+                          <Button className="flex-1 sm:flex-initial" size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleSend(d.decision_id); }} disabled={sendingId === d.decision_id}>
                             <Send className="w-4 h-4 mr-1" />Resend
                           </Button>
                         )}

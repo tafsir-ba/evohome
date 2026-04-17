@@ -80,7 +80,7 @@ export const AgentLayout = ({ children }) => {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-background transition-colors overflow-x-hidden">
+    <div className="min-h-screen bg-background transition-colors">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
@@ -96,8 +96,8 @@ export const AgentLayout = ({ children }) => {
       )}>
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between px-6 h-16 border-b border-border">
-            <Link to="/agent/home" className="flex items-center gap-3" data-testid="logo-link">
+          <div className="flex items-center justify-between px-4 sm:px-6 h-16 border-b border-border">
+            <Link to="/agent/home" className="flex items-center gap-3 min-w-0" data-testid="logo-link">
               {logoUrl ? (
                 <img 
                   src={logoUrl} 
@@ -109,7 +109,7 @@ export const AgentLayout = ({ children }) => {
                   <Home className="w-5 h-5 text-primary-foreground" />
                 </div>
               )}
-              <span className="text-lg font-outfit font-semibold text-foreground tracking-tight">{companyName}</span>
+              <span className="text-lg font-outfit font-semibold text-foreground tracking-tight truncate">{companyName}</span>
             </Link>
             <button 
               className="lg:hidden p-1.5 hover:bg-muted rounded-lg transition-colors"
@@ -219,7 +219,7 @@ export const AgentLayout = ({ children }) => {
       </aside>
       
       {/* Main content */}
-      <div className="lg:pl-64">
+      <div className="lg:pl-64 min-w-0">
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border h-16 flex items-center px-3 sm:px-4 lg:px-6">
           <button 
@@ -238,14 +238,14 @@ export const AgentLayout = ({ children }) => {
         </header>
         
         {/* Page content */}
-        <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6">
+        <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 overflow-x-hidden">
           {children}
         </main>
       </div>
 
       {/* Mobile bottom quick navigation */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/95 backdrop-blur lg:hidden">
-        <div className="grid grid-cols-4 px-2 py-1.5">
+        <div className="grid grid-cols-4 px-2 py-2">
           {mobileQuickNavigation.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -254,7 +254,7 @@ export const AgentLayout = ({ children }) => {
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  'flex flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium transition-colors',
+                  'flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-medium transition-colors',
                   active ? 'text-primary bg-primary/10' : 'text-muted-foreground'
                 )}
                 data-testid={`mobile-nav-${item.href.split('/').pop()}`}

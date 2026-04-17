@@ -60,9 +60,9 @@ const StageCard = ({ stage, onEdit, onDelete, onMove, isFirst, isLast }) => {
   const StatusIcon = style.icon;
 
   return (
-    <Card className={`border-l-4 ${style.border} rounded-sm hover:shadow-swiss transition-shadow`} data-testid={`stage-card-${stage.step_id}`}>
+      <Card className={`border-l-4 ${style.border} rounded-sm hover:shadow-swiss transition-shadow`} data-testid={`stage-card-${stage.step_id}`}>
       <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <div className={`w-10 h-10 rounded-sm flex items-center justify-center flex-shrink-0 ${style.bg}`}>
               <StatusIcon className={`w-5 h-5 ${style.text} ${stage.status === 'in_progress' ? 'animate-spin' : ''}`} />
@@ -77,7 +77,7 @@ const StageCard = ({ stage, onEdit, onDelete, onMove, isFirst, isLast }) => {
               {stage.description && (
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{stage.description}</p>
               )}
-              <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Calendar className="w-3 h-3" />
                   {formatDate(stage.planned_start)} - {formatDate(stage.planned_end)}
@@ -96,13 +96,13 @@ const StageCard = ({ stage, onEdit, onDelete, onMove, isFirst, isLast }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center justify-end gap-1 border-t border-border/50 pt-2 sm:border-0 sm:pt-0 sm:pl-2">
             {/* Reorder Buttons */}
-            <div className="flex flex-col mr-2">
+            <div className="mr-1 flex flex-row sm:mr-2 sm:flex-col">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-8 w-8"
                 onClick={() => onMove(stage, 'up')}
                 disabled={isFirst}
                 data-testid={`move-up-${stage.step_id}`}
@@ -112,7 +112,7 @@ const StageCard = ({ stage, onEdit, onDelete, onMove, isFirst, isLast }) => {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-8 w-8"
                 onClick={() => onMove(stage, 'down')}
                 disabled={isLast}
                 data-testid={`move-down-${stage.step_id}`}
@@ -661,7 +661,7 @@ export const AgentTimeline = () => {
         />
         
         {/* Header */}
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-3xl font-outfit font-semibold text-[#1A1A1A] tracking-tight">
               Project Timeline
@@ -669,10 +669,10 @@ export const AgentTimeline = () => {
             <p className="text-muted-foreground mt-1">Manage construction stages for your projects</p>
           </div>
           {selectedProjectId && (
-            <div className="flex gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
               <Button 
                 variant="outline"
-                className="rounded-sm"
+                className="rounded-sm w-full sm:w-auto"
                 onClick={handleUploadClick}
                 disabled={uploading}
                 data-testid="upload-timeline-btn"
@@ -686,7 +686,7 @@ export const AgentTimeline = () => {
               </Button>
               {stages.length < 8 && (
                 <Button 
-                  className="bg-primary hover:bg-primary/90 rounded-sm"
+                  className="bg-primary hover:bg-primary/90 rounded-sm w-full sm:w-auto"
                   onClick={handleOpenCreate}
                   data-testid="add-stage-btn"
                 >
@@ -702,10 +702,10 @@ export const AgentTimeline = () => {
         {projects.length > 0 ? (
           <Card className="border-[#E2E8F0] rounded-sm">
             <CardContent className="p-4">
-              <div className="flex items-center gap-4">
-                <Label className="text-sm font-medium whitespace-nowrap">Select Project:</Label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                <Label className="text-sm font-medium">Select Project:</Label>
                 <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                  <SelectTrigger className="w-full max-w-md" data-testid="project-selector">
+                  <SelectTrigger className="w-full sm:max-w-md" data-testid="project-selector">
                     <SelectValue placeholder="Select a project" />
                   </SelectTrigger>
                   <SelectContent>

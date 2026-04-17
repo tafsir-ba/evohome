@@ -377,15 +377,15 @@ export const AgentProjects = () => {
          subscriptionStatus.unit_usage >= subscriptionStatus.property_limit * 0.8 && 
          subscriptionStatus.can_create_unit && (
           <Card className="border-amber-500/30 bg-amber-500/5 rounded-lg">
-            <CardContent className="py-3 px-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+            <CardContent className="flex flex-col gap-2 py-3 px-5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex items-center gap-3 min-w-0">
                 <AlertTriangle className="w-5 h-5 text-amber-500" />
                 <p className="text-sm text-muted-foreground">
                   You're approaching your property limit ({subscriptionStatus.unit_usage} / {subscriptionStatus.property_limit} used)
                 </p>
               </div>
               <Link to="/agent/billing">
-                <Button variant="ghost" size="sm" className="text-amber-600 hover:text-amber-700 hover:bg-amber-500/10">
+                <Button variant="ghost" size="sm" className="w-full text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 sm:w-auto">
                   <Zap className="w-3 h-3 mr-1" />
                   Upgrade
                 </Button>
@@ -397,12 +397,12 @@ export const AgentProjects = () => {
         {/* Property Limit Warning Banner (hard limit) */}
         {subscriptionStatus && !subscriptionStatus.can_create_unit && (
           <Card className="border-amber-500/50 bg-amber-500/5 rounded-lg">
-            <CardContent className="py-4 px-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+            <CardContent className="flex flex-col gap-3 py-4 px-5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center">
                   <AlertTriangle className="w-5 h-5 text-amber-500" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="font-medium text-foreground">Property limit reached</p>
                   <p className="text-sm text-muted-foreground">
                     Your {subscriptionStatus.plan_name} plan allows {subscriptionStatus.property_limit} properties. 
@@ -411,7 +411,7 @@ export const AgentProjects = () => {
                 </div>
               </div>
               <Link to="/agent/billing">
-                <Button variant="outline" className="rounded-lg border-amber-500/50 text-amber-600 hover:bg-amber-500/10" data-testid="upgrade-cta-btn">
+                <Button variant="outline" className="w-full rounded-lg border-amber-500/50 text-amber-600 hover:bg-amber-500/10 sm:w-auto" data-testid="upgrade-cta-btn">
                   <Zap className="w-4 h-4 mr-2" />
                   View Plans
                 </Button>
@@ -422,7 +422,7 @@ export const AgentProjects = () => {
 
         {/* Property Usage Indicator */}
         {subscriptionStatus && subscriptionStatus.property_limit && (
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-4">
             <span className="text-muted-foreground">Property usage:</span>
             <div className="flex items-center gap-2 flex-1 max-w-xs">
               <Progress 
@@ -487,8 +487,8 @@ export const AgentProjects = () => {
                       </Button>
                     </div>
                   </div>
-                  <CardTitle className="text-lg font-outfit mt-3 flex items-center justify-between">
-                    <span>{project.name}</span>
+                  <CardTitle className="text-lg font-outfit mt-3 flex items-center justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate">{project.name}</span>
                     <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </CardTitle>
                 </CardHeader>
@@ -510,7 +510,7 @@ export const AgentProjects = () => {
                       {project.description}
                     </p>
                   )}
-                  <div className="pt-3 border-t border-border flex items-center justify-between">
+                  <div className="pt-3 border-t border-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Users className="w-3.5 h-3.5" />
@@ -524,7 +524,7 @@ export const AgentProjects = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs"
+                      className="h-7 w-full text-xs sm:w-auto"
                       onClick={(e) => handleOpenUnits(e, project)}
                       data-testid={`manage-units-${project.project_id}`}
                     >

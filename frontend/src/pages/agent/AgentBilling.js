@@ -261,11 +261,11 @@ export const AgentBilling = () => {
         {/* 80% Usage Warning */}
         {isNearLimit && !isAtLimit && (
           <Card className="border-amber-500/50 bg-amber-500/5 rounded-lg">
-            <CardContent className="py-4 px-5 flex items-center gap-4">
+            <CardContent className="flex flex-col gap-3 py-4 px-5 sm:flex-row sm:items-center sm:gap-4">
               <div className="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                 <AlertTriangle className="w-5 h-5 text-amber-500" />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="font-medium text-foreground">Approaching property limit</p>
                 <p className="text-sm text-muted-foreground">
                   You're using {subscriptionStatus?.unit_usage} of {subscriptionStatus?.property_limit} properties ({Math.round(usagePercent)}%). 
@@ -274,7 +274,7 @@ export const AgentBilling = () => {
               </div>
               <Button 
                 variant="outline" 
-                className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                className="w-full border-amber-500/50 text-amber-600 hover:bg-amber-500/10 sm:w-auto"
                 onClick={() => document.getElementById('plans-section')?.scrollIntoView({ behavior: 'smooth' })}
               >
                 <Zap className="w-4 h-4 mr-2" />
@@ -287,11 +287,11 @@ export const AgentBilling = () => {
         {/* Payment Failed Warning */}
         {subscriptionStatus?.subscription_status === 'past_due' && (
           <Card className="border-red-500/50 bg-red-500/5 rounded-lg">
-            <CardContent className="py-4 px-5 flex items-center gap-4">
+            <CardContent className="flex flex-col gap-3 py-4 px-5 sm:flex-row sm:items-center sm:gap-4">
               <div className="w-10 h-10 bg-red-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                 <AlertCircle className="w-5 h-5 text-red-500" />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="font-medium text-red-600">Payment failed</p>
                 <p className="text-sm text-muted-foreground">
                   Your last payment was unsuccessful. Please update your payment method to maintain access.
@@ -302,6 +302,7 @@ export const AgentBilling = () => {
                   variant="destructive"
                   onClick={handleManageSubscription}
                   disabled={openingPortal}
+                  className="w-full sm:w-auto"
                 >
                   {openingPortal ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -330,7 +331,7 @@ export const AgentBilling = () => {
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge className={cn("rounded-full", getStatusColor(subscriptionStatus?.subscription_status))}>
                     {subscriptionStatus?.subscription_status === 'past_due' ? 'Payment Failed' : 
                      subscriptionStatus?.subscription_status === 'canceling' ? 'Canceling' :
@@ -372,7 +373,7 @@ export const AgentBilling = () => {
                 {subscriptionStatus?.stripe_customer_id && (
                   <Button 
                     variant="outline" 
-                    className="rounded-lg"
+                    className="w-full rounded-lg sm:w-auto"
                     onClick={handleManageSubscription}
                     disabled={openingPortal}
                     data-testid="manage-subscription-btn"

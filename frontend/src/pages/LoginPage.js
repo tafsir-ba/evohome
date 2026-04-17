@@ -273,7 +273,7 @@ export const LoginPage = () => {
                       </div>
                     </div>
                     {selectedRole === 'buyer' ? (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                         {[
                           { slot: 1, label: 'Sophie' },
                           { slot: 2, label: 'Thomas' },

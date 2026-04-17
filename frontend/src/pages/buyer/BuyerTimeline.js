@@ -1993,33 +1993,33 @@ export const BuyerTimeline = () => {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-start justify-between gap-2 sm:items-center">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               {logoUrl ? (
                 <img 
                   src={logoUrl} 
                   alt={companyName} 
-                  className="w-10 h-10 rounded-xl object-contain"
+                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl object-contain"
                 />
               ) : (
-                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary rounded-xl flex items-center justify-center">
                   <Building2 className="w-5 h-5 text-primary-foreground" />
                 </div>
               )}
-              <div>
-                <h1 className="font-semibold text-foreground">
+              <div className="min-w-0">
+                <h1 className="font-semibold text-foreground break-words leading-tight">
                   {projectInfo?.name 
                     ? (projectInfo.unit_reference 
                       ? `${projectInfo.name} — ${projectInfo.unit_reference}` 
                       : projectInfo.name)
                     : (projectInfo?.unit_reference || t('buyer.yourProperty'))}
                 </h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">
                   {companyName}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
               <Button
                 variant="ghost"
                 size="icon"

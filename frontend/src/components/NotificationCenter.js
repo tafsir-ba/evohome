@@ -239,10 +239,10 @@ export const NotificationCenter = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-8 w-8 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
                             onClick={(e) => deleteNotification(notification.notification_id, e)}
                           >
-                            <Trash2 className="w-3 h-3 text-muted-foreground" />
+                            <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
                           </Button>
                         </div>
                       </div>

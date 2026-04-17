@@ -11,7 +11,7 @@ import {
   Menu,
   X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationCenter } from './NotificationCenter';
@@ -31,8 +31,12 @@ export const BuyerLayout = ({ children }) => {
 
   const isActive = (href) => location.pathname === href || location.pathname.startsWith(href.replace('/dashboard', ''));
 
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   return (
-    <div className="min-h-screen bg-background transition-colors">
+    <div className="min-h-screen bg-background transition-colors overflow-x-hidden">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
@@ -43,13 +47,13 @@ export const BuyerLayout = ({ children }) => {
       
       {/* Sidebar */}
       <aside className={cn(
-        "fixed left-0 top-0 h-screen w-64 bg-card border-r border-border z-50 transition-transform duration-300",
+        "fixed left-0 top-0 h-screen w-[86vw] max-w-72 lg:w-64 bg-card border-r border-border z-50 transition-transform duration-300",
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         <div className="flex flex-col h-full">
           {/* Logo - Shows agent's branding */}
-          <div className="flex items-center justify-between px-6 h-16 border-b border-border">
-            <Link to="/buyer/dashboard" className="flex items-center gap-3" data-testid="logo-link">
+          <div className="flex items-center justify-between px-4 sm:px-6 h-16 border-b border-border">
+            <Link to="/buyer/dashboard" className="flex items-center gap-3 min-w-0" data-testid="logo-link">
               {logoUrl ? (
                 <img 
                   src={logoUrl} 
@@ -61,7 +65,7 @@ export const BuyerLayout = ({ children }) => {
                   <Building2 className="w-5 h-5 text-primary-foreground" />
                 </div>
               )}
-              <span className="text-lg font-outfit font-semibold text-foreground tracking-tight">{companyName}</span>
+              <span className="text-lg font-outfit font-semibold text-foreground tracking-tight truncate">{companyName}</span>
             </Link>
             <button 
               className="lg:hidden p-1.5 hover:bg-muted rounded-lg transition-colors"
@@ -128,11 +132,11 @@ export const BuyerLayout = ({ children }) => {
       </aside>
       
       {/* Main content */}
-      <div className="lg:pl-64">
+      <div className="lg:pl-64 min-w-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border h-16 flex items-center px-6">
+        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border h-16 flex items-center px-3 sm:px-4 lg:px-6">
           <button 
-            className="lg:hidden p-2 hover:bg-muted rounded-lg mr-4 transition-colors"
+            className="lg:hidden p-2 hover:bg-muted rounded-lg mr-2 transition-colors"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="w-5 h-5" />
@@ -145,7 +149,7 @@ export const BuyerLayout = ({ children }) => {
         </header>
         
         {/* Page content */}
-        <main className="p-6">
+        <main className="p-3 sm:p-4 lg:p-6 overflow-x-hidden">
           {children}
         </main>
       </div>
