@@ -30,6 +30,7 @@ import { GANTT_APP_NAME } from '../../components/gantt/ganttHostUtils';
 import { useGanttBranding } from '../../components/gantt/ganttBrandingUtils';
 import { GanttLogo } from '../../components/gantt/GanttLogo';
 import { ZOOM_LEVELS } from '../../components/gantt/ganttCockpitUtils';
+import { formatIsoDate } from '../../components/gantt/ganttTimelineUtils';
 import {
   Select,
   SelectContent,
@@ -256,7 +257,15 @@ export const GanttChartTool = () => {
   };
 
   const handleAddTask = () => createTask({ title: 'New task', type: 'task' });
-  const handleAddMilestone = () => createTask({ title: 'New milestone', type: 'milestone' });
+  const handleAddMilestone = () => {
+    const today = formatIsoDate(new Date());
+    createTask({
+      title: 'New milestone',
+      type: 'milestone',
+      start_date: today,
+      end_date: today,
+    });
+  };
   const handleAddPhase = (name) => {
     createTask({ title: 'New task', type: 'task', phase: name.trim() });
   };
@@ -264,7 +273,7 @@ export const GanttChartTool = () => {
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       <header className="border-b bg-card shrink-0">
-        <div className="px-2 sm:px-3 py-1.5 flex items-center justify-between">
+        <div className="px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between">
           <Link to="/gantt" className="flex items-center shrink-0" aria-label={appName}>
             <GanttLogo size="header" alt={appName} />
           </Link>
