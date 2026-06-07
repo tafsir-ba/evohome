@@ -19,6 +19,7 @@ from models.gantt_schemas import (
     UpdateGanttTaskRequest,
 )
 from services import gantt_extraction_service, gantt_service
+from services.gantt_audit import log_gantt_event
 from services.gantt_export_service import build_csv_response
 from services.gantt_validation import GanttValidationError, get_gantt_config
 
@@ -145,6 +146,13 @@ async def delete_task(project_id: str, task_id: str, user=Depends(get_current_us
         dependent_ids = result.get("dependent_task_ids", [])
         count = len(dependent_ids)
         noun = "task" if count == 1 else "tasks"
+        await log_gantt_event(
+            owner_user_id=user["user_id"],
+            action="gantt.task.delete_blocked",
+            gantt_project_id=project_id,
+            task_id=task_id,
+            metadata={"dependent_task_ids": dependent_ids},
+        )
         return JSONResponse(
             status_code=409,
             content={
@@ -181,6 +189,12 @@ async def export_csv(project_id: str, user=Depends(get_current_user)):
 
     tasks = await gantt_service.list_tasks(project_id, user["user_id"])
     content, content_type, disposition = build_csv_response(project, tasks)
+    await log_gantt_event(
+        owner_user_id=user["user_id"],
+        action="gantt.project.export_csv",
+        gantt_project_id=project_id,
+        metadata={"task_count": len(tasks), "filename": disposition},
+    )
     return Response(
         content=content,
         media_type=content_type,

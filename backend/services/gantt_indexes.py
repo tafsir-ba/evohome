@@ -20,6 +20,9 @@ async def ensure_gantt_indexes(db: Any) -> None:
         await db.gantt_tasks.create_index([("gantt_project_id", 1), ("phase", 1), ("order", 1)])
         await db.gantt_tasks.create_index([("owner_user_id", 1), ("gantt_project_id", 1)])
 
+        await db.gantt_audit_logs.create_index([("owner_user_id", 1), ("created_at", -1)])
+        await db.gantt_audit_logs.create_index([("gantt_project_id", 1), ("created_at", -1)])
+
         # Phase 3 — upload & draft collections
         await db.gantt_extraction_drafts.create_index(
             [("owner_user_id", 1), ("status", 1), ("created_at", -1)]

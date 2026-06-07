@@ -155,6 +155,23 @@ def validate_dependencies(
     return normalized
 
 
+def validate_reorder_task_ids(
+    task_ids: List[str],
+    existing_tasks: List[Dict[str, Any]],
+) -> None:
+    """Ensure task_ids is a full, duplicate-free permutation of project tasks."""
+    existing_ids = {t["task_id"] for t in existing_tasks}
+
+    if len(task_ids) != len(existing_tasks):
+        raise GanttValidationError("task_ids must be a full permutation of project tasks")
+
+    if len(set(task_ids)) != len(task_ids):
+        raise GanttValidationError("task_ids must not contain duplicates")
+
+    if set(task_ids) != existing_ids:
+        raise GanttValidationError("task_ids must be a full permutation of project tasks")
+
+
 def detect_dependency_cycle(
     tasks: List[Dict[str, Any]],
     candidate_task_id: str,

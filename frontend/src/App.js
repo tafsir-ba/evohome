@@ -107,13 +107,13 @@ const AppRouter = () => {
       <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
       <Route path="/team/accept" element={<AcceptInvitePage />} />
 
-      {/* Standalone Gantt tool — canonical URL: /gantt */}
-      <Route path="/gantt" element={
+      {/* Standalone Gantt tool — canonical URL: /tools/gantt-chart */}
+      <Route path="/tools/gantt-chart" element={
         <ProtectedRoute>
           <GanttChartTool />
         </ProtectedRoute>
       } />
-      <Route path="/tools/gantt-chart" element={<Navigate to="/gantt" replace />} />
+      <Route path="/gantt" element={<Navigate to="/tools/gantt-chart" replace />} />
       
       {/* Buyer routes - Single timeline page */}
       <Route path="/buyer/dashboard" element={

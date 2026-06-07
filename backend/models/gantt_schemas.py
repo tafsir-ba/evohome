@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 class GanttDependency(BaseModel):
     task_id: str
-    type: Literal["finish_to_start"] = "finish_to_start"
+    type: str = "finish_to_start"
 
 
 class GanttProject(BaseModel):
@@ -46,7 +46,7 @@ class GanttTask(BaseModel):
 
 class GanttDraftDependency(BaseModel):
     temp_task_id: str
-    type: Literal["finish_to_start"] = "finish_to_start"
+    type: str = "finish_to_start"
 
 
 class GanttDraftTask(BaseModel):

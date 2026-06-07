@@ -35,6 +35,7 @@ detect_dependency_cycle = _gantt_validation.detect_dependency_cycle
 get_gantt_config = _gantt_validation.get_gantt_config
 normalize_task_dates = _gantt_validation.normalize_task_dates
 validate_dependencies = _gantt_validation.validate_dependencies
+validate_reorder_task_ids = _gantt_validation.validate_reorder_task_ids
 validate_task_payload = _gantt_validation.validate_task_payload
 validate_draft_tasks = _gantt_validation.validate_draft_tasks
 
@@ -172,6 +173,23 @@ class TestTaskPayloadValidation:
                 existing_tasks=[],
                 is_create=True,
             )
+
+
+class TestReorderValidation:
+    def test_reject_duplicate_task_ids(self):
+        existing = [{"task_id": "gt_a"}, {"task_id": "gt_b"}]
+        with pytest.raises(GanttValidationError, match="must not contain duplicates"):
+            validate_reorder_task_ids(["gt_a", "gt_a"], existing)
+
+    def test_reject_wrong_length(self):
+        existing = [{"task_id": "gt_a"}, {"task_id": "gt_b"}]
+        with pytest.raises(GanttValidationError, match="full permutation"):
+            validate_reorder_task_ids(["gt_a"], existing)
+
+    def test_reject_unknown_task_id(self):
+        existing = [{"task_id": "gt_a"}]
+        with pytest.raises(GanttValidationError, match="full permutation"):
+            validate_reorder_task_ids(["gt_fake"], existing)
 
 
 class TestDraftValidation:

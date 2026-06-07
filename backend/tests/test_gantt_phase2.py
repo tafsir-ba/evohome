@@ -3,6 +3,8 @@ Gantt Chart Phase 2 — E2E integration tests (require live backend + MongoDB).
 
 Run explicitly: pytest -m e2e backend/tests/test_gantt_phase2.py
 """
+import csv
+import io
 import os
 
 import pytest
@@ -14,6 +16,20 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://localhost:8001").rstr
 
 TEST_EMAIL = os.environ.get("TEST_E2E_AGENT_EMAIL", "e2e@evohome-test.com")
 TEST_PASSWORD = os.environ.get("TEST_E2E_AGENT_PASSWORD", "Test2026!")
+
+
+def _backend_available() -> bool:
+    try:
+        response = requests.get(f"{BASE_URL}/api/health", timeout=3)
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
+
+
+@pytest.fixture(scope="module", autouse=True)
+def require_backend():
+    if not _backend_available():
+        pytest.skip(f"Backend not available at {BASE_URL}")
 
 
 @pytest.fixture(scope="module")
@@ -267,6 +283,24 @@ class TestGanttPhase2:
         )
         assert response.status_code == 400
 
+    def test_13b_reorder_rejects_duplicate_ids(self, auth_headers, gantt_project):
+        project_id = gantt_project["gantt_project_id"]
+        ids = []
+        for title in ["Dup A", "Dup B"]:
+            resp = requests.post(
+                f"{BASE_URL}/api/gantt/projects/{project_id}/tasks",
+                headers=auth_headers,
+                json={"title": title},
+            )
+            ids.append(resp.json()["task_id"])
+
+        response = requests.post(
+            f"{BASE_URL}/api/gantt/projects/{project_id}/tasks/reorder",
+            headers=auth_headers,
+            json={"task_ids": [ids[0], ids[0]]},
+        )
+        assert response.status_code == 400
+
     def test_14_delete_with_dependents_409(self, auth_headers, gantt_project):
         project_id = gantt_project["gantt_project_id"]
         parent = requests.post(
@@ -341,7 +375,12 @@ class TestGanttPhase2:
 
     def test_17_csv_export_correct(self, auth_headers, gantt_project):
         project_id = gantt_project["gantt_project_id"]
-        t1 = requests.post(
+        predecessor = requests.post(
+            f"{BASE_URL}/api/gantt/projects/{project_id}/tasks",
+            headers=auth_headers,
+            json={"title": "Predecessor"},
+        ).json()
+        successor = requests.post(
             f"{BASE_URL}/api/gantt/projects/{project_id}/tasks",
             headers=auth_headers,
             json={
@@ -349,8 +388,16 @@ class TestGanttPhase2:
                 "phase": "Phase 1",
                 "start_date": "2026-06-01",
                 "end_date": "2026-06-03",
+                "dependencies": [
+                    {"task_id": predecessor["task_id"], "type": "finish_to_start"}
+                ],
             },
         ).json()
+        requests.post(
+            f"{BASE_URL}/api/gantt/projects/{project_id}/tasks",
+            headers=auth_headers,
+            json={"title": "Start Only", "start_date": "2026-07-01"},
+        )
 
         response = requests.get(
             f"{BASE_URL}/api/gantt/projects/{project_id}/export.csv",
@@ -358,13 +405,55 @@ class TestGanttPhase2:
         )
         assert response.status_code == 200
         assert "text/csv" in response.headers.get("Content-Type", "")
-        assert "attachment" in response.headers.get("Content-Disposition", "")
+        disposition = response.headers.get("Content-Disposition", "")
+        assert "attachment" in disposition
+        assert "TEST_Gantt_Phase2.csv" in disposition
 
-        body = response.text
-        assert "order,type,phase,title" in body
-        assert "Export Task" in body
-        assert "Phase 1" in body
-        assert t1["task_id"] not in body or "dependencies" in body
+        rows = list(csv.DictReader(io.StringIO(response.text)))
+        assert list(rows[0].keys()) == [
+            "order",
+            "type",
+            "phase",
+            "title",
+            "description",
+            "start_date",
+            "end_date",
+            "duration_days",
+            "status",
+            "responsible_party",
+            "dependencies",
+            "source",
+        ]
+
+        export_row = next(row for row in rows if row["title"] == "Export Task")
+        assert export_row["phase"] == "Phase 1"
+        assert export_row["duration_days"] == "2"
+        assert export_row["source"] == "manual"
+        assert export_row["dependencies"] == predecessor["task_id"]
+
+        start_only_row = next(row for row in rows if row["title"] == "Start Only")
+        assert start_only_row["duration_days"] == ""
+
+    def test_17b_csv_filename_sanitizes_special_characters(self, auth_headers):
+        create_resp = requests.post(
+            f"{BASE_URL}/api/gantt/projects",
+            headers=auth_headers,
+            json={"title": "My Project / Q2!"},
+        )
+        assert create_resp.status_code == 200
+        project_id = create_resp.json()["gantt_project_id"]
+
+        response = requests.get(
+            f"{BASE_URL}/api/gantt/projects/{project_id}/export.csv",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert 'filename="My_Project_Q2.csv"' in response.headers.get("Content-Disposition", "")
+
+        requests.delete(
+            f"{BASE_URL}/api/gantt/projects/{project_id}",
+            headers=auth_headers,
+        )
 
     def test_18_reject_unsupported_dependency_types(self, auth_headers, gantt_project):
         project_id = gantt_project["gantt_project_id"]

@@ -4,10 +4,11 @@ Gantt Chart Service — standalone CRUD (no CMP coupling).
 import uuid
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from database import db
-from services.gantt_validation import GanttValidationError, validate_task_payload
+from services.gantt_validation import GanttValidationError, validate_reorder_task_ids, validate_task_payload
+from services.gantt_audit import log_gantt_event
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,12 @@ async def create_project(
     }
     await db.gantt_projects.insert_one(doc)
     doc.pop("_id", None)
+    await log_gantt_event(
+        owner_user_id=owner_user_id,
+        action="gantt.project.create",
+        gantt_project_id=gantt_project_id,
+        metadata={"title": title},
+    )
     return doc
 
 
@@ -85,6 +92,12 @@ async def update_project(
     )
     if result.matched_count == 0:
         return None
+    await log_gantt_event(
+        owner_user_id=owner_user_id,
+        action="gantt.project.update",
+        gantt_project_id=gantt_project_id,
+        metadata={"changed_fields": filtered},
+    )
     return await get_project(gantt_project_id, owner_user_id)
 
 
@@ -107,6 +120,15 @@ async def delete_project(
 
     await db.gantt_projects.delete_one(
         {"gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id}
+    )
+    await log_gantt_event(
+        owner_user_id=owner_user_id,
+        action="gantt.project.delete",
+        gantt_project_id=gantt_project_id,
+        metadata={
+            "title": project.get("title"),
+            "deleted_task_count": delete_result.deleted_count,
+        },
     )
     return delete_result.deleted_count
 
@@ -183,6 +205,13 @@ async def create_task(
         {"gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id},
         {"$set": {"updated_at": now}},
     )
+    await log_gantt_event(
+        owner_user_id=owner_user_id,
+        action="gantt.task.create",
+        gantt_project_id=gantt_project_id,
+        task_id=task_id,
+        metadata={"title": validated["title"], "type": validated["type"]},
+    )
     return doc
 
 
@@ -241,6 +270,12 @@ async def update_task(
     filtered = {k: validated[k] for k in allowed_fields if k in validated}
     filtered["updated_at"] = _now()
 
+    changed_fields = {
+        key: {"from": existing.get(key), "to": filtered[key]}
+        for key in filtered
+        if key != "updated_at" and existing.get(key) != filtered[key]
+    }
+
     await db.gantt_tasks.update_one(
         {"task_id": task_id, "gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id},
         {"$set": filtered},
@@ -249,6 +284,14 @@ async def update_task(
         {"gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id},
         {"$set": {"updated_at": filtered["updated_at"]}},
     )
+    if changed_fields:
+        await log_gantt_event(
+            owner_user_id=owner_user_id,
+            action="gantt.task.update",
+            gantt_project_id=gantt_project_id,
+            task_id=task_id,
+            metadata={"changed_fields": changed_fields},
+        )
     return await db.gantt_tasks.find_one(
         {"task_id": task_id, "gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id},
         {"_id": 0},
@@ -319,6 +362,13 @@ async def delete_task(
     await db.gantt_projects.update_one(
         {"gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id},
         {"$set": {"updated_at": now}},
+    )
+    await log_gantt_event(
+        owner_user_id=owner_user_id,
+        action="gantt.task.delete",
+        gantt_project_id=gantt_project_id,
+        task_id=task_id,
+        metadata={"title": existing.get("title")},
     )
     return "deleted"
 
@@ -421,11 +471,7 @@ async def reorder_tasks(
         raise PermissionError("Project not found or access denied")
 
     existing_tasks = await _list_tasks_raw(gantt_project_id, owner_user_id)
-    existing_ids: Set[str] = {t["task_id"] for t in existing_tasks}
-    submitted_ids: Set[str] = set(task_ids)
-
-    if existing_ids != submitted_ids:
-        raise GanttValidationError("task_ids must be a full permutation of project tasks")
+    validate_reorder_task_ids(task_ids, existing_tasks)
 
     now = _now()
     for index, tid in enumerate(task_ids):
@@ -441,5 +487,11 @@ async def reorder_tasks(
     await db.gantt_projects.update_one(
         {"gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id},
         {"$set": {"updated_at": now}},
+    )
+    await log_gantt_event(
+        owner_user_id=owner_user_id,
+        action="gantt.task.reorder",
+        gantt_project_id=gantt_project_id,
+        metadata={"task_ids": task_ids},
     )
     return await _list_tasks_raw(gantt_project_id, owner_user_id)

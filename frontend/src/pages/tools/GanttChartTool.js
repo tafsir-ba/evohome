@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -157,11 +156,6 @@ export const GanttChartTool = () => {
               </span>
             )}
             <ThemeToggle />
-            <Button variant="ghost" size="sm" asChild>
-              <Link to={user?.role === 'buyer' ? '/buyer/dashboard' : '/agent/home'}>
-                Back to app
-              </Link>
-            </Button>
             <Button variant="ghost" size="icon" onClick={logout} title="Logout">
               <LogOut className="h-4 w-4" />
             </Button>
