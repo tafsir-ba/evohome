@@ -472,3 +472,41 @@ class TestGanttPhase2:
             },
         )
         assert response.status_code == 400
+
+    def test_19_xlsx_export_correct(self, auth_headers, gantt_project):
+        pytest.importorskip("openpyxl")
+        project_id = gantt_project["gantt_project_id"]
+        requests.post(
+            f"{BASE_URL}/api/gantt/projects/{project_id}/tasks",
+            headers=auth_headers,
+            json={"title": "XLSX Task", "start_date": "2026-08-01", "end_date": "2026-08-03"},
+        )
+
+        response = requests.get(
+            f"{BASE_URL}/api/gantt/projects/{project_id}/export.xlsx",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert "spreadsheetml" in response.headers.get("Content-Type", "")
+        disposition = response.headers.get("Content-Disposition", "")
+        assert "TEST_Gantt_Phase2.xlsx" in disposition
+        assert len(response.content) > 100
+
+    def test_20_pdf_export_correct(self, auth_headers, gantt_project):
+        pytest.importorskip("reportlab")
+        project_id = gantt_project["gantt_project_id"]
+        requests.post(
+            f"{BASE_URL}/api/gantt/projects/{project_id}/tasks",
+            headers=auth_headers,
+            json={"title": "PDF Task", "start_date": "2026-09-01", "end_date": "2026-09-05"},
+        )
+
+        response = requests.get(
+            f"{BASE_URL}/api/gantt/projects/{project_id}/export.pdf",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.headers.get("Content-Type", "").startswith("application/pdf")
+        assert response.content[:4] == b"%PDF"
+        disposition = response.headers.get("Content-Disposition", "")
+        assert "TEST_Gantt_Phase2.pdf" in disposition

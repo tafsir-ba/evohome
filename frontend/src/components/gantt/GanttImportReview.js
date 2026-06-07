@@ -297,6 +297,9 @@ export const GanttImportReview = ({
     if (sourceType === 'csv') {
       return 'CSV files are parsed directly: column headers are matched to phases, task titles, dates, and dependencies. No AI is used.';
     }
+    if (sourceType === 'xlsx') {
+      return 'Excel files are parsed directly from the Tasks sheet (or first sheet): same column mapping as CSV export. No AI is used.';
+    }
     if (sourceType === 'pdf') {
       return `PDFs are read for text, then ${modelLabel} extracts phases, tasks, milestones, dates, and dependencies into a reviewable draft.`;
     }
@@ -312,9 +315,9 @@ export const GanttImportReview = ({
   const analyzeButtonLabel = useMemo(() => {
     if (uploading) return 'Uploading…';
     if (extracting) {
-      return sourceType === 'csv' ? 'Parsing spreadsheet…' : 'Analyzing…';
+      return sourceType === 'csv' || sourceType === 'xlsx' ? 'Parsing spreadsheet…' : 'Analyzing…';
     }
-    return sourceType === 'csv' ? 'Parse spreadsheet' : 'Analyze with AI';
+    return sourceType === 'csv' || sourceType === 'xlsx' ? 'Parse spreadsheet' : 'Analyze with AI';
   }, [uploading, extracting, sourceType]);
 
   const activeFlowStep = draft
@@ -334,7 +337,7 @@ export const GanttImportReview = ({
             Import from document
           </h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Upload a PDF, image, or CSV to extract a draft schedule.
+            Upload a PDF, image, CSV, or Excel file to extract a draft schedule.
           </p>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} title="Close">
@@ -412,7 +415,7 @@ export const GanttImportReview = ({
             <GanttImportProgress
               active={extracting}
               steps={extractSteps}
-              label={sourceType === 'csv' ? 'Parsing your spreadsheet' : 'AI is analyzing your document'}
+              label={sourceType === 'csv' || sourceType === 'xlsx' ? 'Parsing your spreadsheet' : 'AI is analyzing your document'}
             />
           )}
 
@@ -427,7 +430,7 @@ export const GanttImportReview = ({
           >
             <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              Drop PDF, image, or CSV here (max {maxSizeMb} MB)
+              Drop PDF, image, CSV, or Excel here (max {maxSizeMb} MB)
             </p>
             <input
               ref={inputRef}
@@ -447,7 +450,7 @@ export const GanttImportReview = ({
               )}
               {!analyzing && !draft && (
                 <p className="text-xs text-primary font-medium">
-                  Click {sourceType === 'csv' ? 'Parse spreadsheet' : 'Analyze with AI'} below to build your draft.
+                  Click {sourceType === 'csv' || sourceType === 'xlsx' ? 'Parse spreadsheet' : 'Analyze with AI'} below to build your draft.
                 </p>
               )}
             </div>

@@ -3,6 +3,7 @@ export const getFileSourceType = (filename) => {
     ? `.${filename.split('.').pop().toLowerCase()}`
     : '';
   if (ext === '.csv') return 'csv';
+  if (ext === '.xlsx') return 'xlsx';
   if (ext === '.pdf') return 'pdf';
   return 'image';
 };
@@ -15,6 +16,12 @@ export const UPLOAD_PROGRESS_STEPS = [
 export const EXTRACT_PROGRESS_STEPS = {
   csv: [
     'Reading CSV spreadsheet…',
+    'Detecting column headers…',
+    'Mapping tasks, phases, and dates…',
+    'Building reviewable draft…',
+  ],
+  xlsx: [
+    'Reading Excel workbook…',
     'Detecting column headers…',
     'Mapping tasks, phases, and dates…',
     'Building reviewable draft…',
@@ -45,7 +52,7 @@ export const IMPORT_FLOW_STEPS = [
   {
     key: 'select',
     label: 'Select file',
-    description: 'Choose a PDF, image, or CSV planning document.',
+    description: 'Choose a PDF, image, CSV, or Excel planning document.',
   },
   {
     key: 'analyze',

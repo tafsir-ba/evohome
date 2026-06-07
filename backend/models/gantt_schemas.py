@@ -71,7 +71,7 @@ class GanttExtractionDraft(BaseModel):
     gantt_project_id: str
     file_id: str
     status: Literal["pending", "confirmed", "discarded", "expired"]
-    source_type: Literal["pdf", "image", "csv"]
+    source_type: Literal["pdf", "image", "csv", "xlsx"]
     tasks: List[GanttDraftTask]
     warnings: List[str] = Field(default_factory=list)
     review_message: str

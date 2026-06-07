@@ -8,7 +8,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import fitz  # PyMuPDF
@@ -54,13 +54,31 @@ def _make_temp_id(index: int) -> str:
     return f"t{index + 1}"
 
 
-def _normalize_date(value: Optional[str]) -> Tuple[Optional[str], float, List[str]]:
-    """Try to normalize a date string; return (iso_date, confidence, warnings)."""
+def _coerce_cell_str(value: Any) -> str:
+    """Normalize spreadsheet cell values (including Excel dates) to strings."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value).strip()
+
+
+def _normalize_date(value: Any) -> Tuple[Optional[str], float, List[str]]:
+    """Try to normalize a date string or spreadsheet date; return (iso_date, confidence, warnings)."""
     warnings: List[str] = []
-    if not value or not str(value).strip():
+    if value is None:
         return None, 0.0, warnings
 
-    raw = str(value).strip()
+    if isinstance(value, datetime):
+        return value.date().isoformat(), 0.98, warnings
+    if isinstance(value, date):
+        return value.isoformat(), 0.98, warnings
+
+    raw = _coerce_cell_str(value)
+    if not raw:
+        return None, 0.0, warnings
     for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
         try:
             return datetime.strptime(raw, fmt).strftime("%Y-%m-%d"), 0.95, warnings
@@ -319,85 +337,11 @@ async def parse_csv_milestones(file_path: str) -> Tuple[List[Dict[str, Any]], Li
             if not reader.fieldnames:
                 return [], ["CSV has no header row"]
 
+            fieldnames = list(reader.fieldnames)
             for index, row in enumerate(reader):
-                title_col = _find_column(
-                    list(row.keys()),
-                    ["title", "name", "task", "milestone", "task name", "activity"],
-                )
-                if not title_col or not (row.get(title_col) or "").strip():
-                    continue
-
-                phase_col = _find_column(list(row.keys()), ["phase", "stage", "group"])
-                start_col = _find_column(
-                    list(row.keys()),
-                    ["start_date", "start", "begin", "start date"],
-                )
-                end_col = _find_column(
-                    list(row.keys()),
-                    ["end_date", "end", "finish", "due", "end date"],
-                )
-                type_col = _find_column(list(row.keys()), ["type"])
-                desc_col = _find_column(list(row.keys()), ["description", "notes", "details"])
-                status_col = _find_column(list(row.keys()), ["status"])
-                resp_col = _find_column(
-                    list(row.keys()),
-                    ["responsible_party", "owner", "assignee", "responsible"],
-                )
-                dep_col = _find_column(
-                    list(row.keys()),
-                    ["dependencies", "depends_on", "predecessor", "predecessors"],
-                )
-
-                raw_type = (row.get(type_col) or "task").strip().lower() if type_col else "task"
-                task_type = "milestone" if raw_type in {"milestone", "m"} else "task"
-
-                start_date, start_conf, start_warn = _normalize_date(
-                    row.get(start_col) if start_col else None
-                )
-                end_date, end_conf, end_warn = _normalize_date(
-                    row.get(end_col) if end_col else None
-                )
-
-                field_confidence = {"title": 0.98}
-                task_warnings = start_warn + end_warn
-
-                if start_col and start_date is None and row.get(start_col):
-                    field_confidence["start_date"] = start_conf
-                elif start_date:
-                    field_confidence["start_date"] = start_conf
-
-                if end_col and end_date is None and row.get(end_col):
-                    field_confidence["end_date"] = end_conf
-                elif end_date:
-                    field_confidence["end_date"] = end_conf
-
-                if task_type == "milestone" and start_date:
-                    end_date = start_date
-
-                dependencies: List[Dict[str, str]] = []
-                if dep_col and row.get(dep_col):
-                    # References by temp_id or row index — resolved after all rows built
-                    dep_refs = [p.strip() for p in re.split(r"[;,|]", row[dep_col]) if p.strip()]
-                    for ref in dep_refs:
-                        dependencies.append({"temp_task_id": ref, "type": "finish_to_start"})
-                    field_confidence["dependencies"] = 0.7
-                    task_warnings.append("CSV dependency references need review after import")
-
-                task = {
-                    "temp_id": _make_temp_id(index),
-                    "type": task_type,
-                    "phase": (row.get(phase_col) or "").strip() or None if phase_col else None,
-                    "title": row[title_col].strip(),
-                    "description": (row.get(desc_col) or "").strip() or None if desc_col else None,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "status": (row.get(status_col) or "not_started").strip() if status_col else "not_started",
-                    "responsible_party": (row.get(resp_col) or "").strip() or None if resp_col else None,
-                    "dependencies": dependencies,
-                    "field_confidence": field_confidence,
-                    "warnings": task_warnings,
-                }
-                tasks.append(_apply_low_confidence_flags(task))
+                task = _draft_task_from_row_dict(row, index, fieldnames)
+                if task:
+                    tasks.append(task)
 
     except Exception as exc:
         logger.error("CSV parse failed: %s", exc)
@@ -407,12 +351,104 @@ async def parse_csv_milestones(file_path: str) -> Tuple[List[Dict[str, Any]], Li
         global_warnings.append("No tasks found in CSV")
         return tasks, global_warnings
 
-    # Resolve dependency references (title or temp_id) to temp_ids
+    return _resolve_draft_dependencies(tasks), global_warnings
+
+
+def _draft_task_from_row_dict(
+    row: Dict[str, Any],
+    index: int,
+    fieldnames: List[str],
+) -> Dict[str, Any]:
+    """Map a header→value row dict to a GanttDraftTask-shaped dict."""
+    title_col = _find_column(
+        fieldnames,
+        ["title", "name", "task", "milestone", "task name", "activity"],
+    )
+    if not title_col or not (row.get(title_col) or "").strip():
+        return {}
+
+    phase_col = _find_column(fieldnames, ["phase", "stage", "group"])
+    start_col = _find_column(fieldnames, ["start_date", "start", "begin", "start date"])
+    end_col = _find_column(fieldnames, ["end_date", "end", "finish", "due", "end date"])
+    type_col = _find_column(fieldnames, ["type"])
+    desc_col = _find_column(fieldnames, ["description", "notes", "details"])
+    status_col = _find_column(fieldnames, ["status"])
+    resp_col = _find_column(
+        fieldnames,
+        ["responsible_party", "owner", "assignee", "responsible"],
+    )
+    dep_col = _find_column(
+        fieldnames,
+        ["dependencies", "depends_on", "predecessor", "predecessors"],
+    )
+    task_id_col = _find_column(fieldnames, ["task_id", "id"])
+
+    raw_type = _coerce_cell_str(row.get(type_col) if type_col else "task").lower() or "task"
+    task_type = "milestone" if raw_type in {"milestone", "m"} else "task"
+
+    start_date, start_conf, start_warn = _normalize_date(
+        row.get(start_col) if start_col else None
+    )
+    end_date, end_conf, end_warn = _normalize_date(
+        row.get(end_col) if end_col else None
+    )
+
+    field_confidence = {"title": 0.98}
+    task_warnings = start_warn + end_warn
+
+    if start_col and start_date is None and row.get(start_col):
+        field_confidence["start_date"] = start_conf
+    elif start_date:
+        field_confidence["start_date"] = start_conf
+
+    if end_col and end_date is None and row.get(end_col):
+        field_confidence["end_date"] = end_conf
+    elif end_date:
+        field_confidence["end_date"] = end_conf
+
+    if task_type == "milestone" and start_date:
+        end_date = start_date
+
+    dependencies: List[Dict[str, str]] = []
+    if dep_col and row.get(dep_col):
+        dep_refs = [p.strip() for p in re.split(r"[;,|]", str(row[dep_col])) if p.strip()]
+        for ref in dep_refs:
+            dependencies.append({"temp_task_id": ref, "type": "finish_to_start"})
+        field_confidence["dependencies"] = 0.7
+        task_warnings.append("Dependency references need review after import")
+
+    exported_task_id = _coerce_cell_str(row.get(task_id_col)) if task_id_col else ""
+
+    task = {
+        "temp_id": _make_temp_id(index),
+        "type": task_type,
+        "phase": _coerce_cell_str(row.get(phase_col)) or None if phase_col else None,
+        "title": _coerce_cell_str(row[title_col]),
+        "description": _coerce_cell_str(row.get(desc_col)) or None if desc_col else None,
+        "start_date": start_date,
+        "end_date": end_date,
+        "status": _coerce_cell_str(row.get(status_col)) or "not_started" if status_col else "not_started",
+        "responsible_party": _coerce_cell_str(row.get(resp_col)) or None if resp_col else None,
+        "dependencies": dependencies,
+        "field_confidence": field_confidence,
+        "warnings": task_warnings,
+    }
+    if exported_task_id:
+        task["task_id"] = exported_task_id
+    return _apply_low_confidence_flags(task)
+
+
+def _resolve_draft_dependencies(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Resolve dependency references (title, temp_id, or exported task_id) to temp_ids."""
     title_to_temp: Dict[str, str] = {}
+    task_id_to_temp: Dict[str, str] = {}
     for task in tasks:
         title_key = task["title"].strip().lower()
         if title_key and title_key not in title_to_temp:
             title_to_temp[title_key] = task["temp_id"]
+        exported_id = (task.get("task_id") or "").strip()
+        if exported_id:
+            task_id_to_temp[exported_id] = task["temp_id"]
 
     for task in tasks:
         resolved: List[Dict[str, str]] = []
@@ -424,6 +460,8 @@ async def parse_csv_milestones(file_path: str) -> Tuple[List[Dict[str, Any]], Li
             target = None
             if ref in {t["temp_id"] for t in tasks}:
                 target = ref
+            elif ref in task_id_to_temp:
+                target = task_id_to_temp[ref]
             elif ref_lower in title_to_temp:
                 target = title_to_temp[ref_lower]
             if target and target != task["temp_id"]:
@@ -435,8 +473,52 @@ async def parse_csv_milestones(file_path: str) -> Tuple[List[Dict[str, Any]], Li
                 task.setdefault("field_confidence", {})["dependencies"] = 0.3
         task["dependencies"] = resolved
         task["warnings"] = _apply_low_confidence_flags(task)["warnings"]
+    return tasks
 
-    return tasks, global_warnings
+
+async def parse_excel(file_path: str) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """Deterministic Excel (.xlsx) task row mapping (Tasks sheet or first sheet)."""
+    global_warnings: List[str] = []
+    tasks: List[Dict[str, Any]] = []
+
+    try:
+        import openpyxl
+
+        wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+        ws = wb["Tasks"] if "Tasks" in wb.sheetnames else wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        header_row = next(rows_iter, None)
+        if not header_row:
+            return [], ["Excel sheet has no header row"]
+
+        fieldnames = [
+            str(cell).strip() if cell is not None else ""
+            for cell in header_row
+        ]
+        if not any(fieldnames):
+            return [], ["Excel sheet has no header row"]
+
+        for index, row_values in enumerate(rows_iter):
+            if not row_values or not any(v is not None and str(v).strip() for v in row_values):
+                continue
+            row_dict = {
+                fieldnames[i]: row_values[i] if i < len(row_values) else None
+                for i in range(len(fieldnames))
+            }
+            task = _draft_task_from_row_dict(row_dict, index, fieldnames)
+            if task:
+                tasks.append(task)
+
+        wb.close()
+    except Exception as exc:
+        logger.error("Excel parse failed: %s", exc)
+        return [], [f"Excel parse failed: {exc}"]
+
+    if not tasks:
+        global_warnings.append("No tasks found in Excel file")
+        return tasks, global_warnings
+
+    return _resolve_draft_dependencies(tasks), global_warnings
 
 
 def make_temp_id() -> str:

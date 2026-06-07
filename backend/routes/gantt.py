@@ -20,7 +20,7 @@ from models.gantt_schemas import (
 )
 from services import gantt_extraction_service, gantt_service
 from services.gantt_audit import log_gantt_event
-from services.gantt_export_service import build_csv_response
+from services.gantt_export_service import build_csv_response, build_pdf_response, build_xlsx_response
 from services.gantt_validation import GanttValidationError, get_gantt_config
 
 logger = logging.getLogger(__name__)
@@ -181,17 +181,55 @@ async def reorder_tasks(
         raise _handle_validation_error(exc)
 
 
-@router.get("/gantt/projects/{project_id}/export.csv")
-async def export_csv(project_id: str, user=Depends(get_gantt_actor)):
-    project = await gantt_service.get_project(project_id, user["user_id"])
+async def _export_project_tasks(project_id: str, owner_user_id: str):
+    project = await gantt_service.get_project(project_id, owner_user_id)
     if not project:
         raise HTTPException(status_code=403, detail="Access denied")
+    tasks = await gantt_service.list_tasks(project_id, owner_user_id)
+    return project, tasks
 
-    tasks = await gantt_service.list_tasks(project_id, user["user_id"])
+
+@router.get("/gantt/projects/{project_id}/export.csv")
+async def export_csv(project_id: str, user=Depends(get_gantt_actor)):
+    project, tasks = await _export_project_tasks(project_id, user["user_id"])
     content, content_type, disposition = build_csv_response(project, tasks)
     await log_gantt_event(
         owner_user_id=user["user_id"],
         action="gantt.project.export_csv",
+        gantt_project_id=project_id,
+        metadata={"task_count": len(tasks), "filename": disposition},
+    )
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": disposition},
+    )
+
+
+@router.get("/gantt/projects/{project_id}/export.xlsx")
+async def export_xlsx(project_id: str, user=Depends(get_gantt_actor)):
+    project, tasks = await _export_project_tasks(project_id, user["user_id"])
+    content, content_type, disposition = build_xlsx_response(project, tasks)
+    await log_gantt_event(
+        owner_user_id=user["user_id"],
+        action="gantt.project.export_xlsx",
+        gantt_project_id=project_id,
+        metadata={"task_count": len(tasks), "filename": disposition},
+    )
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": disposition},
+    )
+
+
+@router.get("/gantt/projects/{project_id}/export.pdf")
+async def export_pdf(project_id: str, user=Depends(get_gantt_actor)):
+    project, tasks = await _export_project_tasks(project_id, user["user_id"])
+    content, content_type, disposition = build_pdf_response(project, tasks)
+    await log_gantt_event(
+        owner_user_id=user["user_id"],
+        action="gantt.project.export_pdf",
         gantt_project_id=project_id,
         metadata={"task_count": len(tasks), "filename": disposition},
     )

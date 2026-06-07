@@ -21,6 +21,7 @@ from services.gantt_constants import (
 )
 from services.gantt_parsers import (
     parse_csv_milestones,
+    parse_excel,
     parse_image_vision,
     parse_pdf_text,
 )
@@ -143,6 +144,8 @@ def _normalize_extension(filename: str) -> str:
 def _source_type_for_extension(ext: str) -> str:
     if ext == ".csv":
         return "csv"
+    if ext == ".xlsx":
+        return "xlsx"
     if ext == ".pdf":
         return "pdf"
     if ext in IMAGE_EXTENSIONS:
@@ -151,7 +154,7 @@ def _source_type_for_extension(ext: str) -> str:
 
 
 def _task_source_for_draft(source_type: str) -> str:
-    return "imported" if source_type == "csv" else "ai_generated"
+    return "imported" if source_type in {"csv", "xlsx"} else "ai_generated"
 
 
 async def _get_project_for_owner(
@@ -284,6 +287,8 @@ async def extract_draft(
 
     if source_type == "csv":
         tasks, warnings = await parse_csv_milestones(file_path)
+    elif source_type == "xlsx":
+        tasks, warnings = await parse_excel(file_path)
     elif source_type == "pdf":
         tasks, warnings = await parse_pdf_text(file_path)
     else:

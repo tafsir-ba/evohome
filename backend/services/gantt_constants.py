@@ -2,7 +2,7 @@
 Gantt Chart — shared constants (Single Source of Truth for backend + config API).
 """
 
-ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".csv"}
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".csv", ".xlsx"}
 MAX_UPLOAD_SIZE_BYTES = 15 * 1024 * 1024
 UPLOAD_RETENTION_HOURS = 24
 GANTT_TEMP_SUBDIR = "gantt_temp"

@@ -5,6 +5,7 @@ import { Input } from '../../components/ui/input';
 import { GanttProjectList } from '../../components/gantt/GanttProjectList';
 import { GanttTaskTable } from '../../components/gantt/GanttTaskTable';
 import { GanttTimelinePreview } from '../../components/gantt/GanttTimelinePreview';
+import { GanttChartCanvas } from '../../components/gantt/GanttChartCanvas';
 import { GanttImportReview } from '../../components/gantt/GanttImportReview';
 import { GanttSaveIndicator } from '../../components/gantt/GanttSaveIndicator';
 import { ThemeToggle } from '../../components/ThemeToggle';
@@ -29,7 +30,7 @@ export const GanttChartTool = () => {
     task_types: ['task', 'milestone'],
     dependency_types: ['finish_to_start'],
     import: {
-      allowed_extensions: ['.csv', '.jpeg', '.jpg', '.pdf', '.png', '.webp'],
+      allowed_extensions: ['.csv', '.jpeg', '.jpg', '.pdf', '.png', '.webp', '.xlsx'],
       max_size_mb: 15,
       low_confidence_threshold: 0.6,
       review_message: '',
@@ -40,6 +41,7 @@ export const GanttChartTool = () => {
   const [saveStatus, setSaveStatus] = useState({ saving: false, dirty: false });
   const [chartSaving, setChartSaving] = useState(false);
   const [tableCollapsed, setTableCollapsed] = useState(true);
+  const [chartView, setChartView] = useState('library');
 
   const apiFetch = useCallback((path, options = {}) => {
     const { headers: optionHeaders, ...rest } = options;
@@ -146,22 +148,23 @@ export const GanttChartTool = () => {
     }
   };
 
-  const handleExportCsv = async () => {
+  const handleExport = async (format) => {
     if (!selectedId) return;
+    const defaults = { csv: 'gantt_export.csv', xlsx: 'gantt_export.xlsx', pdf: 'gantt_export.pdf' };
     try {
-      const res = await apiFetch(`/gantt/projects/${selectedId}/export.csv`);
+      const res = await apiFetch(`/gantt/projects/${selectedId}/export.${format}`);
       if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
       const disposition = res.headers.get('Content-Disposition') || '';
       const match = disposition.match(/filename="?([^"]+)"?/);
-      const filename = match ? match[1] : 'gantt_export.csv';
+      const filename = match ? match[1] : defaults[format];
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('CSV downloaded');
+      toast.success(`${format.toUpperCase()} downloaded`);
     } catch (error) {
       toast.error(error.message);
     }
@@ -270,9 +273,17 @@ export const GanttChartTool = () => {
                       <Upload className="h-4 w-4 mr-2" />
                       Import
                     </Button>
-                    <Button variant="outline" size="sm" onClick={handleExportCsv}>
+                    <Button variant="outline" size="sm" onClick={() => handleExport('csv')}>
                       <Download className="h-4 w-4 mr-2" />
-                      Export CSV
+                      CSV
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleExport('xlsx')}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Excel
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleExport('pdf')}>
+                      <Download className="h-4 w-4 mr-2" />
+                      PDF
                     </Button>
                   </div>
                 </div>
@@ -292,22 +303,53 @@ export const GanttChartTool = () => {
                 )}
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
                     <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                       Gantt chart
                     </h3>
-                    <span className="text-[10px] text-muted-foreground">
-                      Drag bars to move · drag edges to resize
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex rounded border overflow-hidden text-[10px]">
+                        <button
+                          type="button"
+                          className={`px-2 py-0.5 ${chartView === 'library' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                          onClick={() => setChartView('library')}
+                        >
+                          Library view
+                        </button>
+                        <button
+                          type="button"
+                          className={`px-2 py-0.5 ${chartView === 'timeline' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                          onClick={() => setChartView('timeline')}
+                        >
+                          Timeline view
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">
+                        {chartView === 'library'
+                          ? 'Dependency arrows · drag bars to reschedule'
+                          : 'Drag bars to move · drag edges to resize'}
+                      </span>
+                    </div>
                   </div>
-                  <GanttTimelinePreview
-                    tasks={tasks}
-                    projectId={selectedId}
-                    apiFetch={apiFetch}
-                    onTasksChange={setTasks}
-                    onSaving={setChartSaving}
-                    onRevert={() => fetchTasks(selectedId)}
-                  />
+                  {chartView === 'library' ? (
+                    <GanttChartCanvas
+                      tasks={tasks}
+                      projectId={selectedId}
+                      apiFetch={apiFetch}
+                      onTasksChange={setTasks}
+                      onSaving={setChartSaving}
+                      onRevert={() => fetchTasks(selectedId)}
+                    />
+                  ) : (
+                    <GanttTimelinePreview
+                      tasks={tasks}
+                      projectId={selectedId}
+                      apiFetch={apiFetch}
+                      onTasksChange={setTasks}
+                      onSaving={setChartSaving}
+                      onRevert={() => fetchTasks(selectedId)}
+                    />
+                  )}
                 </div>
 
                 <div>
