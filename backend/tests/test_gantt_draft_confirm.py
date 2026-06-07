@@ -1,6 +1,7 @@
 """
 Gantt draft confirm — unit tests (no live API; mocked MongoDB).
 """
+import asyncio
 import importlib
 import sys
 import types
@@ -48,56 +49,13 @@ def gantt_service_module():
 
 
 class TestCreateTasksFromDraft:
-    @pytest.mark.asyncio
-    async def test_confirm_uses_now_string_without_isoformat_crash(
+    def test_confirm_uses_now_string_without_isoformat_crash(
         self, gantt_service_module
     ):
         """Regression: _now() returns str; create_tasks_from_draft must not call .isoformat()."""
-        svc = gantt_service_module
-
-        svc._get_project_for_owner = AsyncMock(
-            return_value={"gantt_project_id": "gp_test", "owner_user_id": "u1"}
+        asyncio.run(
+            _run_create_tasks_from_draft(gantt_service_module)
         )
-        svc._list_tasks_raw = AsyncMock(return_value=[])
-        svc._next_task_order = AsyncMock(return_value=0)
-
-        inserted: dict = {}
-
-        async def fake_insert_many(docs):
-            inserted["docs"] = docs
-
-        mock_tasks = MagicMock()
-        mock_tasks.insert_many = AsyncMock(side_effect=fake_insert_many)
-        mock_projects = MagicMock()
-        mock_projects.update_one = AsyncMock()
-
-        with patch.object(svc, "db") as mock_db:
-            mock_db.gantt_tasks = mock_tasks
-            mock_db.gantt_projects = mock_projects
-
-            created = await svc.create_tasks_from_draft(
-                gantt_project_id="gp_test",
-                owner_user_id="u1",
-                draft_tasks=[
-                    {
-                        "temp_id": "t1",
-                        "type": "task",
-                        "title": "Foundation",
-                        "start_date": "2026-03-01",
-                        "end_date": "2026-03-10",
-                        "dependencies": [],
-                    }
-                ],
-                source="imported",
-            )
-
-        assert len(created) == 1
-        assert created[0]["source"] == "imported"
-        assert isinstance(created[0]["created_at"], str)
-        assert isinstance(created[0]["updated_at"], str)
-        assert created[0]["created_at"] == created[0]["updated_at"]
-        mock_tasks.insert_many.assert_awaited_once()
-        mock_projects.update_one.assert_awaited_once()
 
     def test_now_helper_returns_iso_string(self, gantt_service_module):
         from datetime import datetime
@@ -105,3 +63,44 @@ class TestCreateTasksFromDraft:
         result = gantt_service_module._now()
         assert isinstance(result, str)
         datetime.fromisoformat(result.replace("Z", "+00:00"))
+
+
+async def _run_create_tasks_from_draft(svc):
+    svc._get_project_for_owner = AsyncMock(
+        return_value={"gantt_project_id": "gp_test", "owner_user_id": "u1"}
+    )
+    svc._list_tasks_raw = AsyncMock(return_value=[])
+    svc._next_task_order = AsyncMock(return_value=0)
+
+    mock_tasks = MagicMock()
+    mock_tasks.insert_many = AsyncMock()
+    mock_projects = MagicMock()
+    mock_projects.update_one = AsyncMock()
+
+    with patch.object(svc, "db") as mock_db:
+        mock_db.gantt_tasks = mock_tasks
+        mock_db.gantt_projects = mock_projects
+
+        created = await svc.create_tasks_from_draft(
+            gantt_project_id="gp_test",
+            owner_user_id="u1",
+            draft_tasks=[
+                {
+                    "temp_id": "t1",
+                    "type": "task",
+                    "title": "Foundation",
+                    "start_date": "2026-03-01",
+                    "end_date": "2026-03-10",
+                    "dependencies": [],
+                }
+            ],
+            source="imported",
+        )
+
+    assert len(created) == 1
+    assert created[0]["source"] == "imported"
+    assert isinstance(created[0]["created_at"], str)
+    assert isinstance(created[0]["updated_at"], str)
+    assert created[0]["created_at"] == created[0]["updated_at"]
+    mock_tasks.insert_many.assert_awaited_once()
+    mock_projects.update_one.assert_awaited_once()
