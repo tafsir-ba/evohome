@@ -15,6 +15,7 @@ import { parseApiError, getGanttHeaders } from './ganttApiUtils';
 import { GanttImportProgress } from './GanttImportProgress';
 import {
   getFileSourceType,
+  formatExtractionModelLabel,
   UPLOAD_PROGRESS_STEPS,
   EXTRACT_PROGRESS_STEPS,
   IMPORT_FLOW_STEPS,
@@ -130,10 +131,12 @@ export const GanttImportReview = ({
       const err = await res.json().catch(() => ({}));
       throw new Error(parseApiError(err, 'Extraction failed'));
     }
-    const data = await res.json();
-    setDraft(data);
-    setDraftTasks(data.tasks || []);
-    return data;
+    return res.json();
+  };
+
+  const discardDraftById = async (draftId) => {
+    if (!draftId) return;
+    await apiFetch(`/gantt/drafts/${draftId}/discard`, { method: 'POST' }).catch(() => {});
   };
 
   const handleAnalyze = async () => {
@@ -154,11 +157,17 @@ export const GanttImportReview = ({
       const data = await extractUploadedFile(fileId);
 
       if (!(data.tasks || []).length) {
+        await discardDraftById(data.draft_id);
+        setDraft(null);
+        setDraftTasks([]);
         const warningText = (data.warnings || []).join(' ') || 'No tasks were found in this document.';
         setFlowError(
           `Analysis completed but no tasks were extracted. ${warningText} Try a CSV export, a PDF with a text layer, or a clearer chart image.`
         );
       } else {
+        setDraft(data);
+        setDraftTasks(data.tasks || []);
+        setFlowError(null);
         toast.success('Draft ready for review');
       }
     } catch (error) {
@@ -281,16 +290,18 @@ export const GanttImportReview = ({
 
   const sourceType = selectedFile ? getFileSourceType(selectedFile.name) : null;
 
+  const modelLabel = formatExtractionModelLabel(importConfig?.extraction_model);
+
   const analyzeExplanation = useMemo(() => {
     if (!sourceType) return null;
     if (sourceType === 'csv') {
       return 'CSV files are parsed directly: column headers are matched to phases, task titles, dates, and dependencies. No AI is used.';
     }
     if (sourceType === 'pdf') {
-      return 'PDFs are read for text, then GPT-4o extracts phases, tasks, milestones, dates, and dependencies into a reviewable draft.';
+      return `PDFs are read for text, then ${modelLabel} extracts phases, tasks, milestones, dates, and dependencies into a reviewable draft.`;
     }
-    return 'Images are analyzed with GPT-4o Vision to detect chart bars, milestones, phases, dates, and dependencies into a reviewable draft.';
-  }, [sourceType]);
+    return `Images are analyzed with ${modelLabel} vision to detect chart bars, milestones, phases, dates, and dependencies into a reviewable draft.`;
+  }, [sourceType, modelLabel]);
 
   const extractSteps = sourceType
     ? EXTRACT_PROGRESS_STEPS[sourceType]

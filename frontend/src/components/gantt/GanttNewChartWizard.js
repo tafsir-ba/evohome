@@ -91,6 +91,13 @@ export const GanttNewChartWizard = ({
 
   const handleCreate = async () => {
     const taskRows = tasks.filter((t) => t.title.trim());
+    const milestoneWithoutDate = taskRows.find(
+      (t) => t.type === 'milestone' && !t.start_date
+    );
+    if (milestoneWithoutDate) {
+      toast.error(`Milestone "${milestoneWithoutDate.title}" requires a start date`);
+      return;
+    }
     setCreating(true);
     let createdProjectId = null;
     try {
@@ -106,13 +113,18 @@ export const GanttNewChartWizard = ({
       createdProjectId = project.gantt_project_id;
 
       for (const task of taskRows) {
+        const startDate = task.start_date || null;
+        const endDate =
+          task.type === 'milestone' && startDate
+            ? startDate
+            : task.end_date || null;
         const payload = {
           type: task.type,
           phase: task.phase || null,
           title: task.title.trim(),
           description: null,
-          start_date: task.start_date || null,
-          end_date: task.end_date || null,
+          start_date: startDate,
+          end_date: endDate,
           responsible_party: null,
           dependencies: [],
         };
@@ -227,6 +239,7 @@ export const GanttNewChartWizard = ({
           <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
             <p className="text-sm text-muted-foreground">
               Add tasks now or leave blank and build in the table. Only rows with a title are saved.
+              Milestones require a start date.
             </p>
             {tasks.map((task, index) => (
               <div key={index} className="flex flex-wrap gap-2 items-end border rounded-lg p-3">
@@ -312,6 +325,46 @@ export const GanttNewChartWizard = ({
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="w-32">
+                  <Label className="text-xs">
+                    Start{task.type === 'milestone' ? ' (required)' : ''}
+                  </Label>
+                  <Input
+                    type="date"
+                    className="h-8"
+                    value={task.start_date}
+                    onChange={(e) =>
+                      setTasks((prev) =>
+                        prev.map((t, i) =>
+                          i === index
+                            ? {
+                                ...t,
+                                start_date: e.target.value,
+                                end_date: t.type === 'milestone' ? e.target.value : t.end_date,
+                              }
+                            : t
+                        )
+                      )
+                    }
+                  />
+                </div>
+                {task.type !== 'milestone' && (
+                  <div className="w-32">
+                    <Label className="text-xs">End</Label>
+                    <Input
+                      type="date"
+                      className="h-8"
+                      value={task.end_date}
+                      onChange={(e) =>
+                        setTasks((prev) =>
+                          prev.map((t, i) =>
+                            i === index ? { ...t, end_date: e.target.value } : t
+                          )
+                        )
+                      }
+                    />
+                  </div>
+                )}
                 <Button
                   type="button"
                   variant="ghost"

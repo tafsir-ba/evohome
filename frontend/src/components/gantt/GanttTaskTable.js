@@ -78,6 +78,8 @@ const TaskRow = ({
   onDuplicate,
   onMarkDirty,
   onMarkClean,
+  canReorderUp,
+  canReorderDown,
 }) => (
   <TableRow
     className={cn(selected && 'bg-primary/5 ring-1 ring-inset ring-primary/20')}
@@ -213,7 +215,7 @@ const TaskRow = ({
           className="h-7 w-7"
           title="Move up (Alt+↑)"
           onClick={() => onReorder(task.task_id, 'up')}
-          disabled={task.order === 0}
+          disabled={!canReorderUp}
         >
           <ArrowUp className="h-3 w-3" />
         </Button>
@@ -223,7 +225,7 @@ const TaskRow = ({
           className="h-7 w-7"
           title="Move down (Alt+↓)"
           onClick={() => onReorder(task.task_id, 'down')}
-          disabled={task.order === tasks.length - 1}
+          disabled={!canReorderDown}
         >
           <ArrowDown className="h-3 w-3" />
         </Button>
@@ -276,6 +278,19 @@ export const GanttTaskTable = ({
   const newTitleRef = useRef(null);
 
   const phaseGroups = useMemo(() => groupTasksByPhase(tasks), [tasks]);
+
+  useEffect(() => {
+    setNewTask(emptyTask);
+    setDirtyTaskIds(new Set());
+    setSelectedId(null);
+    setCollapsedPhases(new Set());
+    setBulkOpen(false);
+    setBulkText('');
+    setShortcutsOpen(false);
+    setSaving(null);
+    setAdding(false);
+    setBulkAdding(false);
+  }, [projectId]);
 
   const isDirty = dirtyTaskIds.size > 0 || isNewTaskDirty(newTask);
   const isSaving = saving !== null || adding || bulkAdding;
@@ -415,11 +430,27 @@ export const GanttTaskTable = ({
     }
   };
 
+  const getPhaseTasksFor = useCallback(
+    (taskId) => {
+      for (const { tasks: phaseTasks } of phaseGroups) {
+        if (phaseTasks.some((t) => t.task_id === taskId)) return phaseTasks;
+      }
+      return tasks;
+    },
+    [phaseGroups, tasks]
+  );
+
   const handleReorder = async (taskId, direction) => {
+    const phaseTasks = getPhaseTasksFor(taskId);
+    const phaseIndex = phaseTasks.findIndex((t) => t.task_id === taskId);
+    if (phaseIndex < 0) return;
+    const swapPhaseIndex = direction === 'up' ? phaseIndex - 1 : phaseIndex + 1;
+    if (swapPhaseIndex < 0 || swapPhaseIndex >= phaseTasks.length) return;
+
+    const swapTaskId = phaseTasks[swapPhaseIndex].task_id;
     const index = tasks.findIndex((t) => t.task_id === taskId);
-    if (index < 0) return;
-    const swapIndex = direction === 'up' ? index - 1 : index + 1;
-    if (swapIndex < 0 || swapIndex >= tasks.length) return;
+    const swapIndex = tasks.findIndex((t) => t.task_id === swapTaskId);
+    if (index < 0 || swapIndex < 0) return;
 
     const ids = tasks.map((t) => t.task_id);
     [ids[index], ids[swapIndex]] = [ids[swapIndex], ids[index]];
@@ -469,7 +500,11 @@ export const GanttTaskTable = ({
       await onRefresh();
       toast.success(`Added ${added} task${added === 1 ? '' : 's'}`);
     } catch (error) {
-      toast.error(error.message);
+      const partialMsg =
+        added > 0
+          ? `${error.message} (${added} row${added === 1 ? '' : 's'} were already saved.)`
+          : error.message;
+      toast.error(partialMsg);
       if (added > 0) await onRefresh();
     } finally {
       setBulkAdding(false);
@@ -607,7 +642,7 @@ export const GanttTaskTable = ({
                     </TableCell>
                   </TableRow>
                   {!collapsed &&
-                    phaseTasks.map((task) => (
+                    phaseTasks.map((task, phaseIndex) => (
                       <TaskRow
                         key={`${task.task_id}-${task.updated_at}`}
                         task={task}
@@ -624,6 +659,8 @@ export const GanttTaskTable = ({
                         onDuplicate={handleDuplicate}
                         onMarkDirty={markDirty}
                         onMarkClean={markClean}
+                        canReorderUp={phaseIndex > 0}
+                        canReorderDown={phaseIndex < phaseTasks.length - 1}
                       />
                     ))}
                 </Fragment>
@@ -725,6 +762,7 @@ export const GanttTaskTable = ({
               Paste one task per line. Use tab or comma between columns:
               phase, title, start, end, type, status, responsible.
               A single column is treated as title only.
+              Rows are added one at a time; if one fails, earlier rows remain saved.
             </DialogDescription>
           </DialogHeader>
           <div>
@@ -770,7 +808,7 @@ export const GanttTaskTable = ({
               <dd className="font-mono">⌘D</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Move selected up/down</dt>
+              <dt className="text-muted-foreground">Move selected within phase</dt>
               <dd className="font-mono">Alt+↑ / Alt+↓</dd>
             </div>
             <div className="flex justify-between gap-4">

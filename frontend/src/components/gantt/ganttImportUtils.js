@@ -35,6 +35,12 @@ export const EXTRACT_PROGRESS_STEPS = {
   ],
 };
 
+/** Human-readable label for backend extraction_model (e.g. gpt-5.4 → GPT 5.4). */
+export const formatExtractionModelLabel = (model) => {
+  if (!model) return 'AI';
+  return model.replace(/^gpt-/i, 'GPT ').replace(/-/g, ' ');
+};
+
 export const IMPORT_FLOW_STEPS = [
   {
     key: 'select',

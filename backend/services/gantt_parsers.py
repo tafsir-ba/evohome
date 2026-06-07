@@ -13,14 +13,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import fitz  # PyMuPDF
 
-from services.gantt_constants import LOW_CONFIDENCE_THRESHOLD
+from services.gantt_constants import GANTT_EXTRACTION_MODEL, LOW_CONFIDENCE_THRESHOLD
 from services.ai_service import OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
 
 GANTT_AI_SYSTEM_PROMPT = """You extract Gantt chart / project schedule data from documents.
 
-Return ONLY a JSON object with this shape:
+Return ONLY a single JSON object (no markdown fences, no commentary) with this shape:
 {
   "tasks": [
     {
@@ -104,21 +104,111 @@ def _normalize_ai_tasks(raw_tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     return normalized
 
 
+def _strip_markdown_fences(text: str) -> str:
+    """Remove ```json ... ``` wrappers often returned by chat models."""
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    stripped = re.sub(r"^```(?:json)?\s*", "", stripped, flags=re.IGNORECASE)
+    stripped = re.sub(r"\s*```$", "", stripped)
+    return stripped.strip()
+
+
+def _load_json_payload(response_text: str) -> Optional[Any]:
+    """Parse JSON from model output, tolerating fences and leading prose."""
+    if not response_text or not str(response_text).strip():
+        return None
+
+    candidates = [_strip_markdown_fences(str(response_text))]
+    brace_start = candidates[0].find("{")
+    bracket_start = candidates[0].find("[")
+    if brace_start >= 0:
+        candidates.append(candidates[0][brace_start:])
+    if bracket_start >= 0:
+        candidates.append(candidates[0][bracket_start:])
+
+    decoder = json.JSONDecoder()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            for opener, closer in (("{", "}"), ("[", "]")):
+                start = candidate.find(opener)
+                if start < 0:
+                    continue
+                try:
+                    payload, _ = decoder.raw_decode(candidate[start:])
+                    return payload
+                except json.JSONDecodeError:
+                    continue
+    return None
+
+
+def _call_gantt_extraction_ai(client: Any, messages: List[Dict[str, Any]]) -> str:
+    """Call GANTT_EXTRACTION_MODEL with JSON-object response format when supported."""
+    base_kwargs: Dict[str, Any] = {
+        "model": GANTT_EXTRACTION_MODEL,
+        "messages": messages,
+        "response_format": {"type": "json_object"},
+    }
+    token_attempts = (
+        {"max_completion_tokens": 4000},
+        {"max_tokens": 4000},
+        {},
+    )
+    last_exc: Optional[Exception] = None
+    for token_kwargs in token_attempts:
+        try:
+            response = client.chat.completions.create(**base_kwargs, **token_kwargs)
+            return response.choices[0].message.content or ""
+        except TypeError as exc:
+            last_exc = exc
+            continue
+        except Exception as exc:
+            err = str(exc).lower()
+            if "response_format" in err or "json_object" in err:
+                response = client.chat.completions.create(
+                    model=GANTT_EXTRACTION_MODEL,
+                    messages=messages,
+                    **token_kwargs,
+                )
+                return response.choices[0].message.content or ""
+            last_exc = exc
+            break
+    if last_exc:
+        raise last_exc
+    return ""
+
+
 def _parse_ai_json_response(response_text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
-    json_match = re.search(r"\{[\s\S]*\}", response_text)
-    if not json_match:
-        return [], ["AI response did not contain valid JSON"]
-    try:
-        payload = json.loads(json_match.group())
-    except json.JSONDecodeError:
+    payload = _load_json_payload(response_text)
+    if payload is None:
+        logger.warning(
+            "Gantt AI JSON parse failed (first 500 chars): %s",
+            (response_text or "")[:500],
+        )
         return [], ["AI response JSON could not be parsed"]
-    tasks = _normalize_ai_tasks(payload.get("tasks") or [])
-    warnings = list(payload.get("warnings") or [])
+
+    if isinstance(payload, list):
+        tasks_raw = payload
+        warnings: List[str] = []
+    elif isinstance(payload, dict):
+        tasks_raw = payload.get("tasks") or payload.get("items") or []
+        warnings = list(payload.get("warnings") or [])
+    else:
+        return [], ["AI response JSON had unexpected structure"]
+
+    if not isinstance(tasks_raw, list):
+        return [], ["AI response tasks field was not a list"]
+
+    tasks = _normalize_ai_tasks(tasks_raw)
     return tasks, warnings
 
 
 async def parse_pdf_text(file_path: str) -> Tuple[List[Dict[str, Any]], List[str]]:
-    """Extract draft tasks from a PDF with a text layer via PyMuPDF + GPT-4o."""
+    """Extract draft tasks from a PDF with a text layer via PyMuPDF + GANTT_EXTRACTION_MODEL."""
     warnings: List[str] = []
     try:
         doc = fitz.open(file_path)
@@ -139,25 +229,24 @@ async def parse_pdf_text(file_path: str) -> Tuple[List[Dict[str, Any]], List[str
         import openai
 
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
+        content = _call_gantt_extraction_ai(
+            client,
+            [
                 {"role": "system", "content": GANTT_AI_SYSTEM_PROMPT},
                 {
                     "role": "user",
                     "content": f"Extract Gantt tasks from this PDF text:\n\n{text_content[:8000]}",
                 },
             ],
-            max_tokens=4000,
         )
-        return _parse_ai_json_response(response.choices[0].message.content or "")
+        return _parse_ai_json_response(content)
     except Exception as exc:
         logger.error("PDF AI extraction failed: %s", exc)
         return [], [f"AI extraction failed: {exc}"]
 
 
 async def parse_image_vision(file_path: str) -> Tuple[List[Dict[str, Any]], List[str]]:
-    """Extract draft tasks from scanned Gantt / images via GPT-4o Vision."""
+    """Extract draft tasks from scanned Gantt / images via GANTT_EXTRACTION_MODEL vision."""
     if not OPENAI_API_KEY:
         return [], ["AI extraction unavailable (OPENAI_API_KEY not set)"]
 
@@ -180,9 +269,9 @@ async def parse_image_vision(file_path: str) -> Tuple[List[Dict[str, Any]], List
             image_data = base64.b64encode(img_file.read()).decode("utf-8")
 
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
+        content = _call_gantt_extraction_ai(
+            client,
+            [
                 {"role": "system", "content": GANTT_AI_SYSTEM_PROMPT},
                 {
                     "role": "user",
@@ -198,9 +287,8 @@ async def parse_image_vision(file_path: str) -> Tuple[List[Dict[str, Any]], List
                     ],
                 },
             ],
-            max_tokens=4000,
         )
-        return _parse_ai_json_response(response.choices[0].message.content or "")
+        return _parse_ai_json_response(content)
     except Exception as exc:
         logger.error("Image vision extraction failed: %s", exc)
         return [], [f"AI extraction failed: {exc}"]

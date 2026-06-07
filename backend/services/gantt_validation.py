@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from services.gantt_constants import (
     ALLOWED_UPLOAD_EXTENSIONS,
+    GANTT_EXTRACTION_MODEL,
     GANTT_REVIEW_MESSAGE,
     LOW_CONFIDENCE_THRESHOLD,
     MAX_UPLOAD_SIZE_BYTES,
@@ -38,6 +39,7 @@ def get_gantt_config() -> Dict[str, Any]:
             "max_size_mb": MAX_UPLOAD_SIZE_BYTES // (1024 * 1024),
             "review_message": GANTT_REVIEW_MESSAGE,
             "low_confidence_threshold": LOW_CONFIDENCE_THRESHOLD,
+            "extraction_model": GANTT_EXTRACTION_MODEL,
         },
     }
 

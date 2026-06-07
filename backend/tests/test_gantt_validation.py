@@ -138,6 +138,7 @@ class TestGanttConfig:
         assert ".csv" in config["import"]["allowed_extensions"]
         assert config["import"]["max_size_mb"] == 15
         assert "review all dates" in config["import"]["review_message"].lower()
+        assert config["import"]["extraction_model"] == "gpt-5.4"
 
 
 class TestTaskPayloadValidation:

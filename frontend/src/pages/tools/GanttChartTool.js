@@ -33,6 +33,7 @@ export const GanttChartTool = () => {
       max_size_mb: 15,
       low_confidence_threshold: 0.6,
       review_message: '',
+      extraction_model: 'gpt-5.4',
     },
   });
   const [showImport, setShowImport] = useState(false);
@@ -102,6 +103,8 @@ export const GanttChartTool = () => {
     fetchTasks(selectedId);
     setShowImport(false);
     setSaveStatus({ saving: false, dirty: false });
+    setEditingTitle(false);
+    setTitleDraft('');
   }, [selectedId, fetchTasks]);
 
   const selectedProject = projects.find((p) => p.gantt_project_id === selectedId);
@@ -287,6 +290,7 @@ export const GanttChartTool = () => {
                 )}
 
                 <GanttTaskTable
+                  key={selectedId}
                   projectId={selectedId}
                   tasks={tasks}
                   loading={loadingTasks}
