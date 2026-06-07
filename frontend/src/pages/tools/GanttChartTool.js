@@ -6,6 +6,7 @@ import { GanttProjectList } from '../../components/gantt/GanttProjectList';
 import { GanttTaskTable } from '../../components/gantt/GanttTaskTable';
 import { GanttTimelinePreview } from '../../components/gantt/GanttTimelinePreview';
 import { GanttImportReview } from '../../components/gantt/GanttImportReview';
+import { GanttSaveIndicator } from '../../components/gantt/GanttSaveIndicator';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { toast } from 'sonner';
 import { Download, LogOut, BarChart3, Loader2, Upload, LogIn } from 'lucide-react';
@@ -35,6 +36,7 @@ export const GanttChartTool = () => {
     },
   });
   const [showImport, setShowImport] = useState(false);
+  const [saveStatus, setSaveStatus] = useState({ saving: false, dirty: false });
 
   const apiFetch = useCallback((path, options = {}) => {
     const { headers: optionHeaders, ...rest } = options;
@@ -99,9 +101,30 @@ export const GanttChartTool = () => {
   useEffect(() => {
     fetchTasks(selectedId);
     setShowImport(false);
+    setSaveStatus({ saving: false, dirty: false });
   }, [selectedId, fetchTasks]);
 
   const selectedProject = projects.find((p) => p.gantt_project_id === selectedId);
+
+  const titleDirty =
+    editingTitle &&
+    selectedProject &&
+    titleDraft.trim() !== selectedProject.title;
+
+  const combinedSaveStatus = {
+    saving: saveStatus.saving,
+    dirty: saveStatus.dirty || titleDirty,
+  };
+
+  useEffect(() => {
+    if (!combinedSaveStatus.dirty) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [combinedSaveStatus.dirty]);
 
   const handleTitleSave = async () => {
     if (!selectedId || !titleDraft.trim()) return;
@@ -187,6 +210,8 @@ export const GanttChartTool = () => {
                 onSelect={setSelectedId}
                 onRefresh={fetchProjects}
                 apiFetch={apiFetch}
+                taskTypes={ganttConfig.task_types}
+                hasUnsavedChanges={combinedSaveStatus.dirty}
               />
             )}
           </aside>
@@ -198,7 +223,7 @@ export const GanttChartTool = () => {
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
                   {editingTitle ? (
                     <div className="flex items-center gap-2 flex-1">
                       <Input
@@ -227,7 +252,11 @@ export const GanttChartTool = () => {
                       {selectedProject.title}
                     </h2>
                   )}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <GanttSaveIndicator
+                      saving={combinedSaveStatus.saving}
+                      dirty={combinedSaveStatus.dirty}
+                    />
                     <Button
                       variant="outline"
                       size="sm"
@@ -265,6 +294,7 @@ export const GanttChartTool = () => {
                   taskTypes={ganttConfig.task_types}
                   onRefresh={() => fetchTasks(selectedId)}
                   apiFetch={apiFetch}
+                  onSaveStatusChange={setSaveStatus}
                 />
 
                 <div>
