@@ -124,7 +124,7 @@ const AppRouter = () => {
       <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
       <Route path="/team/accept" element={<AcceptInvitePage />} />
 
-      {/* Gantt: carib-recon.org serves app; evohome redirects to carib-recon */}
+      {/* Gantt: app.carib-recon.org serves tool; evohome redirects to app.carib-recon.org */}
       <Route path="/gantt" element={<GanttDomainRoute />} />
       <Route path="/tools/gantt-chart" element={<GanttDomainRoute />} />
       
@@ -262,7 +262,7 @@ const AppRouter = () => {
         } />
       </Route>
       
-      {/* Default: evohome landing; carib-recon → /gantt */}
+      {/* Default: evohome landing; app.carib-recon.org → Gantt landing */}
       <Route path="/" element={<AppRootRoute />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

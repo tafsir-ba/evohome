@@ -13,7 +13,7 @@ GANTT_ORIGINS = [
     o.strip().rstrip("/")
     for o in os.environ.get(
         "GANTT_ORIGINS",
-        "https://carib-recon.org,https://www.carib-recon.org",
+        "https://app.carib-recon.org",
     ).split(",")
     if o.strip()
 ]

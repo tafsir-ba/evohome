@@ -1,11 +1,17 @@
 /** Display name for the standalone Gantt app (matches backend GANTT_APP_NAME). */
 export const GANTT_APP_NAME = 'Caribbean Regional Connectivity';
 
-/** Hostnames that serve the standalone Gantt app (not the evohome CMP). */
-const DEFAULT_GANTT_HOSTS = ['carib-recon.org', 'www.carib-recon.org'];
+/**
+ * Hostnames that serve the Gantt app on DO (not Emergent marketing, not evohome CMP).
+ * carib-recon.org / www → Emergent homepage; app.carib-recon.org → this app.
+ */
+const DEFAULT_GANTT_HOSTS = ['app.carib-recon.org'];
 
 export const GANTT_APP_URL =
-  process.env.REACT_APP_GANTT_APP_URL || 'https://carib-recon.org/gantt';
+  process.env.REACT_APP_GANTT_APP_URL || 'https://app.carib-recon.org/gantt';
+
+export const GANTT_LOGIN_URL =
+  process.env.REACT_APP_GANTT_LOGIN_URL || 'https://app.carib-recon.org/login';
 
 const ganttHosts = (process.env.REACT_APP_GANTT_HOSTS || '')
   .split(',')

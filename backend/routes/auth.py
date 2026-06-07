@@ -22,17 +22,18 @@ from core.rate_limit import rate_limit_check
 from core.monitoring import capture_auth_failure
 from services.email_service import send_notification_email, send_email_async
 from core.config import get_config
-from core.gantt_site import gantt_welcome_email_data, is_gantt_request
+from core.gantt_site import GANTT_ORIGINS, gantt_welcome_email_data, is_gantt_request
 from services.gantt_constants import GANTT_APP_NAME
 
 logger = logging.getLogger("evohome.auth")
 
 
 def _password_reset_frontend_url(req: Request) -> str:
-    """Use request Origin when allowed (e.g. carib-recon.org), else FRONTEND_URL."""
+    """Use request Origin when allowed (e.g. app.carib-recon.org), else FRONTEND_URL."""
     config = get_config()
     origin = (req.headers.get("origin") or "").strip().rstrip("/")
     allowed = {o.strip().rstrip("/") for o in config.CORS_ORIGINS if o and o != "*"}
+    allowed.update(GANTT_ORIGINS)
     if config.FRONTEND_URL:
         allowed.add(config.FRONTEND_URL.strip().rstrip("/"))
     if origin in allowed:

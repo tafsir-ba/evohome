@@ -4,9 +4,9 @@ import { GanttExternalRedirect } from './GanttExternalRedirect';
 import { isGanttHost } from '../../components/gantt/ganttHostUtils';
 
 /**
- * Same DO static site serves evohome + carib-recon:
- * - carib-recon.org → Gantt tool
- * - app.evo-home.ch → redirect legacy Gantt URLs to carib-recon
+ * Same DO app serves evohome CMP + Gantt subdomain:
+ * - app.carib-recon.org → Gantt tool
+ * - app.evo-home.ch → redirect legacy Gantt URLs to app.carib-recon.org
  */
 export const GanttDomainRoute = ({ canonicalPath = '/gantt' }) => {
   if (isGanttHost()) {
