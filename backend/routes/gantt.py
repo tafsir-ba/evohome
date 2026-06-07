@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, Response
 
-from core.auth import get_current_user
+from core.gantt_auth import get_gantt_actor
 from models.gantt_schemas import (
     ConfirmGanttDraftResponse,
     CreateGanttProjectRequest,
@@ -32,12 +32,12 @@ def _handle_validation_error(exc: GanttValidationError) -> HTTPException:
 
 
 @router.get("/gantt/config")
-async def gantt_config(user=Depends(get_current_user)):
+async def gantt_config(user=Depends(get_gantt_actor)):
     return get_gantt_config()
 
 
 @router.post("/gantt/projects")
-async def create_project(data: CreateGanttProjectRequest, user=Depends(get_current_user)):
+async def create_project(data: CreateGanttProjectRequest, user=Depends(get_gantt_actor)):
     return await gantt_service.create_project(
         owner_user_id=user["user_id"],
         title=data.title,
@@ -46,12 +46,12 @@ async def create_project(data: CreateGanttProjectRequest, user=Depends(get_curre
 
 
 @router.get("/gantt/projects")
-async def list_projects(user=Depends(get_current_user)):
+async def list_projects(user=Depends(get_gantt_actor)):
     return await gantt_service.list_projects(owner_user_id=user["user_id"])
 
 
 @router.get("/gantt/projects/{project_id}")
-async def get_project(project_id: str, user=Depends(get_current_user)):
+async def get_project(project_id: str, user=Depends(get_gantt_actor)):
     project = await gantt_service.get_project(project_id, user["user_id"])
     if not project:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -62,7 +62,7 @@ async def get_project(project_id: str, user=Depends(get_current_user)):
 async def update_project(
     project_id: str,
     data: UpdateGanttProjectRequest,
-    user=Depends(get_current_user),
+    user=Depends(get_gantt_actor),
 ):
     updates = data.model_dump(exclude_unset=True)
     project = await gantt_service.update_project(project_id, user["user_id"], updates)
@@ -72,7 +72,7 @@ async def update_project(
 
 
 @router.delete("/gantt/projects/{project_id}")
-async def delete_project(project_id: str, user=Depends(get_current_user)):
+async def delete_project(project_id: str, user=Depends(get_gantt_actor)):
     deleted_count = await gantt_service.delete_project(project_id, user["user_id"])
     if deleted_count is None:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -87,7 +87,7 @@ async def delete_project(project_id: str, user=Depends(get_current_user)):
 async def create_task(
     project_id: str,
     data: CreateGanttTaskRequest,
-    user=Depends(get_current_user),
+    user=Depends(get_gantt_actor),
 ):
     try:
         return await gantt_service.create_task(
@@ -102,7 +102,7 @@ async def create_task(
 
 
 @router.get("/gantt/projects/{project_id}/tasks")
-async def list_tasks(project_id: str, user=Depends(get_current_user)):
+async def list_tasks(project_id: str, user=Depends(get_gantt_actor)):
     try:
         return await gantt_service.list_tasks(project_id, user["user_id"])
     except PermissionError:
@@ -114,7 +114,7 @@ async def update_task(
     project_id: str,
     task_id: str,
     data: UpdateGanttTaskRequest,
-    user=Depends(get_current_user),
+    user=Depends(get_gantt_actor),
 ):
     try:
         updated = await gantt_service.update_task(
@@ -134,7 +134,7 @@ async def update_task(
 
 
 @router.delete("/gantt/projects/{project_id}/tasks/{task_id}")
-async def delete_task(project_id: str, task_id: str, user=Depends(get_current_user)):
+async def delete_task(project_id: str, task_id: str, user=Depends(get_gantt_actor)):
     try:
         result = await gantt_service.delete_task(project_id, user["user_id"], task_id)
     except PermissionError:
@@ -167,7 +167,7 @@ async def delete_task(project_id: str, task_id: str, user=Depends(get_current_us
 async def reorder_tasks(
     project_id: str,
     data: ReorderGanttTasksRequest,
-    user=Depends(get_current_user),
+    user=Depends(get_gantt_actor),
 ):
     try:
         return await gantt_service.reorder_tasks(
@@ -182,7 +182,7 @@ async def reorder_tasks(
 
 
 @router.get("/gantt/projects/{project_id}/export.csv")
-async def export_csv(project_id: str, user=Depends(get_current_user)):
+async def export_csv(project_id: str, user=Depends(get_gantt_actor)):
     project = await gantt_service.get_project(project_id, user["user_id"])
     if not project:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -209,7 +209,7 @@ async def export_csv(project_id: str, user=Depends(get_current_user)):
 async def upload_gantt_file(
     gantt_project_id: str = Form(...),
     file: UploadFile = File(...),
-    user=Depends(get_current_user),
+    user=Depends(get_gantt_actor),
 ):
     try:
         content = await file.read()
@@ -227,7 +227,7 @@ async def upload_gantt_file(
 
 
 @router.post("/gantt/extract")
-async def extract_gantt_draft(data: ExtractGanttRequest, user=Depends(get_current_user)):
+async def extract_gantt_draft(data: ExtractGanttRequest, user=Depends(get_gantt_actor)):
     try:
         return await gantt_extraction_service.extract_draft(
             owner_user_id=user["user_id"],
@@ -241,7 +241,7 @@ async def extract_gantt_draft(data: ExtractGanttRequest, user=Depends(get_curren
 
 
 @router.get("/gantt/drafts/{draft_id}")
-async def get_gantt_draft(draft_id: str, user=Depends(get_current_user)):
+async def get_gantt_draft(draft_id: str, user=Depends(get_gantt_actor)):
     draft = await gantt_extraction_service.get_draft(draft_id, user["user_id"])
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
@@ -252,7 +252,7 @@ async def get_gantt_draft(draft_id: str, user=Depends(get_current_user)):
 async def update_gantt_draft(
     draft_id: str,
     data: UpdateGanttDraftRequest,
-    user=Depends(get_current_user),
+    user=Depends(get_gantt_actor),
 ):
     try:
         draft = await gantt_extraction_service.update_draft(
@@ -269,7 +269,7 @@ async def update_gantt_draft(
 
 
 @router.post("/gantt/drafts/{draft_id}/confirm")
-async def confirm_gantt_draft(draft_id: str, user=Depends(get_current_user)):
+async def confirm_gantt_draft(draft_id: str, user=Depends(get_gantt_actor)):
     try:
         created, summary = await gantt_extraction_service.confirm_draft(
             draft_id, user["user_id"]
@@ -288,7 +288,7 @@ async def confirm_gantt_draft(draft_id: str, user=Depends(get_current_user)):
 
 
 @router.post("/gantt/drafts/{draft_id}/discard")
-async def discard_gantt_draft(draft_id: str, user=Depends(get_current_user)):
+async def discard_gantt_draft(draft_id: str, user=Depends(get_gantt_actor)):
     try:
         result = await gantt_extraction_service.discard_draft(draft_id, user["user_id"])
     except GanttValidationError as exc:

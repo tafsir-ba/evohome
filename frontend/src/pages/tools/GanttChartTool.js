@@ -8,16 +8,11 @@ import { GanttTimelinePreview } from '../../components/gantt/GanttTimelinePrevie
 import { GanttImportReview } from '../../components/gantt/GanttImportReview';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { toast } from 'sonner';
-import { Download, LogOut, BarChart3, Loader2, Upload } from 'lucide-react';
+import { Download, LogOut, BarChart3, Loader2, Upload, LogIn } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { getGanttHeaders } from '../../components/gantt/ganttApiUtils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('auth_token');
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
-};
 
 export const GanttChartTool = () => {
   const { user, logout } = useAuth();
@@ -42,10 +37,16 @@ export const GanttChartTool = () => {
   const [showImport, setShowImport] = useState(false);
 
   const apiFetch = useCallback((path, options = {}) => {
+    const { headers: optionHeaders, ...rest } = options;
+    const mergedHeaders = getGanttHeaders(optionHeaders || {});
+    // Let browser set multipart boundary for FormData bodies
+    if (rest.body instanceof FormData) {
+      delete mergedHeaders['Content-Type'];
+    }
     return fetch(`${API}${path}`, {
       credentials: 'include',
-      headers: getAuthHeaders(),
-      ...options,
+      headers: mergedHeaders,
+      ...rest,
     });
   }, []);
 
@@ -156,9 +157,18 @@ export const GanttChartTool = () => {
               </span>
             )}
             <ThemeToggle />
-            <Button variant="ghost" size="icon" onClick={logout} title="Logout">
-              <LogOut className="h-4 w-4" />
-            </Button>
+            {user ? (
+              <Button variant="ghost" size="icon" onClick={logout} title="Logout">
+                <LogOut className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/login">
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Login
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
       </header>

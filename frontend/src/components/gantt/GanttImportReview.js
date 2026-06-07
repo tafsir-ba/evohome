@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '../ui/table';
-import { parseApiError } from './ganttApiUtils';
+import { parseApiError, getGanttHeaders } from './ganttApiUtils';
 import { toast } from 'sonner';
 import { AlertTriangle, Check, Loader2, Sparkles, Trash2, Upload, X } from 'lucide-react';
 
@@ -93,14 +93,13 @@ export const GanttImportReview = ({
       form.append('gantt_project_id', projectId);
       form.append('file', selectedFile);
 
-      const token = localStorage.getItem('auth_token');
-      const headers = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
+      const uploadHeaders = getGanttHeaders();
+      delete uploadHeaders['Content-Type'];
 
       const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/gantt/upload`, {
         method: 'POST',
         credentials: 'include',
-        headers,
+        headers: uploadHeaders,
         body: form,
       });
       if (!res.ok) {
