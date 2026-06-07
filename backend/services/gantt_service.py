@@ -395,8 +395,7 @@ async def create_tasks_from_draft(
     }
     all_task_ids = {t["task_id"] for t in existing_tasks} | set(temp_to_task.values())
 
-    now = _now()
-    now_iso = now.isoformat()
+    now_iso = _now()
     docs: List[Dict[str, Any]] = []
 
     # Build synthetic existing list for cycle detection including new tasks
