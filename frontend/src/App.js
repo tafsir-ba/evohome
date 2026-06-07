@@ -36,6 +36,7 @@ import { AgentAnalytics } from "./pages/agent/AgentAnalytics";
 import { AgentVault } from "./pages/agent/AgentVault";
 import { AgentHomePage } from "./pages/agent/AgentHomePage";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
+import { GanttChartTool } from "./pages/tools/GanttChartTool";
 
 import "./App.css";
 
@@ -95,6 +96,13 @@ const AppRouter = () => {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
       <Route path="/team/accept" element={<AcceptInvitePage />} />
+
+      {/* Standalone tools — any authenticated user */}
+      <Route path="/tools/gantt-chart" element={
+        <ProtectedRoute>
+          <GanttChartTool />
+        </ProtectedRoute>
+      } />
       
       {/* Buyer routes - Single timeline page */}
       <Route path="/buyer/dashboard" element={

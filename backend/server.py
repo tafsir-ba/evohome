@@ -118,6 +118,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Compound index creation warning: {e}")
 
+    from services.gantt_indexes import ensure_gantt_indexes
+    await ensure_gantt_indexes(db)
+
     yield
 
     # ── Graceful shutdown: close all WebSocket connections ──
@@ -227,6 +230,7 @@ from routes.units import router as units_router
 from routes.doc_extraction import router as doc_extraction_router
 from routes.workflows import router as workflows_router
 from routes.team_v2 import router as team_router
+from routes.gantt import router as gantt_router
 
 for r in [
     auth_router, projects_router, clients_router, documents_router,
@@ -235,7 +239,7 @@ for r in [
     stats_router, vault_router, analytics_router, test_endpoints_router,
     demo_router, billing_router, invitations_router, settings_router,
     admin_router, commands_router, doc_extraction_router, workflows_router,
-    units_router, team_router,
+    units_router, team_router, gantt_router,
 ]:
     api_router.include_router(r)
 

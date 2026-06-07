@@ -1,0 +1,147 @@
+"""
+Gantt validation — unit tests (no DB, no API).
+"""
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+_validation_path = Path(__file__).resolve().parents[1] / "services" / "gantt_validation.py"
+_spec = importlib.util.spec_from_file_location("gantt_validation", _validation_path)
+_gantt_validation = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_gantt_validation)
+
+GanttValidationError = _gantt_validation.GanttValidationError
+detect_dependency_cycle = _gantt_validation.detect_dependency_cycle
+get_gantt_config = _gantt_validation.get_gantt_config
+normalize_task_dates = _gantt_validation.normalize_task_dates
+validate_dependencies = _gantt_validation.validate_dependencies
+validate_task_payload = _gantt_validation.validate_task_payload
+
+
+class TestDateValidation:
+    def test_both_dates_null_allowed(self):
+        start, end, duration = normalize_task_dates("task", None, None)
+        assert start is None
+        assert end is None
+        assert duration is None
+
+    def test_start_only_allowed(self):
+        start, end, duration = normalize_task_dates("task", "2026-01-10", None)
+        assert start == "2026-01-10"
+        assert end is None
+        assert duration is None
+
+    def test_reject_end_only(self):
+        with pytest.raises(GanttValidationError, match="end_date requires start_date"):
+            normalize_task_dates("task", None, "2026-01-10")
+
+    def test_reject_end_before_start(self):
+        with pytest.raises(GanttValidationError, match="end_date must not be before start_date"):
+            normalize_task_dates("task", "2026-01-10", "2026-01-05")
+
+    def test_invalid_date_format(self):
+        with pytest.raises(GanttValidationError, match="valid calendar date"):
+            normalize_task_dates("task", "2026-02-30", None)
+
+    def test_duration_computed_inclusive(self):
+        _, _, duration = normalize_task_dates("task", "2026-01-01", "2026-01-03")
+        assert duration == 3
+
+
+class TestMilestoneValidation:
+    def test_milestone_requires_start(self):
+        with pytest.raises(GanttValidationError, match="Milestones require start_date"):
+            normalize_task_dates("milestone", None, None)
+
+    def test_milestone_normalizes_end_date(self):
+        start, end, duration = normalize_task_dates("milestone", "2026-03-15", None)
+        assert start == "2026-03-15"
+        assert end == "2026-03-15"
+        assert duration == 0
+
+    def test_milestone_rejects_differing_dates(self):
+        with pytest.raises(GanttValidationError, match="must match"):
+            normalize_task_dates("milestone", "2026-03-15", "2026-03-16")
+
+
+class TestDependencyValidation:
+    def test_reject_self_dependency(self):
+        with pytest.raises(GanttValidationError, match="cannot depend on itself"):
+            validate_dependencies(
+                [{"task_id": "gt_abc", "type": "FS"}],
+                "gt_abc",
+                {"gt_abc"},
+            )
+
+    def test_reject_missing_dependency(self):
+        with pytest.raises(GanttValidationError, match="not found in project"):
+            validate_dependencies(
+                [{"task_id": "gt_missing", "type": "FS"}],
+                "gt_abc",
+                {"gt_abc"},
+            )
+
+    def test_reject_non_fs_type(self):
+        with pytest.raises(GanttValidationError, match="Unsupported dependency type"):
+            validate_dependencies(
+                [{"task_id": "gt_b", "type": "SS"}],
+                "gt_a",
+                {"gt_a", "gt_b"},
+            )
+
+    def test_detect_cycle(self):
+        tasks = [
+            {"task_id": "gt_a", "dependencies": [{"task_id": "gt_b", "type": "FS"}]},
+            {"task_id": "gt_b", "dependencies": [{"task_id": "gt_c", "type": "FS"}]},
+            {"task_id": "gt_c", "dependencies": []},
+        ]
+        with pytest.raises(GanttValidationError, match="Circular dependency"):
+            detect_dependency_cycle(
+                tasks,
+                "gt_c",
+                [{"task_id": "gt_a", "type": "FS"}],
+            )
+
+
+class TestGanttConfig:
+    def test_config_matches_validation_constants(self):
+        config = get_gantt_config()
+        assert config["task_statuses"] == sorted(_gantt_validation.VALID_STATUSES)
+        assert config["task_types"] == list(_gantt_validation.VALID_TASK_TYPES)
+        assert config["dependency_types"] == ["FS"]
+
+
+class TestTaskPayloadValidation:
+    def test_clear_dates_allowed_on_update(self):
+        result = validate_task_payload(
+            {
+                "title": "Task A",
+                "start_date": None,
+                "end_date": None,
+            },
+            task_id="gt_a",
+            task_type="task",
+            project_task_ids={"gt_a"},
+            existing_tasks=[{"task_id": "gt_a", "dependencies": []}],
+            is_create=False,
+        )
+        assert result["start_date"] is None
+        assert result["end_date"] is None
+        assert result["duration_days"] is None
+
+    def test_reject_duration_mismatch(self):
+        with pytest.raises(GanttValidationError, match="duration_days mismatch"):
+            validate_task_payload(
+                {
+                    "title": "Task A",
+                    "start_date": "2026-01-01",
+                    "end_date": "2026-01-05",
+                    "duration_days": 99,
+                },
+                task_id="gt_new",
+                task_type="task",
+                project_task_ids=set(),
+                existing_tasks=[],
+                is_create=True,
+            )
