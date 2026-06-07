@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
+import { getApiBaseUrl } from '../../lib/api';
 import { isGanttHost, GANTT_APP_NAME } from './ganttHostUtils';
-
-const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
 export const GANTT_POST_AUTH_PATH = '/gantt';
 
@@ -18,7 +17,7 @@ export const useGanttAppName = () => {
   const [appName, setAppName] = useState(GANTT_APP_NAME);
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API}/gantt/config`, { credentials: 'include' })
+    fetch(`${getApiBaseUrl()}/gantt/config`, { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : null))
       .then((config) => {
         if (!cancelled && config?.app_name) setAppName(config.app_name);

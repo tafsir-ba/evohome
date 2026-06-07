@@ -5,9 +5,8 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { toast } from 'sonner';
 import { Loader2, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { getApiBaseUrl } from '../../lib/api';
 import { GanttAuthShell } from '../../components/gantt/GanttAuthShell';
-
-const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
 export const GanttResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
@@ -38,7 +37,7 @@ export const GanttResetPasswordPage = () => {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API}/auth/reset-password`, {
+      const res = await fetch(`${getApiBaseUrl()}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, new_password: password }),

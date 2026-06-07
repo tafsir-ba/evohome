@@ -6,9 +6,8 @@ import { Label } from '../../components/ui/label';
 import { toast } from 'sonner';
 import { Loader2, Mail, CheckCircle } from 'lucide-react';
 import { GanttAuthShell } from '../../components/gantt/GanttAuthShell';
+import { getApiBaseUrl } from '../../lib/api';
 import { GANTT_AUTH_ROLE } from '../../components/gantt/ganttAuthUtils';
-
-const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
 export const GanttForgotPasswordPage = () => {
   const [email, setEmail] = useState('');
@@ -23,7 +22,7 @@ export const GanttForgotPasswordPage = () => {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API}/auth/forgot-password`, {
+      const res = await fetch(`${getApiBaseUrl()}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

@@ -3,9 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { getApiBaseUrl } from '../lib/api';
 import { getPostAuthPath } from '../components/gantt/ganttAuthUtils';
-
-const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
 export const GoogleCallbackPage = () => {
   const [searchParams] = useSearchParams();
@@ -39,7 +38,7 @@ export const GoogleCallbackPage = () => {
       }
 
       try {
-        const response = await fetch(`${API}/auth/google/callback`, {
+        const response = await fetch(`${getApiBaseUrl()}/auth/google/callback`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',

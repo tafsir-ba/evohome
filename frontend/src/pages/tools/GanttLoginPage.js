@@ -5,12 +5,10 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { toast } from 'sonner';
-import { parseApiError } from '../../lib/api';
+import { getApiBaseUrl, parseApiError } from '../../lib/api';
 import { Loader2, Mail, Lock } from 'lucide-react';
 import { GanttAuthShell } from '../../components/gantt/GanttAuthShell';
 import { GANTT_AUTH_ROLE, getPostAuthPath, useGanttAppName } from '../../components/gantt/ganttAuthUtils';
-
-const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
 export const GanttLoginPage = () => {
   const appName = useGanttAppName();
@@ -43,7 +41,7 @@ export const GanttLoginPage = () => {
     e.preventDefault();
     setEmailLoading(true);
     try {
-      const res = await fetch(`${API}/auth/login`, {
+      const res = await fetch(`${getApiBaseUrl()}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

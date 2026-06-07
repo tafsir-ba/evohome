@@ -9,6 +9,7 @@ import {
   TableHead,
   TableRow,
 } from '../ui/table';
+import { getApiBaseUrl } from '../../lib/api';
 import { parseApiError, getGanttHeaders } from './ganttApiUtils';
 import { GanttImportProgress } from './GanttImportProgress';
 import {
@@ -111,7 +112,7 @@ export const GanttImportReview = ({
     const uploadHeaders = getGanttHeaders();
     delete uploadHeaders['Content-Type'];
 
-    const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/gantt/upload`, {
+    const res = await fetch(`${getApiBaseUrl()}/gantt/upload`, {
       method: 'POST',
       credentials: 'include',
       headers: uploadHeaders,

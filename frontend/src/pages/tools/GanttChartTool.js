@@ -25,6 +25,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { getApiBaseUrl } from '../../lib/api';
 import { getGanttHeaders, parseApiError } from '../../components/gantt/ganttApiUtils';
 import { GANTT_APP_NAME } from '../../components/gantt/ganttHostUtils';
 import { ZOOM_LEVELS } from '../../components/gantt/ganttCockpitUtils';
@@ -41,8 +42,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
-
-const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
 export const GanttChartTool = () => {
   const { user, logout } = useAuth();
@@ -80,7 +79,7 @@ export const GanttChartTool = () => {
     if (rest.body instanceof FormData) {
       delete mergedHeaders['Content-Type'];
     }
-    return fetch(`${API}${path}`, {
+    return fetch(`${getApiBaseUrl()}${path}`, {
       credentials: 'include',
       headers: mergedHeaders,
       ...rest,

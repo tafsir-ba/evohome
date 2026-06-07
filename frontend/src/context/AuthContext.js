@@ -1,8 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { parseApiError } from '../lib/api';
-
-const API = process.env.REACT_APP_BACKEND_URL + '/api';
+import { getApiBaseUrl, parseApiError } from '../lib/api';
 
 const AuthContext = createContext(null);
 
@@ -30,7 +28,7 @@ export const AuthProvider = ({ children }) => {
 
     try {
       // Use new session endpoint for auth check
-      const response = await fetch(`${API}/auth/session`, {
+      const response = await fetch(`${getApiBaseUrl()}/auth/session`, {
         credentials: 'include'
       });
       
@@ -43,14 +41,14 @@ export const AuthProvider = ({ children }) => {
         }
       } else if (response.status === 401) {
         // Try to refresh token before giving up
-        const refreshResponse = await fetch(`${API}/auth/refresh`, {
+        const refreshResponse = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
           method: 'POST',
           credentials: 'include'
         });
         
         if (refreshResponse.ok) {
           // Token refreshed, check session again
-          const retryResponse = await fetch(`${API}/auth/session`, {
+          const retryResponse = await fetch(`${getApiBaseUrl()}/auth/session`, {
             credentials: 'include'
           });
           if (retryResponse.ok) {
@@ -79,7 +77,7 @@ export const AuthProvider = ({ children }) => {
   }, [checkAuth]);
 
   const login = async (email, password) => {
-    const response = await fetch(`${API}/auth/login`, {
+    const response = await fetch(`${getApiBaseUrl()}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -101,7 +99,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (name, email, password) => {
-    const response = await fetch(`${API}/auth/register`, {
+    const response = await fetch(`${getApiBaseUrl()}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -150,7 +148,7 @@ export const AuthProvider = ({ children }) => {
       body.intended_role = intendedRole;
     }
     
-    const response = await fetch(`${API}/auth/session`, {
+    const response = await fetch(`${getApiBaseUrl()}/auth/session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -172,7 +170,7 @@ export const AuthProvider = ({ children }) => {
    * then issues a normal session (same cookie shape as email login).
    */
   const enterDemo = async ({ persona, buyerSlot = 1, fresh = true }) => {
-    const response = await fetch(`${API}/demo/enter`, {
+    const response = await fetch(`${getApiBaseUrl()}/demo/enter`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -209,7 +207,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await fetch(`${API}/auth/logout`, {
+      await fetch(`${getApiBaseUrl()}/auth/logout`, {
         method: 'POST',
         credentials: 'include'
       });

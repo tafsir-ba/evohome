@@ -1,3 +1,17 @@
+import { isGanttHost } from '../components/gantt/ganttHostUtils';
+
+/**
+ * API base URL. On carib-recon.org use same-origin /api (DO routes to backend).
+ * On evohome CMP use REACT_APP_BACKEND_URL to avoid cross-origin CORS blocks.
+ */
+export function getApiBaseUrl() {
+  if (typeof window !== 'undefined' && isGanttHost()) {
+    return `${window.location.origin}/api`;
+  }
+  const base = (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
+  return `${base}/api`;
+}
+
 /**
  * Authenticated fetch wrapper.
  * Adds Authorization header from localStorage token alongside credentials: 'include'.
