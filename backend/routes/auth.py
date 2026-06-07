@@ -20,6 +20,7 @@ from core.auth import (
 )
 from core.rate_limit import rate_limit_check
 from core.monitoring import capture_auth_failure
+from services.email_service import send_notification_email, send_email_async
 
 logger = logging.getLogger("evohome.auth")
 
@@ -98,7 +99,7 @@ class AuthLogoutResponse(BaseModel):
 
 @router.post("/auth/register")
 async def register_agent(data: AgentRegister, response: Response, request: Request):
-    rate_limit_check(request, "auth_register")
+    await rate_limit_check(request, "auth_register")
     existing = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
 
     if existing:
@@ -133,6 +134,11 @@ async def register_agent(data: AgentRegister, response: Response, request: Reque
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
+    await send_notification_email("welcome_onboarding", data.email, {
+        "name": data.name,
+        "role": "agent",
+        "project_name": "your workspace",
+    })
     token = create_access_token(user_id, "agent")
     _set_session_cookie(response, token)
     return {"user_id": user_id, "email": data.email, "name": data.name, "role": "agent", "token": token}
@@ -140,11 +146,13 @@ async def register_agent(data: AgentRegister, response: Response, request: Reque
 
 @router.post("/auth/login")
 async def login_agent(data: AgentLogin, response: Response, request: Request):
-    rate_limit_check(request, "auth_login")
+    await rate_limit_check(request, "auth_login")
     user = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
     if not user:
         capture_auth_failure("invalid_credentials", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if user.get("is_active", True) is False:
+        raise HTTPException(status_code=403, detail="Account is deactivated. Contact your administrator.")
     if not user.get('password_hash'):
         capture_auth_failure("oauth_only_account", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="This account was created with Google. Please login with Google, or create a password by clicking 'Create Account' with the same email.")
@@ -179,6 +187,11 @@ async def register_buyer(data: BuyerRegister, response: Response):
         client = await db.clients.find_one({"invitation_code": data.invitation_code}, {"_id": 0})
         if client and not client.get('buyer_id'):
             await db.clients.update_one({"client_id": client['client_id']}, {"$set": {"buyer_id": user_id}})
+    await send_notification_email("welcome_onboarding", data.email, {
+        "name": data.name,
+        "role": "buyer",
+        "project_name": "your buyer dashboard",
+    })
     logger.info(f"Buyer registered: {data.email} (user_id: {user_id})")
     token = create_access_token(user_id, "buyer")
     _set_session_cookie(response, token)
@@ -187,11 +200,13 @@ async def register_buyer(data: BuyerRegister, response: Response):
 
 @router.post("/auth/buyer/login")
 async def login_buyer(data: BuyerLogin, response: Response, request: Request):
-    rate_limit_check(request, "auth_login")
+    await rate_limit_check(request, "auth_login")
     user = await db.users.find_one({"email": data.email, "role": "buyer"}, {"_id": 0})
     if not user:
         capture_auth_failure("invalid_credentials", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if user.get("is_active", True) is False:
+        raise HTTPException(status_code=403, detail="Account is deactivated. Contact your administrator.")
     if not user.get('password_hash'):
         capture_auth_failure("oauth_only_account", email=data.email, request=request)
         raise HTTPException(status_code=401, detail="This account was created with Google. Please login with Google, or create a password by clicking 'Create Account' with the same email.")
@@ -331,7 +346,7 @@ async def set_password_for_oauth_user(request: SetPasswordRequest, response: Res
 
 @router.post("/auth/forgot-password")
 async def forgot_password(request: ForgotPasswordRequest, req: Request):
-    rate_limit_check(req, "auth_password_reset")
+    await rate_limit_check(req, "auth_password_reset")
     email = request.email.lower().strip()
     role = request.role
     if role not in ['agent', 'buyer']:
@@ -346,7 +361,6 @@ async def forgot_password(request: ForgotPasswordRequest, req: Request):
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     subject = "Reset your Evohome password"
     html_content = f'<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><h2 style="color:#2563EB">Reset Your Password</h2><p>Hi {user.get("name","there")},</p><p>Click below to create a new password:</p><p style="text-align:center;margin:30px 0"><a href="{reset_link}" style="background:#2563EB;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block">Reset Password</a></p><p style="color:#666;font-size:14px">This link expires in 1 hour.</p></div>'
-    from services.email_service import send_email_async
     await send_email_async(email, subject, html_content)
     return {"message": "If an account exists with this email, you will receive a reset link."}
 
@@ -367,23 +381,6 @@ async def reset_password(request: ResetPasswordRequest):
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"password_hash": password_hash}, "$unset": {"password_reset_token": "", "password_reset_expires": ""}})
     logger.info(f"Password reset successful for user: {user['user_id']}")
     return {"message": "Password reset successful. You can now log in with your new password."}
-
-
-@router.post("/auth/demo/{role}")
-async def demo_login(role: str, response: Response, buyer_num: int = 1):
-    """Demo login — finds demo users by user_id prefix convention (demo_*)."""
-    if role not in ['buyer', 'agent']:
-        raise HTTPException(status_code=400, detail="Invalid role")
-    if role == 'buyer':
-        buyer_id = f"demo_buyer_00{buyer_num}" if buyer_num in [1, 2] else "demo_buyer_001"
-        demo_user = await db.users.find_one({"user_id": buyer_id, "role": "buyer"}, {"_id": 0, "password_hash": 0})
-    else:
-        demo_user = await db.users.find_one({"user_id": {"$regex": "^demo_"}, "role": role}, {"_id": 0, "password_hash": 0})
-    if not demo_user:
-        raise HTTPException(status_code=404, detail="Demo not initialized. Please seed demo data first.")
-    token = create_access_token(demo_user['user_id'], role)
-    _set_session_cookie(response, token)
-    return {"user_id": demo_user['user_id'], "email": demo_user['email'], "name": demo_user['name'], "role": role, "token": token}
 
 
 @router.post("/auth/refresh")

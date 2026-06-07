@@ -35,9 +35,9 @@ init_access_control(db)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
 logger = logging.getLogger(__name__)
 
-# Upload directory
-UPLOAD_DIR = Path("/app/backend/uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+# Upload directory (repo-local so dev/pytest works without /app in Docker-only layouts)
+UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # App version (git SHA if available, else static)
 APP_VERSION = "3.1.0"
@@ -77,7 +77,11 @@ async def lifespan(app: FastAPI):
         await db.notifications.create_index("user_id")
         await db.activities.create_index("activity_id", unique=True)
         await db.activities.create_index("project_id")
-        await db.vault_documents.create_index("vault_id", unique=True)
+        await db.vault_documents.create_index("vault_document_id", unique=True)
+        await db.counters.create_index("counter_key", unique=True)
+        await db.audit_logs.create_index("audit_id", unique=True)
+        await db.timeline_extractions.create_index("extraction_id", unique=True)
+        await db.email_send_locks.create_index("lock_key", unique=True)
         logger.info("Single-field indexes created/verified")
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
@@ -110,10 +114,30 @@ async def lifespan(app: FastAPI):
         await db.activity_recipients.create_index("client_id")
         # Activity replies: batch count and lookup by activity_id
         await db.activity_replies.create_index("activity_id")
+        # Change requests: entity lookup and agent listing
+        await db.change_requests.create_index([("entity_type", 1), ("entity_id", 1)])
+        await db.change_requests.create_index([("agent_id", 1), ("status", 1)])
+        # Decisions: agent listing, buyer lookup
+        await db.decisions.create_index("decision_id", unique=True)
+        await db.decisions.create_index([("agent_id", 1), ("status", 1)])
+        await db.decisions.create_index("project_id")
+        await db.decision_recipients.create_index("decision_id")
+        await db.decision_recipients.create_index("client_id")
         # Notifications: user + read status (unread count query)
         await db.notifications.create_index([("user_id", 1), ("is_read", 1)])
         # Vault: agent vault list
         await db.vault_documents.create_index([("agent_id", 1)])
+        await db.timeline_extractions.create_index([("agent_id", 1), ("created_at", -1)])
+        await db.email_send_locks.create_index([("email", 1), ("category", 1), ("sent_ts", -1)])
+        await db.email_send_locks.create_index("expires_at", expireAfterSeconds=0)
+        # Audit logs: workspace history and actor timelines
+        await db.audit_logs.create_index([("workspace_owner_id", 1), ("created_at", -1)])
+        await db.audit_logs.create_index([("actor_user_id", 1), ("created_at", -1)])
+        # Trace events: TTL index for auto-purge + query indexes
+        await db.trace_events.create_index("created_at", expireAfterSeconds=30 * 24 * 3600)  # 30 days
+        await db.trace_events.create_index([("outcome", 1), ("created_at", -1)])
+        await db.trace_events.create_index([("entity_type", 1), ("entity_id", 1)])
+        await db.trace_events.create_index("request_id")
         logger.info("Compound indexes created/verified")
     except Exception as e:
         logger.warning(f"Compound index creation warning: {e}")
@@ -144,21 +168,68 @@ api_router = APIRouter(prefix="/api")
 # ==================== MIDDLEWARE ====================
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Adds security headers and request ID tracking to all responses."""
+    """Adds security headers, canonical request ID, and auto-tracing to all responses."""
+
+    # Methods that are auto-traced
+    TRACED_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+    # Critical GETs that are explicitly traced
+    TRACED_GETS = {
+        "/api/vault/documents/",  # vault download (matched by prefix + /download suffix)
+        "/api/documents/",        # source-pdf, hero-image GET
+    }
 
     async def dispatch(self, request: Request, call_next):
-        # Generate or reuse request ID
-        request_id = request.headers.get("x-request-id", uuid.uuid4().hex[:16])
+        from core.trace import TraceContext, set_trace_context, clear_trace_context, trace_write, set_trace_user
+
+        # Generate canonical request ID
+        request_id = f"req_{uuid.uuid4().hex[:12]}"
         request.state.request_id = request_id
 
+        # Determine if this request should be traced
+        method = request.method
+        path = request.url.path
+        should_trace = (
+            method in self.TRACED_METHODS
+            or (method == "GET" and any(path.startswith(p) for p in self.TRACED_GETS)
+                and ("/download" in path or "/source-pdf" in path or "/hero-image" in path))
+        )
+        # Never trace internal debug routes or static files
+        if "/internal/debug" in path or "/uploads/" in path or path.startswith("/api/health") or path.startswith("/api/ready"):
+            should_trace = False
+
+        if should_trace:
+            ctx = TraceContext(request_id=request_id, endpoint=path, method=method)
+            set_trace_context(ctx)
+
         start = time.time()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Let FastAPI's exception handlers deal with it
+            clear_trace_context()
+            raise
+
         elapsed_ms = (time.time() - start) * 1000
 
-        # Request tracking
-        response.headers["X-Request-ID"] = request_id
+        # Write trace if applicable
+        if should_trace:
+            outcome = "success" if response.status_code < 400 else (
+                "validation_error" if response.status_code in (400, 422) else
+                "auth_error" if response.status_code in (401, 403) else
+                "not_found" if response.status_code == 404 else
+                "service_error"
+            )
+            try:
+                await trace_write(
+                    response_status=response.status_code,
+                    outcome=outcome,
+                )
+            except Exception as e:
+                logger.warning(f"Trace write failed (non-blocking): {e}")
+                clear_trace_context()
 
-        # Security headers
+        # Response headers
+        response.headers["X-Request-ID"] = request_id
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -167,7 +238,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Log slow requests (>2s)
         if elapsed_ms > 2000:
-            logger.warning(f"Slow request: {request.method} {request.url.path} {elapsed_ms:.0f}ms [rid={request_id}]")
+            logger.warning(f"Slow request: {method} {path} {elapsed_ms:.0f}ms [rid={request_id}]")
 
         return response
 
@@ -175,34 +246,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 
 
-# ==================== GLOBAL EXCEPTION HANDLER ====================
+# ==================== CANONICAL ERROR HANDLERS ====================
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Catch-all for unhandled exceptions. Sanitizes response, logs full context."""
-    request_id = getattr(request.state, 'request_id', uuid.uuid4().hex[:16])
+from core.errors import http_exception_handler, validation_exception_handler, unhandled_exception_handler
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-    # Log full detail server-side
-    context = ErrorContext(
-        request=request,
-        endpoint=str(request.url.path),
-        extra={"request_id": request_id}
-    )
-    error_id = capture_exception(exc, context=context, severity="critical")
-
-    logger.error(f"Unhandled exception [rid={request_id}] [eid={error_id}]: {type(exc).__name__}: {exc}")
-    logger.error(traceback.format_exc())
-
-    # Sanitized response — no stack trace leakage
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "An internal error occurred. Please try again later.",
-            "request_id": request_id,
-            "error_id": error_id
-        },
-        headers={"X-Request-ID": request_id}
-    )
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 
 # ==================== IMPORT AND REGISTER ROUTERS ====================
@@ -231,6 +283,9 @@ from routes.doc_extraction import router as doc_extraction_router
 from routes.workflows import router as workflows_router
 from routes.team_v2 import router as team_router
 from routes.gantt import router as gantt_router
+from routes.change_requests import router as change_requests_router
+from routes.decisions import router as decisions_router
+from routes.buyer_portal import router as buyer_portal_router
 
 for r in [
     auth_router, projects_router, clients_router, documents_router,
@@ -239,7 +294,8 @@ for r in [
     stats_router, vault_router, analytics_router, test_endpoints_router,
     demo_router, billing_router, invitations_router, settings_router,
     admin_router, commands_router, doc_extraction_router, workflows_router,
-    units_router, team_router, gantt_router,
+    units_router, team_router, gantt_router, change_requests_router, decisions_router,
+    buyer_portal_router,
 ]:
     api_router.include_router(r)
 
@@ -336,8 +392,15 @@ async def api_root():
 
 # ==================== MOUNT ====================
 
+# Main API
 app.include_router(api_router)
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+
+# Internal Debug Console — separate from main app, not in api_router
+from routes.debug import router as debug_router
+debug_api_router = APIRouter(prefix="/api")
+debug_api_router.include_router(debug_router)
+app.include_router(debug_api_router)
 
 # CORS — config-driven, no wildcard fallback
 _cors_origins = list(app_config.CORS_ORIGINS)

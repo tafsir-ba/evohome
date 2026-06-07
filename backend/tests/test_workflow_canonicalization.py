@@ -29,10 +29,10 @@ TEMPLATE_IDS = [
 @pytest.fixture(scope="module")
 def agent_token():
     """Get agent auth token via demo login."""
-    resp = requests.post(f"{BASE_URL}/api/auth/demo/agent", json={
-        "email": "demo.agent@upgradeflow.com",
-        "password": "demo123"
-    })
+    resp = requests.post(
+        f"{BASE_URL}/api/demo/enter",
+        json={"persona": "agent", "fresh": False},
+    )
     if resp.status_code != 200:
         pytest.skip(f"Demo agent login failed: {resp.status_code} - {resp.text}")
     data = resp.json()
@@ -436,11 +436,11 @@ class TestDemoSeedAndLogin:
         print(f"  Demo seed: {data['message']}")
 
     def test_demo_agent_login_works(self):
-        """POST /api/auth/demo/agent — still works."""
-        resp = requests.post(f"{BASE_URL}/api/auth/demo/agent", json={
-            "email": "demo.agent@upgradeflow.com",
-            "password": "demo123"
-        })
+        """POST /api/demo/enter — agent persona."""
+        resp = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "agent", "fresh": False},
+        )
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
         
         data = resp.json()
@@ -448,8 +448,8 @@ class TestDemoSeedAndLogin:
         print("  Demo agent login: SUCCESS")
 
     def test_demo_buyer_login_works(self):
-        """POST /api/auth/demo/buyer?buyer_num=1 — still works."""
-        resp = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+        """POST /api/demo/enter — buyer slot 1."""
+        resp = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
         
         data = resp.json()

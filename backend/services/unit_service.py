@@ -38,6 +38,7 @@ async def create_unit(
         "agent_id": agent_id,
         "unit_reference": unit_reference,
         "assigned_client_id": None,
+        "assigned_client_ids": [],
         "is_available": True,
         "status": "active",
         "notes": notes,
@@ -60,14 +61,24 @@ async def list_units_by_project(project_id: str) -> List[Dict[str, Any]]:
 
     # Enrich with assigned client name
     for unit in units:
-        if unit.get('assigned_client_id'):
-            client = await db.clients.find_one(
-                {"client_id": unit['assigned_client_id']},
-                {"_id": 0, "name": 1}
-            )
-            unit['assigned_client_name'] = client['name'] if client else None
+        assigned_ids = unit.get("assigned_client_ids") or (
+            [unit["assigned_client_id"]] if unit.get("assigned_client_id") else []
+        )
+        if assigned_ids:
+            assigned_clients = await db.clients.find(
+                {"client_id": {"$in": assigned_ids}},
+                {"_id": 0, "name": 1},
+            ).to_list(100)
+            names = [c.get("name") for c in assigned_clients if c.get("name")]
+            unit["assigned_client_names"] = names
+            unit["assigned_clients_count"] = len(names)
+            unit["assigned_client_name"] = names[0] if names else None  # backward compatibility
+            unit["is_available"] = False
         else:
-            unit['assigned_client_name'] = None
+            unit["assigned_client_names"] = []
+            unit["assigned_clients_count"] = 0
+            unit["assigned_client_name"] = None
+            unit["is_available"] = True
 
     return units
 
@@ -97,11 +108,14 @@ async def assign_client(unit_id: str, client_id: str) -> Optional[Dict[str, Any]
     """Assign a client to a unit."""
     await db.units.update_one(
         {"unit_id": unit_id},
-        {"$set": {
-            "assigned_client_id": client_id,
-            "is_available": False,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }}
+        {
+            "$addToSet": {"assigned_client_ids": client_id},
+            "$set": {
+                "assigned_client_id": client_id,
+                "is_available": False,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        },
     )
     return await get_unit(unit_id)
 
@@ -110,17 +124,28 @@ async def unassign_client(unit_id: str) -> Optional[Dict[str, Any]]:
     """Remove client assignment from a unit."""
     await db.units.update_one(
         {"unit_id": unit_id},
-        {"$set": {
-            "assigned_client_id": None,
-            "is_available": True,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }}
+        {
+            "$set": {
+                "assigned_client_id": None,
+                "assigned_client_ids": [],
+                "is_available": True,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
     )
     return await get_unit(unit_id)
 
 
 async def delete_unit(unit_id: str) -> bool:
-    """Delete a unit."""
+    """Delete a unit if it is not linked to active client references."""
+    unit = await get_unit(unit_id)
+    if not unit:
+        return False
+
+    linked_clients = await db.clients.count_documents({"unit_id": unit_id})
+    if linked_clients > 0:
+        raise ValueError("Cannot delete unit while client records still reference it")
+
     result = await db.units.delete_one({"unit_id": unit_id})
     return result.deleted_count > 0
 

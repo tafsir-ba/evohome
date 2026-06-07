@@ -77,25 +77,27 @@ class TestDemoLogin:
     
     def test_demo_agent_login(self):
         """Test demo agent login"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent", 
-                                 json={})
+        response = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "agent", "fresh": False},
+        )
         assert response.status_code == 200
         data = response.json()
         assert "user_id" in data
         assert data["role"] == "agent"
-        assert data["is_demo"] == True
         assert "token" in data
         print(f"PASS: Demo agent login successful - user: {data['name']}")
         return data["token"]
     
     def test_demo_buyer_login(self):
         """Test demo buyer login"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1", 
-                                 json={})
+        response = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["role"] == "buyer"
-        assert data["is_demo"] == True
         print(f"PASS: Demo buyer login successful - user: {data['name']}")
 
 
@@ -105,7 +107,10 @@ class TestAgentQuotesAPI:
     @pytest.fixture
     def auth_token(self):
         """Get demo agent authentication token"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent", json={})
+        response = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "agent", "fresh": False},
+        )
         if response.status_code == 200:
             return response.json().get("token")
         pytest.skip("Demo login failed")
@@ -179,7 +184,10 @@ class TestChangeRequestedQuote:
     @pytest.fixture
     def auth_token(self):
         """Get demo agent authentication token"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent", json={})
+        response = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "agent", "fresh": False},
+        )
         if response.status_code == 200:
             return response.json().get("token")
         pytest.skip("Demo login failed")

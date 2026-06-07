@@ -8,11 +8,13 @@ Recipients are explicit. Attachments inherit ownership from activity.
 import os
 import uuid
 import logging
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from database import db
 from services.notification_service import emit_notification, emit_email, emit_realtime
+from services.recipient_scope_service import get_buyer_scope, expand_client_ids_to_unit_peers
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,15 @@ VALID_ACTIVITY_TYPES = {"message", "image", "pdf", "status"}
 
 
 # ── Helpers ──
+
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs from row dicts without raising KeyError."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
 
 async def get_buyer_context(buyer_id: str) -> Optional[Dict[str, Any]]:
     """Get unit/project context for a buyer via client linkage."""
@@ -39,6 +50,39 @@ async def get_buyer_context(buyer_id: str) -> Optional[Dict[str, Any]]:
         "unit_id": unit.get('unit_id') if unit else None,
         "unit_reference": unit.get('unit_reference') if unit else client.get('unit_reference'),
     }
+
+
+async def _get_buyer_access_scope(buyer_id: str) -> Dict[str, Any]:
+    """
+    Resolve all buyer-linked clients and same-unit peer clients.
+
+    This guarantees multi-owner units see the same activity stream, including
+    legacy posts that were originally sent to only one owner client_id.
+    """
+    scope = await get_buyer_scope(buyer_id, include_unit_peers=True)
+    buyer_client_ids = scope.get("client_ids", [])
+    peer_client_ids = scope.get("peer_client_ids", [])
+    if not buyer_client_ids:
+        return {"buyer_client_ids": [], "peer_client_ids": [], "activity_ids": []}
+
+    recipients = await db.activity_recipients.find(
+        {"client_id": {"$in": peer_client_ids}},
+        {"_id": 0, "activity_id": 1},
+    ).to_list(5000)
+    activity_ids = list({r.get("activity_id") for r in recipients if r.get("activity_id")})
+
+    return {
+        "buyer_client_ids": buyer_client_ids,
+        "peer_client_ids": peer_client_ids,
+        "activity_ids": activity_ids,
+    }
+
+
+async def _expand_recipient_client_ids(client_ids: List[str]) -> List[str]:
+    """
+    Expand selected recipients to include all co-owners on the same unit(s).
+    """
+    return await expand_client_ids_to_unit_peers(client_ids or [])
 
 
 async def enrich_activity(activity: dict, include_replies: bool = False) -> dict:
@@ -89,8 +133,8 @@ async def batch_enrich_activities(activities: List[dict]) -> List[dict]:
         return []
 
     # Collect unique IDs
-    activity_ids = [a['activity_id'] for a in activities]
-    author_ids = list({a['author_id'] for a in activities})
+    activity_ids = _collect_string_ids(activities, "activity_id")
+    author_ids = list(set(_collect_string_ids(activities, "author_id")))
     project_ids = list({a['project_id'] for a in activities if a.get('project_id')})
     unit_ids = list({a['unit_id'] for a in activities if a.get('unit_id')})
 
@@ -116,7 +160,7 @@ async def batch_enrich_activities(activities: List[dict]) -> List[dict]:
     ).to_list(1000)
 
     # Batch fetch client names for all recipients
-    recipient_client_ids = list({r['client_id'] for r in all_recipients})
+    recipient_client_ids = list(set(_collect_string_ids(all_recipients, "client_id")))
     clients_list = await db.clients.find(
         {"client_id": {"$in": recipient_client_ids}}, {"_id": 0, "client_id": 1, "name": 1}
     ).to_list(len(recipient_client_ids)) if recipient_client_ids else []
@@ -125,8 +169,12 @@ async def batch_enrich_activities(activities: List[dict]) -> List[dict]:
     # Group recipients by activity_id
     recipients_by_activity = {}
     for r in all_recipients:
-        r['client_name'] = client_map.get(r['client_id'], 'Unknown')
-        recipients_by_activity.setdefault(r['activity_id'], []).append(r)
+        client_id = r.get("client_id")
+        activity_id = r.get("activity_id")
+        if not isinstance(activity_id, str) or not activity_id:
+            continue
+        r['client_name'] = client_map.get(client_id, 'Unknown') if isinstance(client_id, str) else 'Unknown'
+        recipients_by_activity.setdefault(activity_id, []).append(r)
 
     # Batch count replies using aggregation
     reply_counts_pipeline = [
@@ -162,6 +210,7 @@ async def create_and_distribute_activity(
     file_size: Optional[int],
     unit_id: Optional[str],
     agent_user: dict,
+    stored_filename: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create activity, link recipients, send notifications. Full canonical flow."""
     now = datetime.now(timezone.utc).isoformat()
@@ -182,18 +231,33 @@ async def create_and_distribute_activity(
         "created_at": now,
         "updated_at": now,
     }
+    if stored_filename:
+        doc["stored_filename"] = stored_filename
     await db.activities.insert_one(doc)
 
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "name": 1})
 
-    for client_id in recipient_client_ids:
+    expanded_recipients = await _expand_recipient_client_ids(recipient_client_ids)
+    recipient_clients = await db.clients.find(
+        {"client_id": {"$in": expanded_recipients}},
+        {"_id": 0, "client_id": 1, "buyer_id": 1},
+    ).to_list(len(expanded_recipients))
+    buyer_by_client = {c["client_id"]: c.get("buyer_id") for c in recipient_clients if c.get("client_id")}
+    notified_buyers = set()
+
+    for client_id in expanded_recipients:
         await db.activity_recipients.insert_one({
             "recipient_id": f"rcpt_{uuid.uuid4().hex[:8]}",
             "activity_id": activity_id,
             "client_id": client_id,
             "created_at": now,
         })
+        buyer_id = buyer_by_client.get(client_id)
+        if buyer_id and buyer_id in notified_buyers:
+            continue
         await _notify_recipient(client_id, activity_id, activity_type, content, project, agent_user)
+        if buyer_id:
+            notified_buyers.add(buyer_id)
 
     result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
     return await enrich_activity(result)
@@ -211,13 +275,16 @@ async def _notify_recipient(client_id, activity_id, activity_type, content, proj
     if not buyer:
         return
 
+    from core.notification_routing import buyer_query
+
+    pid = project.get('project_id') if project else None
     await emit_notification(
         user_id=client['buyer_id'],
         title="New Update from Your Agent",
         message=content[:100] if content else f"New {activity_type} posted",
         notification_type="feed_update",
-        link="/buyer/dashboard",
-        metadata={"activity_id": activity_id, "project_id": project.get('project_id') if project else None},
+        link=buyer_query("updates", activity_id=activity_id, project_id=pid or ""),
+        metadata={"activity_id": activity_id, "project_id": pid},
     )
 
     await emit_realtime(
@@ -245,6 +312,8 @@ async def _notify_recipient(client_id, activity_id, activity_type, content, proj
 async def list_activities(
     user_id: str,
     role: str,
+    agent_scope_id: Optional[str] = None,
+    accessible_project_ids: Optional[List[str]] = None,
     project_id: Optional[str] = None,
     client_id: Optional[str] = None,
     unit_id: Optional[str] = None,
@@ -256,25 +325,40 @@ async def list_activities(
     if role == 'buyer':
         return await _list_buyer_activities(user_id, activity_type, limit, offset)
     return await _list_agent_activities(
-        user_id, project_id, client_id, unit_id, activity_type, limit, offset
+        user_id, agent_scope_id, accessible_project_ids, project_id, client_id, unit_id, activity_type, limit, offset
     )
 
 
 async def _list_agent_activities(
-    agent_id, project_id, client_id, unit_id, activity_type, limit, offset
+    user_id, agent_scope_id, accessible_project_ids, project_id, client_id, unit_id, activity_type, limit, offset
 ):
     query = {}
+    scoped_project_ids = list(accessible_project_ids or [])
+    has_explicit_scope = accessible_project_ids is not None
+    if has_explicit_scope and not scoped_project_ids:
+        return {"activities": [], "total": 0, "limit": limit, "offset": offset}
+    if scoped_project_ids:
+        query["project_id"] = {"$in": scoped_project_ids}
     if project_id:
         query["project_id"] = project_id
     if client_id:
         recs = await db.activity_recipients.find(
             {"client_id": client_id}, {"_id": 0, "activity_id": 1}
         ).to_list(1000)
-        query["activity_id"] = {"$in": [r['activity_id'] for r in recs]} if recs else {"$in": []}
+        query["activity_id"] = {"$in": _collect_string_ids(recs, "activity_id")} if recs else {"$in": []}
     if unit_id:
         query["unit_id"] = unit_id
     if not project_id and not client_id and not unit_id:
-        query["author_id"] = agent_id
+        if scoped_project_ids:
+            query["project_id"] = {"$in": scoped_project_ids}
+        elif agent_scope_id and not has_explicit_scope:
+            projects = await db.projects.find(
+                {"agent_id": agent_scope_id}, {"_id": 0, "project_id": 1}
+            ).to_list(2000)
+            project_ids = _collect_string_ids(projects, "project_id")
+            query["project_id"] = {"$in": project_ids}
+        else:
+            query["author_id"] = user_id
     if activity_type:
         query["type"] = activity_type
 
@@ -287,18 +371,12 @@ async def _list_agent_activities(
 
 
 async def _list_buyer_activities(buyer_id, activity_type, limit, offset):
-    ctx = await get_buyer_context(buyer_id)
-    if not ctx:
+    scope = await _get_buyer_access_scope(buyer_id)
+    activity_ids = scope.get("activity_ids", [])
+    if not activity_ids:
         return {"activities": [], "total": 0, "limit": limit, "offset": offset}
 
-    recs = await db.activity_recipients.find(
-        {"client_id": ctx['client_id']}, {"_id": 0, "activity_id": 1}
-    ).to_list(1000)
-    ids = [r['activity_id'] for r in recs]
-    if not ids:
-        return {"activities": [], "total": 0, "limit": limit, "offset": offset}
-
-    query = {"activity_id": {"$in": ids}}
+    query = {"activity_id": {"$in": activity_ids}}
     if activity_type:
         query["type"] = activity_type
 
@@ -321,34 +399,57 @@ async def get_activity_detail(activity_id: str) -> Optional[Dict[str, Any]]:
 
 
 async def can_buyer_access_activity(buyer_id: str, activity_id: str) -> bool:
-    """Check buyer has access via recipient linkage."""
-    ctx = await get_buyer_context(buyer_id)
-    if not ctx:
+    """Check buyer has access via own or same-unit recipient linkage."""
+    scope = await _get_buyer_access_scope(buyer_id)
+    if not scope.get("peer_client_ids"):
         return False
     return bool(await db.activity_recipients.find_one({
-        "activity_id": activity_id, "client_id": ctx['client_id'],
+        "activity_id": activity_id,
+        "client_id": {"$in": scope["peer_client_ids"]},
     }))
 
 
 async def update_activity(
-    activity_id: str, author_id: str, title: Optional[str], content: Optional[str]
+    activity_id: str, author_id: str, updates: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
-    """Update activity title/content. Author only."""
+    """Update activity content/project/recipients. Author only."""
     activity = await db.activities.find_one(
         {"activity_id": activity_id, "author_id": author_id}, {"_id": 0}
     )
     if not activity:
         return None
 
-    updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    if title is not None:
-        updates['title'] = title
-    if content is not None:
-        updates['content'] = content
+    update_data: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if "title" in updates:
+        update_data["title"] = updates.get("title")
+    if "content" in updates:
+        update_data["content"] = updates.get("content")
+    if "project_id" in updates and updates.get("project_id"):
+        update_data["project_id"] = updates["project_id"]
 
-    await db.activities.update_one({"activity_id": activity_id}, {"$set": updates})
+    if "client_ids" in updates:
+        client_ids = []
+        seen = set()
+        for cid in updates.get("client_ids") or []:
+            v = str(cid or "").strip()
+            if v and v not in seen:
+                seen.add(v)
+                client_ids.append(v)
+
+        # Replace recipients list for this activity
+        await db.activity_recipients.delete_many({"activity_id": activity_id})
+        now = datetime.now(timezone.utc).isoformat()
+        for client_id in client_ids:
+            await db.activity_recipients.insert_one({
+                "recipient_id": f"rcpt_{uuid.uuid4().hex[:8]}",
+                "activity_id": activity_id,
+                "client_id": client_id,
+                "created_at": now,
+            })
+
+    await db.activities.update_one({"activity_id": activity_id}, {"$set": update_data})
     result = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
-    return result
+    return await enrich_activity(result)
 
 
 async def delete_activity(activity_id: str, author_id: str) -> bool:
@@ -359,11 +460,37 @@ async def delete_activity(activity_id: str, author_id: str) -> bool:
     if not activity:
         return False
 
+    from services import file_service
+
+    sf = activity.get("stored_filename")
+    if not sf and activity.get("file_url"):
+        sf = file_service.stored_filename_from_public_url(activity["file_url"])
+    if sf:
+        try:
+            file_service.delete_file(sf)
+        except Exception as e:
+            logger.warning("delete activity file storage failed activity_id=%s: %s", activity_id, e)
+
     if activity.get('file_path') and os.path.exists(activity['file_path']):
         try:
             os.remove(activity['file_path'])
         except Exception:
             pass
+
+    # Legacy: files written only under backend/uploads/activities/ (not file_service)
+    fu = activity.get("file_url") or ""
+    if "/activities/files/" in fu:
+        rel = fu.split("/activities/files/", 1)[-1].split("?")[0]
+        legacy_dir = Path(__file__).resolve().parent.parent / "uploads" / "activities"
+        parts = [p for p in rel.replace("\\", "/").split("/") if p and p != "."]
+        if parts and ".." not in parts:
+            try:
+                target = legacy_dir.joinpath(*parts).resolve()
+                target.relative_to(legacy_dir.resolve())
+                if target.is_file():
+                    target.unlink()
+            except (OSError, ValueError):
+                pass
 
     await db.activity_replies.delete_many({"activity_id": activity_id})
     await db.activity_recipients.delete_many({"activity_id": activity_id})
@@ -437,7 +564,7 @@ async def send_draft_activity(activity_id: str, author_id: str, agent_user: dict
     if not activity or not activity.get('is_draft'):
         return None
 
-    recipients = activity.get('draft_recipients', [])
+    recipients = await _expand_recipient_client_ids(activity.get('draft_recipients', []))
     if not recipients:
         return None
 
@@ -450,6 +577,13 @@ async def send_draft_activity(activity_id: str, author_id: str, agent_user: dict
     project = await db.projects.find_one(
         {"project_id": activity['project_id']}, {"_id": 0, "name": 1}
     )
+    recipient_clients = await db.clients.find(
+        {"client_id": {"$in": recipients}},
+        {"_id": 0, "client_id": 1, "buyer_id": 1},
+    ).to_list(len(recipients))
+    buyer_by_client = {c["client_id"]: c.get("buyer_id") for c in recipient_clients if c.get("client_id")}
+    notified_buyers = set()
+
     for client_id in recipients:
         await db.activity_recipients.insert_one({
             "recipient_id": f"rcpt_{uuid.uuid4().hex[:8]}",
@@ -457,10 +591,15 @@ async def send_draft_activity(activity_id: str, author_id: str, agent_user: dict
             "client_id": client_id,
             "created_at": now,
         })
+        buyer_id = buyer_by_client.get(client_id)
+        if buyer_id and buyer_id in notified_buyers:
+            continue
         await _notify_recipient(
             client_id, activity_id, activity.get('type', 'message'),
             activity.get('content'), project, agent_user
         )
+        if buyer_id:
+            notified_buyers.add(buyer_id)
 
     updated = await db.activities.find_one({"activity_id": activity_id}, {"_id": 0})
     return await enrich_activity(updated)
@@ -489,7 +628,12 @@ async def mark_seen(user_id: str) -> str:
     return now
 
 
-async def get_unread_count(user_id: str, role: str) -> Dict[str, Any]:
+async def get_unread_count(
+    user_id: str,
+    role: str,
+    agent_scope_id: Optional[str] = None,
+    accessible_project_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Count activities newer than last_seen_at."""
     tracking = await db.user_activity_tracking.find_one(
         {"user_id": user_id}, {"_id": 0}
@@ -497,18 +641,22 @@ async def get_unread_count(user_id: str, role: str) -> Dict[str, Any]:
     last_seen = tracking.get('last_seen_at') if tracking else None
 
     if role == 'buyer':
-        ctx = await get_buyer_context(user_id)
-        if not ctx:
-            return {"unread_count": 0, "last_seen_at": last_seen}
-        recs = await db.activity_recipients.find(
-            {"client_id": ctx['client_id']}, {"_id": 0, "activity_id": 1}
-        ).to_list(1000)
-        ids = [r['activity_id'] for r in recs]
+        scope = await _get_buyer_access_scope(user_id)
+        ids = scope.get("activity_ids", [])
         if not ids:
             return {"unread_count": 0, "last_seen_at": last_seen}
         query = {"activity_id": {"$in": ids}}
     else:
-        query = {"author_id": user_id}
+        if accessible_project_ids is not None:
+            query = {"project_id": {"$in": list(accessible_project_ids)}}
+        elif agent_scope_id:
+            projects = await db.projects.find(
+                {"agent_id": agent_scope_id}, {"_id": 0, "project_id": 1}
+            ).to_list(2000)
+            project_ids = _collect_string_ids(projects, "project_id")
+            query = {"project_id": {"$in": project_ids}}
+        else:
+            query = {"author_id": user_id}
 
     if last_seen:
         query["created_at"] = {"$gt": last_seen}

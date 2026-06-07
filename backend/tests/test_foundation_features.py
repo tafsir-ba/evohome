@@ -22,7 +22,7 @@ class TestFoundationFeatures:
         """Setup - login as demo agent"""
         # Login as demo agent
         self.session = requests.Session()
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Demo login failed: {res.text}"
         self.agent_data = res.json()
         self.token = self.agent_data.get('token')
@@ -423,7 +423,7 @@ class TestClientUnitValidation:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.session = requests.Session()
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.agent_data = res.json()
         self.token = self.agent_data.get('token')
@@ -469,9 +469,11 @@ class TestClientUnitValidation:
         print(f"Client linked to unit: {client.get('unit_reference')}")
         
         # Cleanup - delete client first (unit might be in use)
-        self.session.delete(f"{BASE_URL}/api/clients/{client['client_id']}")
-        # Then delete unit
-        self.session.delete(f"{BASE_URL}/api/projects/{self.demo_project['project_id']}/units/{new_unit['unit_id']}")
+        del_client = self.session.delete(f"{BASE_URL}/api/clients/{client['client_id']}")
+        assert del_client.status_code == 200, f"Client cleanup failed: {del_client.status_code}"
+        # Then delete unit via canonical path
+        del_unit = self.session.delete(f"{BASE_URL}/api/units/{new_unit['unit_id']}")
+        assert del_unit.status_code == 200, f"Unit cleanup failed: {del_unit.status_code}"
         print("PASS: Unit->Client flow works")
 
 
@@ -481,7 +483,7 @@ class TestEmailNotificationTemplates:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.session = requests.Session()
-        res = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.agent_data = res.json()
         self.token = self.agent_data.get('token')

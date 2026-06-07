@@ -25,7 +25,7 @@ def generate_unique_email():
 def agent_session():
     """Get authenticated agent session using demo login"""
     session = requests.Session()
-    response = session.post(f"{BASE_URL}/api/auth/demo/agent")
+    response = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
     assert response.status_code == 200, f"Demo agent login failed: {response.text}"
     token = response.json()['token']
     session.headers.update({
@@ -39,7 +39,10 @@ def agent_session():
 def buyer_session():
     """Get authenticated buyer session using demo login"""
     session = requests.Session()
-    response = session.post(f"{BASE_URL}/api/auth/demo/buyer")
+    response = session.post(
+        f"{BASE_URL}/api/demo/enter",
+        json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+    )
     assert response.status_code == 200, f"Demo buyer login failed: {response.text}"
     token = response.json()['token']
     session.headers.update({
@@ -217,7 +220,7 @@ class TestBuyerRegistrationAutoLink:
         """
         # Step 1: Get agent token
         session = requests.Session()
-        login_response = session.post(f"{BASE_URL}/api/auth/demo/agent")
+        login_response = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert login_response.status_code == 200
         agent_token = login_response.json()['token']
         

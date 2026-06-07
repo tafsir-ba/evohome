@@ -19,11 +19,13 @@ import openai
 import fitz
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 
 from database import db
 from core.auth import get_current_agent
+from core.access_scope import resolve_agent_access_scope
+from core.access_control import can_access_project, can_access_document
 from services.email_service import send_email_async, RESEND_API_KEY
 from services.ai_service import OPENAI_API_KEY
 from services.workflow_service import (
@@ -119,8 +121,16 @@ async def get_workflow_template(template_id: str, user: dict = Depends(get_curre
 @router.post("/workflows/execute")
 async def execute_workflow(request: WorkflowExecuteRequest, user: dict = Depends(get_current_agent)):
     """Start executing a workflow. All mutations delegated to canonical services."""
+    scope = await resolve_agent_access_scope(user)
+    agent_id = scope.workspace_owner_id
+    context_project_id = request.context.get("project_id")
+    if context_project_id:
+        scope.ensure_project_access(context_project_id)
+    context_document_id = request.context.get("document_id")
+    if context_document_id and not await can_access_document(user, context_document_id):
+        raise HTTPException(status_code=403, detail="Access denied to this document")
+
     service = get_workflow_service(db)
-    agent_id = user['user_id']
 
     # Resolve agent display name + email for outbound emails
     agent_name, agent_email = await _resolve_agent_identity(user)
@@ -128,6 +138,21 @@ async def execute_workflow(request: WorkflowExecuteRequest, user: dict = Depends
     try:
         # Enrich context with entity details from DB (read-only lookups)
         enriched_context = await _enrich_context(dict(request.context))
+        if enriched_context.get("project_id"):
+            scope.ensure_project_access(enriched_context["project_id"])
+        if enriched_context.get("step_id"):
+            step = await db.timeline_steps.find_one(
+                {"step_id": enriched_context["step_id"]},
+                {"_id": 0, "project_id": 1},
+            )
+            if not step:
+                raise HTTPException(status_code=403, detail="Access denied to this timeline step")
+            try:
+                scope.ensure_project_access(step.get("project_id"))
+            except HTTPException:
+                raise HTTPException(status_code=403, detail="Access denied to this timeline step")
+            if enriched_context.get("project_id") and step.get("project_id") != enriched_context.get("project_id"):
+                raise HTTPException(status_code=400, detail="Workflow context project does not match timeline step project")
 
         execution = await service.create_execution(
             template_id=request.template_id,
@@ -168,16 +193,21 @@ async def get_workflow_execution(execution_id: str, user: dict = Depends(get_cur
     execution = await service.get_execution(execution_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    if execution.agent_id != user['user_id']:
+    scope = await resolve_agent_access_scope(user)
+    if execution.agent_id != scope.workspace_owner_id:
         raise HTTPException(status_code=403, detail="Not authorized")
     return service.get_execution_summary(execution)
 
 
 @router.get("/workflows/history")
-async def get_workflow_history(limit: int = 20, user: dict = Depends(get_current_agent)):
+async def get_workflow_history(
+    limit: int = Query(20, ge=1, le=100),
+    user: dict = Depends(get_current_agent),
+):
     """Get recent workflow executions for the agent."""
     service = get_workflow_service(db)
-    executions = await service.get_agent_executions(user['user_id'], limit)
+    scope = await resolve_agent_access_scope(user)
+    executions = await service.get_agent_executions(scope.workspace_owner_id, limit)
     return {"executions": [service.get_execution_summary(e) for e in executions]}
 
 
@@ -186,7 +216,8 @@ async def cancel_workflow(execution_id: str, user: dict = Depends(get_current_ag
     """Cancel a workflow execution."""
     service = get_workflow_service(db)
     try:
-        execution = await service.cancel_execution(execution_id, user['user_id'])
+        scope = await resolve_agent_access_scope(user)
+        execution = await service.cancel_execution(execution_id, scope.workspace_owner_id)
         return service.get_execution_summary(execution)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -211,12 +242,13 @@ async def retry_workflow_step(
     execution = await service.get_execution(execution_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    if execution.agent_id != user['user_id']:
+    scope = await resolve_agent_access_scope(user)
+    if execution.agent_id != scope.workspace_owner_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     agent_name, agent_email = await _resolve_agent_identity(user)
     step_warnings: Dict[str, str] = {}
-    action_executor = _build_action_executor(user['user_id'], agent_name, agent_email, step_warnings, user)
+    action_executor = _build_action_executor(scope.workspace_owner_id, agent_name, agent_email, step_warnings, user)
 
     try:
         execution = await service.retry_step(execution, step_index, action_executor)
@@ -246,14 +278,18 @@ async def get_workflow_selectors(
     user: dict = Depends(get_current_agent),
 ):
     """Get items for workflow selectors (documents, timeline steps, clients)."""
-    agent_id = user['user_id']
+    scope = await resolve_agent_access_scope(user)
+    agent_id = scope.workspace_owner_id
+    accessible_project_ids = scope.accessible_project_ids
+    if project_id:
+        scope.ensure_project_access(project_id)
 
     if selector_type == "document":
-        return await _select_documents(agent_id, project_id)
+        return await _select_documents(agent_id, project_id, accessible_project_ids)
     elif selector_type == "timeline_step":
-        return await _select_timeline_steps(agent_id, project_id)
+        return await _select_timeline_steps(agent_id, project_id, accessible_project_ids)
     elif selector_type == "client":
-        return await _select_clients(agent_id, project_id)
+        return await _select_clients(agent_id, project_id, accessible_project_ids)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown selector type: {selector_type}")
 
@@ -273,12 +309,20 @@ def _build_action_executor(
         result: Dict[str, Any] = {}
 
         if action == "create_client":
+            target_project_id = params.get("project_id") or context.get("project_id")
+            if target_project_id:
+                try:
+                    (await resolve_agent_access_scope(agent_user)).ensure_project_access(target_project_id)
+                except HTTPException:
+                    result["_warning"] = "Access denied to target project"
+                    step_warnings["create_client"] = "Access denied to target project"
+                    return result
             client = await client_service.create_client(
                 agent_id=agent_id,
                 name=params.get("client_name") or context.get("client_name", "New Client"),
                 email=params.get("client_email") or context.get("client_email"),
                 phone=params.get("client_phone") or context.get("client_phone"),
-                project_id=params.get("project_id") or context.get("project_id"),
+                project_id=target_project_id,
             )
             result["client_id"] = client["client_id"]
             result["client_email"] = client.get("email")
@@ -296,6 +340,20 @@ def _build_action_executor(
         elif action == "complete_timeline_step":
             step_id = params.get("step_id") or context.get("step_id")
             if step_id:
+                step = await db.timeline_steps.find_one(
+                    {"step_id": step_id},
+                    {"_id": 0, "project_id": 1},
+                )
+                if not step:
+                    result["_warning"] = "Access denied to timeline step"
+                    step_warnings["complete_timeline_step"] = "Access denied to timeline step"
+                    return result
+                try:
+                    (await resolve_agent_access_scope(agent_user)).ensure_project_access(step.get("project_id"))
+                except HTTPException:
+                    result["_warning"] = "Access denied to timeline step"
+                    step_warnings["complete_timeline_step"] = "Access denied to timeline step"
+                    return result
                 await step_service.update_step(step_id, {"status": "completed"})
                 result["step_status"] = "completed"
 
@@ -412,9 +470,17 @@ def _build_action_executor(
                 result["emails_sent"] = 0
                 result["_warning"] = "No project_id provided"
                 step_warnings["send_project_announcement_email"] = "No project_id provided"
-            elif not RESEND_API_KEY:
+            else:
+                try:
+                    (await resolve_agent_access_scope(agent_user)).ensure_project_access(project_id)
+                except HTTPException:
+                    result["emails_sent"] = 0
+                    result["_warning"] = "Access denied to this project"
+                    step_warnings["send_project_announcement_email"] = "Access denied to this project"
+                    return result
+            if not RESEND_API_KEY:
                 clients = await db.clients.find(
-                    {"project_id": project_id, "email": {"$exists": True, "$ne": None}},
+                    {"project_id": project_id, "agent_id": agent_id, "email": {"$exists": True, "$ne": None}},
                     {"_id": 0},
                 ).to_list(100)
                 result["emails_sent"] = 0
@@ -423,14 +489,14 @@ def _build_action_executor(
                 step_warnings["send_project_announcement_email"] = "Email service not configured"
             else:
                 clients = await db.clients.find(
-                    {"project_id": project_id, "email": {"$exists": True, "$ne": None}},
+                    {"project_id": project_id, "agent_id": agent_id, "email": {"$exists": True, "$ne": None}},
                     {"_id": 0, "email": 1, "name": 1},
                 ).to_list(100)
                 sent, failures = 0, []
                 for c in clients:
                     if c.get("email"):
                         try:
-                            await send_email_async(
+                            email_result = await send_email_async(
                                 c["email"],
                                 f"Project Update: {message_title}",
                                 _announcement_email_html(
@@ -440,7 +506,10 @@ def _build_action_executor(
                                     agent_name=agent_name,
                                 ),
                             )
-                            sent += 1
+                            if isinstance(email_result, dict) and email_result.get("status") == "success":
+                                sent += 1
+                            else:
+                                failures.append(c["email"])
                         except Exception as e:
                             failures.append(c["email"])
                             logger.warning(f"Failed announcement to {c['email']}: {e}")
@@ -534,8 +603,16 @@ async def _send_workflow_email(
         step_warnings[step_name] = "Email service not configured"
         return {"sent": False, "warning": "Email service not configured"}
     try:
-        await send_email_async(to, subject, html)
-        return {"sent": True}
+        result = await send_email_async(to, subject, html)
+        if isinstance(result, dict) and result.get("status") == "success":
+            return {"sent": True}
+        warning = "Email delivery skipped or failed"
+        if isinstance(result, dict) and result.get("reason"):
+            warning = f"Email delivery skipped: {result.get('reason')}"
+        elif isinstance(result, dict) and result.get("error"):
+            warning = f"Email delivery failed: {str(result.get('error'))[:100]}"
+        step_warnings[step_name] = warning
+        return {"sent": False, "warning": warning}
     except Exception as e:
         warning = f"Email delivery failed: {str(e)[:100]}"
         step_warnings[step_name] = warning
@@ -634,8 +711,12 @@ def _announcement_email_html(client_name: str, message_title: str, message_conte
 
 # ── Internal: Selector Queries (read-only) ──
 
-async def _select_documents(agent_id: str, project_id: Optional[str]) -> Dict:
+async def _select_documents(agent_id: str, project_id: Optional[str], accessible_project_ids: Optional[List[str]] = None) -> Dict:
     query: Dict[str, Any] = {"agent_id": agent_id}
+    if accessible_project_ids is not None:
+        if not accessible_project_ids:
+            return {"items": []}
+        query["project_id"] = {"$in": accessible_project_ids}
     if project_id:
         query["project_id"] = project_id
     docs = await db.documents.find(
@@ -649,14 +730,22 @@ async def _select_documents(agent_id: str, project_id: Optional[str]) -> Dict:
     return {"items": docs}
 
 
-async def _select_timeline_steps(agent_id: str, project_id: Optional[str]) -> Dict:
+async def _select_timeline_steps(agent_id: str, project_id: Optional[str], accessible_project_ids: Optional[List[str]] = None) -> Dict:
     if project_id:
-        timeline = await db.timelines.find_one({"project_id": project_id}, {"_id": 0, "timeline_id": 1})
+        timeline = await db.timelines.find_one(
+            {"project_id": project_id, "agent_id": agent_id},
+            {"_id": 0, "timeline_id": 1},
+        )
         if not timeline:
             return {"items": []}
         query = {"timeline_id": timeline["timeline_id"]}
     else:
-        projects = await db.projects.find({"agent_id": agent_id}, {"_id": 0, "project_id": 1}).to_list(100)
+        project_query: Dict[str, Any] = {"agent_id": agent_id}
+        if accessible_project_ids is not None:
+            if not accessible_project_ids:
+                return {"items": []}
+            project_query["project_id"] = {"$in": accessible_project_ids}
+        projects = await db.projects.find(project_query, {"_id": 0, "project_id": 1}).to_list(100)
         project_ids = [p["project_id"] for p in projects]
         timelines = await db.timelines.find(
             {"project_id": {"$in": project_ids}}, {"_id": 0, "timeline_id": 1},
@@ -682,8 +771,12 @@ async def _select_timeline_steps(agent_id: str, project_id: Optional[str]) -> Di
     return {"items": steps}
 
 
-async def _select_clients(agent_id: str, project_id: Optional[str]) -> Dict:
+async def _select_clients(agent_id: str, project_id: Optional[str], accessible_project_ids: Optional[List[str]] = None) -> Dict:
     query: Dict[str, Any] = {"agent_id": agent_id}
+    if accessible_project_ids is not None:
+        if not accessible_project_ids:
+            return {"items": []}
+        query["project_id"] = {"$in": accessible_project_ids}
     if project_id:
         query["project_id"] = project_id
     clients = await db.clients.find(

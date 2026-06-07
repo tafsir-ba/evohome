@@ -98,6 +98,8 @@ async def update_step(
 
 
 async def delete_step(step_id: str) -> bool:
+    await db.timeline_step_documents.delete_many({"timeline_step_id": step_id})
+    await db.timeline_step_internal_notes.delete_many({"timeline_step_id": step_id})
     result = await db.timeline_steps.delete_one({"step_id": step_id})
     return result.deleted_count > 0
 

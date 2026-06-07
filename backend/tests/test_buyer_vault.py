@@ -32,8 +32,8 @@ class TestBuyerVaultBackend:
     def get_demo_buyer_session(self, buyer_num=1):
         """Login as demo buyer and return session with auth"""
         response = self.session.post(
-            f"{BASE_URL}/api/auth/demo/buyer",
-            params={"buyer_num": buyer_num}
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": buyer_num, "fresh": False}
         )
         if response.status_code == 200:
             token = response.json().get("token")
@@ -43,7 +43,7 @@ class TestBuyerVaultBackend:
     
     def get_demo_agent_session(self):
         """Login as demo agent and return session with auth"""
-        response = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         if response.status_code == 200:
             token = response.json().get("token")
             self.session.headers.update({"Authorization": f"Bearer {token}"})
@@ -152,7 +152,7 @@ class TestBuyerVaultIntegration:
     
     def login_as_agent(self):
         """Login as demo agent"""
-        response = self.agent_session.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = self.agent_session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         if response.status_code == 200:
             token = response.json().get("token")
             self.agent_session.headers.update({
@@ -165,8 +165,8 @@ class TestBuyerVaultIntegration:
     def login_as_buyer(self, buyer_num=1):
         """Login as demo buyer"""
         response = self.buyer_session.post(
-            f"{BASE_URL}/api/auth/demo/buyer",
-            params={"buyer_num": buyer_num}
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": buyer_num, "fresh": False}
         )
         if response.status_code == 200:
             token = response.json().get("token")
@@ -243,7 +243,7 @@ class TestBuyerVaultIntegration:
         """
         # Login buyer 1 (Sophie)
         buyer1_session = requests.Session()
-        resp1 = buyer1_session.post(f"{BASE_URL}/api/auth/demo/buyer", params={"buyer_num": 1})
+        resp1 = buyer1_session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         if resp1.status_code != 200:
             pytest.skip("Could not login as demo buyer 1")
         token1 = resp1.json().get("token")
@@ -251,7 +251,7 @@ class TestBuyerVaultIntegration:
         
         # Login buyer 2 (Thomas)
         buyer2_session = requests.Session()
-        resp2 = buyer2_session.post(f"{BASE_URL}/api/auth/demo/buyer", params={"buyer_num": 2})
+        resp2 = buyer2_session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 2, "fresh": False})
         if resp2.status_code != 200:
             pytest.skip("Could not login as demo buyer 2")
         token2 = resp2.json().get("token")
@@ -278,7 +278,7 @@ class TestBuyerVaultEmptyState:
         session = requests.Session()
         
         # Login as demo buyer
-        response = session.post(f"{BASE_URL}/api/auth/demo/buyer", params={"buyer_num": 2})
+        response = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 2, "fresh": False})
         if response.status_code != 200:
             pytest.skip("Could not login as demo buyer")
         

@@ -20,7 +20,7 @@ def auth_session():
     session = requests.Session()
     
     # Login as demo agent
-    response = session.post(f"{BASE_URL}/api/auth/demo/agent")
+    response = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
     assert response.status_code == 200, f"Demo agent login failed: {response.text}"
     data = response.json()
     token = data.get('token')

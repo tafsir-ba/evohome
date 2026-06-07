@@ -152,7 +152,7 @@ class TestAuthSurgeryDemoLogin:
     
     def test_demo_agent_login_works(self):
         """POST /api/auth/demo/agent works - finds demo user by user_id prefix demo_*"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200, f"Demo agent login failed: {response.text}"
         data = response.json()
         
@@ -167,7 +167,10 @@ class TestAuthSurgeryDemoLogin:
     
     def test_demo_buyer_login_works(self):
         """POST /api/auth/demo/buyer works - finds demo buyer by user_id demo_buyer_001"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/buyer")
+        response = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+        )
         assert response.status_code == 200, f"Demo buyer login failed: {response.text}"
         data = response.json()
         
@@ -182,7 +185,7 @@ class TestAuthSurgeryDemoLogin:
     
     def test_demo_login_response_keys(self):
         """Demo login response has NO is_demo field"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         data = response.json()
         

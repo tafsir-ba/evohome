@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import List, Optional, Literal, Dict, Any
 from io import BytesIO
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Form, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field, EmailStr
 
@@ -287,7 +287,7 @@ async def list_tools(user: dict = Depends(get_current_agent)):
 @router.get("/command/logs")
 async def get_command_logs(
     draft_id: Optional[str] = None,
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=100),
     user: dict = Depends(get_current_agent)
 ):
     """Get command execution logs"""
@@ -305,7 +305,7 @@ async def get_command_logs(
 
 @router.get("/command/history")
 async def get_command_history(
-    limit: int = 20,
+    limit: int = Query(20, ge=1, le=100),
     user: dict = Depends(get_current_agent)
 ):
     """

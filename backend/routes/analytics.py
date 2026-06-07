@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, EmailStr
 
 from database import db
 from core.auth import get_current_user, get_current_agent, get_current_buyer, verify_token
-from core.access_control import can_access_project, can_access_client, can_access_vault_doc, can_access_document, get_accessible_project_ids, get_accessible_client_ids, is_agent, is_buyer
+from core.access_scope import resolve_agent_access_scope
 from core.rate_limit import rate_limit_check, check_rate_limit
 from core.monitoring import capture_exception, capture_auth_failure, capture_payment_error, capture_email_error, capture_ai_error, capture_websocket_error, capture_document_error, ErrorContext
 from core.responses import AuthSessionResponse, AuthLoginResponse, AuthRefreshResponse, AuthLogoutResponse, DocumentResponse, VaultDocumentResponse, NotificationResponse, ActivityResponse, ActivitiesListResponse, SuccessResponse
@@ -49,7 +49,9 @@ async def get_analytics(period: str = "month", user: dict = Depends(get_current_
     Get comprehensive analytics for the agent dashboard.
     Period can be: week, month, quarter, year, all
     """
-    agent_id = user['user_id']
+    scope = await resolve_agent_access_scope(user)
+    agent_id = scope.workspace_owner_id
+    project_filter = scope.project_filter()
     
     # Calculate date filter based on period
     now = datetime.now(timezone.utc)
@@ -66,7 +68,7 @@ async def get_analytics(period: str = "month", user: dict = Depends(get_current_
     # "all" = no date filter
     
     # Build base query
-    base_query = {"agent_id": agent_id}
+    base_query = {"agent_id": agent_id, **project_filter}
     if date_filter:
         base_query["created_at"] = {"$gte": date_filter}
     
@@ -87,7 +89,7 @@ async def get_analytics(period: str = "month", user: dict = Depends(get_current_
     invoice_draft = await db.documents.count_documents({**base_query, "type": "invoice", "status": "Draft"})
     
     # Revenue from paid invoices (no date filter for total revenue)
-    revenue_query = {"agent_id": agent_id, "type": "invoice", "status": "Paid"}
+    revenue_query = {"agent_id": agent_id, "type": "invoice", "status": "Paid", **project_filter}
     if date_filter:
         revenue_query["paid_date"] = {"$gte": date_filter}
     
@@ -105,10 +107,10 @@ async def get_analytics(period: str = "month", user: dict = Depends(get_current_
     pending_amount = sum(inv.get('amount', 0) for inv in pending_invoices)
     
     # Client count (all time, regardless of period)
-    total_clients = await db.clients.count_documents({"agent_id": agent_id})
+    total_clients = await db.clients.count_documents({"agent_id": agent_id, **project_filter})
     
     # Project count (all time)
-    total_projects = await db.projects.count_documents({"agent_id": agent_id})
+    total_projects = await db.projects.count_documents({"agent_id": agent_id, **project_filter})
     
     return {
         "totalQuotes": total_quotes,

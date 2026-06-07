@@ -186,6 +186,8 @@ class DocumentUpdate(BaseModel):
     client_id: Optional[str] = None
     project_id: Optional[str] = None
     unit_id: Optional[str] = None
+    approver_client_ids: Optional[List[str]] = None
+    approval_required_count: Optional[int] = None
 
 class DocumentAction(BaseModel):
     action: str

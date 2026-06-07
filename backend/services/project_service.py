@@ -13,6 +13,7 @@ from database import db
 from services.billing_service import get_subscription_status
 
 logger = logging.getLogger(__name__)
+NON_DRAFT_DOCUMENT_STATUS = {"Draft"}
 
 
 def _make_project_id() -> str:
@@ -22,6 +23,16 @@ def _make_project_id() -> str:
 def _clean(doc: dict) -> dict:
     doc.pop('_id', None)
     return doc
+
+
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs from row dicts without raising KeyError."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
 
 
 async def create_project(
@@ -57,11 +68,14 @@ async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
     return await db.projects.find_one({"project_id": project_id}, {"_id": 0})
 
 
-async def list_projects_by_agent(agent_id: str) -> List[Dict[str, Any]]:
+async def list_projects_by_agent(agent_id: str, project_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """List all projects for an agent, enriched with counts."""
-    projects = await db.projects.find(
-        {"agent_id": agent_id}, {"_id": 0}
-    ).sort("created_at", -1).to_list(500)
+    query: Dict[str, Any] = {"agent_id": agent_id}
+    if project_ids is not None:
+        if not project_ids:
+            return []
+        query["project_id"] = {"$in": project_ids}
+    projects = await db.projects.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
 
     for p in projects:
         pid = p['project_id']
@@ -86,9 +100,121 @@ async def update_project(
     return await get_project(project_id)
 
 
-async def delete_project(project_id: str) -> bool:
-    result = await db.projects.delete_one({"project_id": project_id})
-    return result.deleted_count > 0
+async def get_project_delete_impact(project_id: str) -> Dict[str, Any]:
+    """Summarize linked records and deletion risks for a project."""
+    doc_status_pipeline = [
+        {"$match": {"project_id": project_id}},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+    ]
+    status_rows = await db.documents.aggregate(doc_status_pipeline).to_list(50)
+    documents_by_status = {row.get("_id") or "unknown": row.get("count", 0) for row in status_rows}
+    non_draft_documents = sum(
+        count for status, count in documents_by_status.items() if status not in NON_DRAFT_DOCUMENT_STATUS
+    )
+
+    impact = {
+        "project_id": project_id,
+        "clients": await db.clients.count_documents({"project_id": project_id}),
+        "units": await db.units.count_documents({"project_id": project_id}),
+        "documents_total": await db.documents.count_documents({"project_id": project_id}),
+        "documents_non_draft": non_draft_documents,
+        "documents_by_status": documents_by_status,
+        "activities": await db.activities.count_documents({"project_id": project_id}),
+        "timelines": await db.timelines.count_documents({"project_id": project_id}),
+        "timeline_steps": await db.timeline_steps.count_documents({"project_id": project_id}),
+        "team_members": await db.team_members.count_documents({"project_id": project_id}),
+        "vault_documents": await db.vault_documents.count_documents({"project_id": project_id}),
+        "decisions": await db.decisions.count_documents({"project_id": project_id}),
+        "change_requests": await db.change_requests.count_documents({"project_id": project_id}),
+    }
+    impact["has_linked_data"] = any(v > 0 for k, v in impact.items() if isinstance(v, int))
+    return impact
+
+
+async def delete_project(project_id: str, agent_id: str, force: bool = False) -> Dict[str, Any]:
+    """
+    Delete a project with dependency guards.
+    - Requires force=true when linked records exist.
+    - With force=true, cascades cleanup for all project-linked data.
+    """
+    project = await db.projects.find_one({"project_id": project_id, "agent_id": agent_id}, {"_id": 0})
+    if not project:
+        return {"deleted": False, "reason": "not_found"}
+
+    impact = await get_project_delete_impact(project_id)
+    if impact["documents_non_draft"] > 0 and not force:
+        raise ValueError(
+            "Cannot delete project with issued documents (Sent/Approved/Paid/etc). "
+            "Re-run delete with force=true to permanently remove project and all linked records."
+        )
+
+    if impact["has_linked_data"] and not force:
+        raise ValueError(
+            "Project has linked data. Re-run delete with force=true after reviewing delete impact."
+        )
+
+    # Delete project document files before DB cleanup.
+    from services.file_service import delete_file
+    project_docs = await db.documents.find(
+        {"project_id": project_id},
+        {"_id": 0, "document_id": 1, "pdf_stored_filename": 1, "hero_image_stored_filename": 1},
+    ).to_list(10000)
+    project_doc_ids = _collect_string_ids(project_docs, "document_id")
+    for doc in project_docs:
+        for fk in ("pdf_stored_filename", "hero_image_stored_filename"):
+            if doc.get(fk):
+                delete_file(doc[fk])
+
+    # Delete vault files before removing vault records.
+    vault_docs = await db.vault_documents.find(
+        {"project_id": project_id}, {"_id": 0, "stored_filename": 1}
+    ).to_list(10000)
+    for vd in vault_docs:
+        if vd.get("stored_filename"):
+            delete_file(vd["stored_filename"])
+
+    # Activity cascade cleanup (children first)
+    activities = await db.activities.find({"project_id": project_id}, {"_id": 0, "activity_id": 1}).to_list(10000)
+    activity_ids = _collect_string_ids(activities, "activity_id")
+    if activity_ids:
+        await db.activity_recipients.delete_many({"activity_id": {"$in": activity_ids}})
+        await db.activity_replies.delete_many({"activity_id": {"$in": activity_ids}})
+    await db.activities.delete_many({"project_id": project_id})
+
+    # Timeline cascade cleanup (children first)
+    timelines = await db.timelines.find({"project_id": project_id}, {"_id": 0, "timeline_id": 1}).to_list(1000)
+    timeline_ids = _collect_string_ids(timelines, "timeline_id")
+    step_ids: List[str] = []
+    if timeline_ids:
+        steps = await db.timeline_steps.find(
+            {"timeline_id": {"$in": timeline_ids}}, {"_id": 0, "step_id": 1}
+        ).to_list(5000)
+        step_ids = _collect_string_ids(steps, "step_id")
+    if step_ids:
+        await db.timeline_step_documents.delete_many({"timeline_step_id": {"$in": step_ids}})
+        await db.timeline_step_internal_notes.delete_many({"timeline_step_id": {"$in": step_ids}})
+    await db.timeline_steps.delete_many({"project_id": project_id})
+    await db.timelines.delete_many({"project_id": project_id})
+
+    # Decision recipients linked to project decisions
+    decisions = await db.decisions.find({"project_id": project_id}, {"_id": 0, "decision_id": 1}).to_list(5000)
+    decision_ids = _collect_string_ids(decisions, "decision_id")
+    if decision_ids:
+        await db.decision_recipients.delete_many({"decision_id": {"$in": decision_ids}})
+
+    # Remove project-scoped records
+    await db.documents.delete_many({"project_id": project_id})
+    if project_doc_ids:
+        await db.change_requests.delete_many({"entity_id": {"$in": project_doc_ids}})
+    await db.change_requests.delete_many({"project_id": project_id})
+    await db.decisions.delete_many({"project_id": project_id})
+    await db.team_members.delete_many({"project_id": project_id})
+    await db.vault_documents.delete_many({"project_id": project_id})
+    await db.clients.delete_many({"project_id": project_id})
+    await db.units.delete_many({"project_id": project_id})
+
+    result = await db.projects.delete_one({"project_id": project_id, "agent_id": agent_id})
+    return {"deleted": result.deleted_count > 0, "impact": impact}
 
 
 async def count_projects_by_agent(agent_id: str) -> int:

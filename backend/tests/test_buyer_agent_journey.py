@@ -44,7 +44,10 @@ class TestAgentBuyerJourney:
         """Login as demo buyer"""
         session = requests.Session()
         # Use demo buyer login
-        login_response = session.post(f"{BASE_URL}/api/auth/demo/buyer")
+        login_response = session.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+        )
         assert login_response.status_code == 200, f"Demo buyer login failed: {login_response.text}"
         data = login_response.json()
         session.headers.update({"Authorization": f"Bearer {data['token']}"})

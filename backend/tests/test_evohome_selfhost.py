@@ -26,7 +26,7 @@ class TestDemoLogin:
     
     def test_demo_agent_login(self):
         """Verify demo agent login works"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         data = response.json()
         assert data.get("role") == "agent"
@@ -37,7 +37,10 @@ class TestDemoLogin:
     
     def test_demo_buyer_login(self):
         """Verify demo buyer login works"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/buyer")
+        response = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+        )
         assert response.status_code == 200
         data = response.json()
         assert data.get("role") == "buyer"
@@ -48,7 +51,7 @@ class TestDemoLogin:
     
     def test_demo_buyer_login_with_buyer_num(self):
         """Verify demo buyer login with buyer_num parameter works"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=2")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 2, "fresh": False})
         assert response.status_code == 200
         data = response.json()
         assert data.get("role") == "buyer"
@@ -143,13 +146,16 @@ class TestAuthenticatedEndpoints:
     @pytest.fixture
     def agent_token(self):
         """Get agent token for authenticated requests"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         return response.json().get("token")
     
     @pytest.fixture
     def buyer_token(self):
         """Get buyer token for authenticated requests"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/buyer")
+        response = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+        )
         return response.json().get("token")
     
     def test_auth_me_with_token(self, agent_token):
@@ -212,7 +218,7 @@ class TestSubscriptionEndpoints:
     @pytest.fixture
     def agent_token(self):
         """Get agent token for authenticated requests"""
-        response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         return response.json().get("token")
     
     def test_subscription_plans(self, agent_token):

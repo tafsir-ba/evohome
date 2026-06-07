@@ -618,7 +618,11 @@ export const SettingsProvider = ({ children }) => {
       const res = await fetch(`${API}/settings`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
-        setSettings(prev => ({ ...prev, ...data }));
+        const savedLang = localStorage.getItem('evohome_language');
+        const preferredLang = (savedLang === 'en' || savedLang === 'fr')
+          ? savedLang
+          : (data.language || 'en');
+        setSettings(prev => ({ ...prev, ...data, language: preferredLang }));
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -635,9 +639,11 @@ export const SettingsProvider = ({ children }) => {
         const data = await res.json();
         setAgentBranding(data);
         // Use agent's language preference for buyer interface
-        if (data.language) {
-          setSettings(prev => ({ ...prev, language: data.language, currency: data.currency || 'CHF' }));
-        }
+        const savedLang = localStorage.getItem('evohome_language');
+        const preferredLang = (savedLang === 'en' || savedLang === 'fr')
+          ? savedLang
+          : (data.language || 'en');
+        setSettings(prev => ({ ...prev, language: preferredLang, currency: data.currency || 'CHF' }));
       }
     } catch (error) {
       console.error('Failed to fetch agent branding:', error);
@@ -708,13 +714,14 @@ export const SettingsProvider = ({ children }) => {
 
   // Get the logo to display (agent's own or agent branding for buyers)
   const getLogo = useCallback(() => {
-    const baseUrl = API.replace('/api', '');
+    const baseUrl = process.env.REACT_APP_BACKEND_URL;
     if (agentBranding?.company_logo_url) {
-      // Logo URLs are stored as /api/uploads/... to ensure proper routing
-      return `${baseUrl}${agentBranding.company_logo_url}`;
+      const url = agentBranding.company_logo_url;
+      return url.startsWith('http') ? url : `${baseUrl}${url}`;
     }
     if (settings.company_logo_url) {
-      return `${baseUrl}${settings.company_logo_url}`;
+      const url = settings.company_logo_url;
+      return url.startsWith('http') ? url : `${baseUrl}${url}`;
     }
     return null;
   }, [settings.company_logo_url, agentBranding]);
@@ -747,6 +754,9 @@ export const SettingsProvider = ({ children }) => {
     const savedLang = localStorage.getItem('evohome_language');
     if (savedLang && (savedLang === 'en' || savedLang === 'fr')) {
       setSettings(prev => ({ ...prev, language: savedLang }));
+    } else {
+      localStorage.setItem('evohome_language', 'en');
+      setSettings(prev => ({ ...prev, language: 'en' }));
     }
   }, []);
 

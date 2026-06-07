@@ -18,15 +18,12 @@ import { AgentDashboard } from "./pages/agent/AgentDashboard";
 import { AgentClients } from "./pages/agent/AgentClients";
 import { AgentClientDetail } from "./pages/agent/AgentClientDetail";
 import { AgentProjects } from "./pages/agent/AgentProjects";
-import { AgentQuotes } from "./pages/agent/AgentQuotes";
-import { AgentQuoteDetail } from "./pages/agent/AgentQuoteDetail";
-import { AgentQuoteUpload } from "./pages/agent/AgentQuoteUpload";
-import { AgentQuoteEdit } from "./pages/agent/AgentQuoteEdit";
-import { AgentInvoices } from "./pages/agent/AgentInvoices";
-import { AgentInvoiceDetail } from "./pages/agent/AgentInvoiceDetail";
-import { AgentInvoiceUpload } from "./pages/agent/AgentInvoiceUpload";
+import { AgentDocuments } from "./pages/agent/AgentDocuments";
+import { AgentDocumentDetail } from "./pages/agent/AgentDocumentDetail";
+import { AgentDocumentUpload } from "./pages/agent/AgentDocumentUpload";
 import { AgentTimeline } from "./pages/agent/AgentTimeline";
 import { AgentFeed } from "./pages/agent/AgentFeed";
+import { AgentDecisions } from "./pages/agent/AgentDecisions";
 import { AgentTeam } from "./pages/agent/AgentTeam";
 import { ClientPreview } from "./pages/agent/ClientPreview";
 import { AgentWorkflow } from "./pages/agent/AgentWorkflow";
@@ -35,6 +32,7 @@ import { AgentSettings } from "./pages/agent/AgentSettings";
 import { AgentAnalytics } from "./pages/agent/AgentAnalytics";
 import { AgentVault } from "./pages/agent/AgentVault";
 import { AgentHomePage } from "./pages/agent/AgentHomePage";
+import { AgentUnitDetail } from "./pages/agent/AgentUnitDetail";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { GanttChartTool } from "./pages/tools/GanttChartTool";
 
@@ -42,10 +40,11 @@ import "./App.css";
 
 // Feature flag for new agent homepage - set to false to rollback to legacy dashboard
 const USE_NEW_AGENT_HOME = true;
+const SUPER_ADMIN_EMAIL = 'tafsir@evo-home.ch';
 
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const ProtectedRoute = ({ children, allowedRoles, requirePlatformAdmin = false }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
   
@@ -73,6 +72,10 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
       return <Navigate to={USE_NEW_AGENT_HOME ? "/agent/home" : "/agent/dashboard-legacy"} replace />;
     }
     return <Navigate to="/login" replace />;
+  }
+
+  if (requirePlatformAdmin && (user?.email || '').toLowerCase() !== SUPER_ADMIN_EMAIL) {
+    return <Navigate to="/agent/settings" replace />;
   }
   
   return children;
@@ -156,46 +159,34 @@ const AppRouter = () => {
             <AgentProjects />
           </ProtectedRoute>
         } />
-        <Route path="/agent/quotes" element={
+        <Route path="/agent/documents" element={
           <ProtectedRoute allowedRoles={['agent']}>
-            <AgentQuotes />
+            <AgentDocuments />
           </ProtectedRoute>
         } />
-        <Route path="/agent/quotes/new" element={
+        <Route path="/agent/documents/new" element={
           <ProtectedRoute allowedRoles={['agent']}>
-            <AgentQuoteUpload />
+            <AgentDocumentUpload />
           </ProtectedRoute>
         } />
-        <Route path="/agent/quotes/:quoteId" element={
+        <Route path="/agent/documents/:documentId" element={
           <ProtectedRoute allowedRoles={['agent']}>
-            <AgentQuoteDetail />
+            <AgentDocumentDetail />
           </ProtectedRoute>
         } />
-        <Route path="/agent/quotes/edit/:quoteId" element={
+        <Route path="/agent/documents/edit/:documentId" element={
           <ProtectedRoute allowedRoles={['agent']}>
-            <AgentQuoteUpload />
+            <AgentDocumentUpload />
           </ProtectedRoute>
         } />
-        <Route path="/agent/invoices" element={
-          <ProtectedRoute allowedRoles={['agent']}>
-            <AgentInvoices />
-          </ProtectedRoute>
-        } />
-        <Route path="/agent/invoices/new" element={
-          <ProtectedRoute allowedRoles={['agent']}>
-            <AgentInvoiceUpload />
-          </ProtectedRoute>
-        } />
-        <Route path="/agent/invoices/:invoiceId" element={
-          <ProtectedRoute allowedRoles={['agent']}>
-            <AgentInvoiceDetail />
-          </ProtectedRoute>
-        } />
-        <Route path="/agent/invoices/edit/:invoiceId" element={
-          <ProtectedRoute allowedRoles={['agent']}>
-            <AgentInvoiceUpload />
-          </ProtectedRoute>
-        } />
+        <Route path="/agent/quotes" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocuments /></ProtectedRoute>} />
+        <Route path="/agent/quotes/new" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentUpload /></ProtectedRoute>} />
+        <Route path="/agent/quotes/:documentId" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentDetail /></ProtectedRoute>} />
+        <Route path="/agent/quotes/edit/:documentId" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentUpload /></ProtectedRoute>} />
+        <Route path="/agent/invoices" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocuments /></ProtectedRoute>} />
+        <Route path="/agent/invoices/new" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentUpload /></ProtectedRoute>} />
+        <Route path="/agent/invoices/:documentId" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentDetail /></ProtectedRoute>} />
+        <Route path="/agent/invoices/edit/:documentId" element={<ProtectedRoute allowedRoles={['agent']}><AgentDocumentUpload /></ProtectedRoute>} />
         <Route path="/agent/timeline" element={
           <ProtectedRoute allowedRoles={['agent']}>
             <AgentTimeline />
@@ -206,6 +197,11 @@ const AppRouter = () => {
             <AgentFeed />
           </ProtectedRoute>
         } />
+        <Route path="/agent/decisions" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentDecisions />
+          </ProtectedRoute>
+        } />
         <Route path="/agent/team" element={
           <ProtectedRoute allowedRoles={['agent']}>
             <AgentTeam />
@@ -214,6 +210,11 @@ const AppRouter = () => {
         <Route path="/agent/clients/:clientId/preview" element={
           <ProtectedRoute allowedRoles={['agent']}>
             <ClientPreview />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/units/:unitId" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentUnitDetail />
           </ProtectedRoute>
         } />
         <Route path="/agent/workflow" element={
@@ -229,6 +230,11 @@ const AppRouter = () => {
         <Route path="/agent/settings" element={
           <ProtectedRoute allowedRoles={['agent']}>
             <AgentSettings />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/admin" element={
+          <ProtectedRoute allowedRoles={['agent']} requirePlatformAdmin>
+            <AgentSettings defaultTab="admin" />
           </ProtectedRoute>
         } />
         <Route path="/agent/analytics" element={

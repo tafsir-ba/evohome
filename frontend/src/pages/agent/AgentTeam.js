@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { TeamContactImport } from '../../components/TeamContactImport';
 import { useDataContext } from '../../context/DataContext';
 import { toast } from 'sonner';
+import { parseApiError } from '../../lib/api';
 import { 
   Plus, 
   Search, 
@@ -49,7 +50,7 @@ const ROLE_SUGGESTIONS = [
 ];
 
 export const AgentTeam = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const projectFilter = searchParams.get('project');
   
   // SINGLE SOURCE OF TRUTH: DataContext for projects
@@ -93,9 +94,15 @@ export const AgentTeam = () => {
       const projectExists = projects.some(p => p.project_id === projectFilter);
       if (projectExists) {
         setSelectedProjectId(projectFilter);
+      } else {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('project');
+          return next;
+        }, { replace: true });
       }
     }
-  }, [projectFilter, projects.length]); // Only depend on length, not full array
+  }, [projectFilter, projects.length, selectedProjectId, setSearchParams]); // Only depend on length, not full array
 
   const fetchTeamMembers = async (projectId) => {
     if (!projectId) {
@@ -226,10 +233,10 @@ export const AgentTeam = () => {
       if (res.ok) {
         toast.success(editingMember ? 'Team member updated' : 'Team member added');
         setDialogOpen(false);
-        fetchTeamMembers();
+        fetchTeamMembers(selectedProjectId);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to save');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to save');
       }
     } catch (error) {
       toast.error(error.message);
@@ -249,7 +256,7 @@ export const AgentTeam = () => {
 
       if (res.ok) {
         toast.success('Team member removed');
-        fetchTeamMembers();
+        fetchTeamMembers(selectedProjectId);
       } else {
         throw new Error('Failed to delete');
       }
@@ -273,7 +280,7 @@ export const AgentTeam = () => {
     <AgentLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-3xl font-outfit font-semibold text-foreground tracking-tight">
               Team Directory
@@ -282,10 +289,10 @@ export const AgentTeam = () => {
               Manage project team contacts for your clients
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Button 
               variant="outline"
-              className="rounded-lg"
+              className="rounded-lg w-full sm:w-auto"
               onClick={() => setImportDialogOpen(true)}
               disabled={!selectedProjectId}
               data-testid="import-contacts-btn"
@@ -294,7 +301,7 @@ export const AgentTeam = () => {
               Import from Document
             </Button>
             <Button 
-              className="rounded-lg"
+              className="rounded-lg w-full sm:w-auto"
               onClick={() => handleOpenDialog()}
               disabled={!selectedProjectId}
               data-testid="add-team-member-btn"
@@ -308,10 +315,10 @@ export const AgentTeam = () => {
         {/* Project Selector */}
         <Card className="border-border">
           <CardContent className="py-4">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
               <Building2 className="w-5 h-5 text-muted-foreground" />
               <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                <SelectTrigger className="w-64" data-testid="project-selector">
+                <SelectTrigger className="w-full sm:w-64 max-w-full" data-testid="project-selector">
                   <SelectValue placeholder="Select a project" />
                 </SelectTrigger>
                 <SelectContent>
@@ -393,14 +400,14 @@ export const AgentTeam = () => {
                           <p className="text-sm text-muted-foreground">{member.contact_name}</p>
                         )}
                         <p className="text-sm text-primary font-medium">{member.role}</p>
-                        <div className="flex items-center gap-4 mt-2 flex-wrap">
+                      <div className="flex items-center gap-3 sm:gap-4 mt-2 flex-wrap">
                           {member.email && (
                             <a 
                               href={`mailto:${member.email}`}
                               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
                             >
                               <Mail className="w-3.5 h-3.5" />
-                              <span className="truncate max-w-[200px]">{member.email}</span>
+                              <span className="truncate max-w-[160px] sm:max-w-[200px]">{member.email}</span>
                             </a>
                           )}
                           {member.phone && (
@@ -426,7 +433,7 @@ export const AgentTeam = () => {
                           {member.address && (
                             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                               <MapPin className="w-3.5 h-3.5" />
-                              <span className="truncate max-w-[200px]">{member.address}</span>
+                              <span className="truncate max-w-[160px] sm:max-w-[200px]">{member.address}</span>
                             </span>
                           )}
                         </div>
@@ -437,7 +444,7 @@ export const AgentTeam = () => {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -594,7 +601,7 @@ export const AgentTeam = () => {
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         projectId={selectedProjectId}
-        onImportComplete={fetchTeamMembers}
+        onImportComplete={() => fetchTeamMembers(selectedProjectId)}
       />
     </AgentLayout>
   );

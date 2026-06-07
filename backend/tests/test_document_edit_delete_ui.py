@@ -23,7 +23,7 @@ class TestInvoiceDetailEditDelete:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Login as demo agent"""
-        response = requests.post(f"{API_URL}/auth/demo/agent")
+        response = requests.post(f"{API_URL}/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200, f"Demo login failed: {response.text}"
         self.token = response.json().get('token')
         self.headers = {
@@ -132,7 +132,7 @@ class TestQuoteDetailEditDelete:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Login as demo agent"""
-        response = requests.post(f"{API_URL}/auth/demo/agent")
+        response = requests.post(f"{API_URL}/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         self.token = response.json().get('token')
         self.headers = {
@@ -264,7 +264,7 @@ class TestDeleteEndpointValidation:
     
     @pytest.fixture(autouse=True)
     def setup(self):
-        response = requests.post(f"{API_URL}/auth/demo/agent")
+        response = requests.post(f"{API_URL}/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200
         self.token = response.json().get('token')
         self.headers = {

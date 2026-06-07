@@ -18,11 +18,13 @@ import {
 import { toast } from 'sonner';
 import { useSettings } from '../../context/SettingsContext';
 import { useDataContext } from '../../context/DataContext';
+import { parseApiError } from '../../lib/api';
 import { 
   Building2, 
   Plus, 
   Edit2, 
   Trash2, 
+  FileText,
   MapPin,
   Calendar,
   Users,
@@ -69,6 +71,13 @@ export const AgentProjects = () => {
   const [units, setUnits] = useState([]);
   const [newUnit, setNewUnit] = useState('');
   const [loadingUnits, setLoadingUnits] = useState(false);
+
+  // Project delete impact & confirmation
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteImpact, setDeleteImpact] = useState(null);
+  const [deleteProject, setDeleteProject] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     fetchSubscriptionStatus();
@@ -145,15 +154,15 @@ export const AgentProjects = () => {
         refreshProjects();
         fetchSubscriptionStatus(); // Refresh usage count
       } else {
-        const error = await res.json();
+        const error = await parseApiError(res);
         // Check if it's a property limit error
-        if (res.status === 403 && error.detail?.includes('Property limit')) {
+        if (res.status === 403 && error.message?.includes('Property limit')) {
           setShowDialog(false);
           setShowLimitModal(true);
           fetchSubscriptionStatus(); // Refresh to get latest status
           return;
         }
-        throw new Error(error.detail || 'Failed to save project');
+        throw new Error(error.message || 'Failed to save project');
       }
     } catch (error) {
       toast.error(error.message);
@@ -162,27 +171,89 @@ export const AgentProjects = () => {
     }
   };
 
-  const handleDelete = async (e, projectId) => {
+  const openDeleteDialog = async (e, project) => {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this project? This will also affect linked clients.')) {
-      return;
-    }
+    setDeleteProject(project);
+    setDeleteImpact(null);
+    setDeleteError('');
+    setDeleteDialogOpen(true);
+    setDeleteLoading(true);
 
     try {
-      const res = await fetch(`${API}/projects/${projectId}`, {
+      const res = await fetch(`${API}/projects/${project.project_id}/delete-impact`, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        setDeleteImpact(await res.json());
+      } else {
+        const error = await parseApiError(res);
+        setDeleteError(error.message || 'Failed to load delete impact');
+      }
+    } catch (error) {
+      console.error('Failed to load delete impact:', error);
+      setDeleteError('Failed to load delete impact');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleImpactNavigate = (type, projectId) => {
+    switch (type) {
+      case 'clients':
+        navigate(`/agent/clients?project=${projectId}`);
+        break;
+      case 'units':
+        navigate(`/agent/clients?project=${projectId}`);
+        break;
+      case 'documents':
+        navigate('/agent/documents');
+        break;
+      case 'timeline':
+        navigate('/agent/timeline');
+        break;
+      case 'vault':
+        navigate('/agent/vault');
+        break;
+      case 'decisions':
+        navigate('/agent/decisions');
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteProject) return;
+    setDeleteLoading(true);
+    setDeleteError('');
+
+    try {
+      const res = await fetch(`${API}/projects/${deleteProject.project_id}?force=true`, {
         method: 'DELETE',
-        credentials: 'include'
+        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (res.ok) {
-        toast.success('Project deleted');
+        toast.success('Project and linked data deleted');
+        setDeleteDialogOpen(false);
+        setDeleteImpact(null);
+        setDeleteProject(null);
         refreshProjects();
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to delete project');
+        const error = await parseApiError(res);
+        const message = error.message || 'Failed to delete project';
+        setDeleteError(message);
+        toast.error(message);
       }
     } catch (error) {
-      toast.error(error.message);
+      console.error('Delete project failed:', error);
+      const message = error.message || 'Failed to delete project';
+      setDeleteError(message);
+      toast.error(message);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -227,8 +298,8 @@ export const AgentProjects = () => {
         toast.success('Unit added');
         refreshProjects(); // Update unit_count on project cards
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to add unit');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to add unit');
       }
     } catch (error) {
       toast.error(error.message);
@@ -237,8 +308,9 @@ export const AgentProjects = () => {
 
   const handleDeleteUnit = async (unitId) => {
     try {
-      const res = await fetch(`${API}/projects/${unitsProject.project_id}/units/${unitId}`, {
+      const res = await fetch(`${API}/units/${unitId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
         credentials: 'include'
       });
 
@@ -247,8 +319,8 @@ export const AgentProjects = () => {
         toast.success('Unit removed');
         refreshProjects(); // Update unit_count on project cards
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to remove unit');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to remove unit');
       }
     } catch (error) {
       toast.error(error.message);
@@ -305,15 +377,15 @@ export const AgentProjects = () => {
          subscriptionStatus.unit_usage >= subscriptionStatus.property_limit * 0.8 && 
          subscriptionStatus.can_create_unit && (
           <Card className="border-amber-500/30 bg-amber-500/5 rounded-lg">
-            <CardContent className="py-3 px-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+            <CardContent className="flex flex-col gap-2 py-3 px-5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex items-center gap-3 min-w-0">
                 <AlertTriangle className="w-5 h-5 text-amber-500" />
                 <p className="text-sm text-muted-foreground">
                   You're approaching your property limit ({subscriptionStatus.unit_usage} / {subscriptionStatus.property_limit} used)
                 </p>
               </div>
               <Link to="/agent/billing">
-                <Button variant="ghost" size="sm" className="text-amber-600 hover:text-amber-700 hover:bg-amber-500/10">
+                <Button variant="ghost" size="sm" className="w-full text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 sm:w-auto">
                   <Zap className="w-3 h-3 mr-1" />
                   Upgrade
                 </Button>
@@ -325,12 +397,12 @@ export const AgentProjects = () => {
         {/* Property Limit Warning Banner (hard limit) */}
         {subscriptionStatus && !subscriptionStatus.can_create_unit && (
           <Card className="border-amber-500/50 bg-amber-500/5 rounded-lg">
-            <CardContent className="py-4 px-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+            <CardContent className="flex flex-col gap-3 py-4 px-5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center">
                   <AlertTriangle className="w-5 h-5 text-amber-500" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="font-medium text-foreground">Property limit reached</p>
                   <p className="text-sm text-muted-foreground">
                     Your {subscriptionStatus.plan_name} plan allows {subscriptionStatus.property_limit} properties. 
@@ -339,7 +411,7 @@ export const AgentProjects = () => {
                 </div>
               </div>
               <Link to="/agent/billing">
-                <Button variant="outline" className="rounded-lg border-amber-500/50 text-amber-600 hover:bg-amber-500/10" data-testid="upgrade-cta-btn">
+                <Button variant="outline" className="w-full rounded-lg border-amber-500/50 text-amber-600 hover:bg-amber-500/10 sm:w-auto" data-testid="upgrade-cta-btn">
                   <Zap className="w-4 h-4 mr-2" />
                   View Plans
                 </Button>
@@ -350,7 +422,7 @@ export const AgentProjects = () => {
 
         {/* Property Usage Indicator */}
         {subscriptionStatus && subscriptionStatus.property_limit && (
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-4">
             <span className="text-muted-foreground">Property usage:</span>
             <div className="flex items-center gap-2 flex-1 max-w-xs">
               <Progress 
@@ -408,15 +480,15 @@ export const AgentProjects = () => {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={(e) => handleDelete(e, project.project_id)}
+                        onClick={(e) => openDeleteDialog(e, project)}
                         data-testid={`delete-project-${project.project_id}`}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>
-                  <CardTitle className="text-lg font-outfit mt-3 flex items-center justify-between">
-                    <span>{project.name}</span>
+                  <CardTitle className="text-lg font-outfit mt-3 flex items-center justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate">{project.name}</span>
                     <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </CardTitle>
                 </CardHeader>
@@ -438,7 +510,7 @@ export const AgentProjects = () => {
                       {project.description}
                     </p>
                   )}
-                  <div className="pt-3 border-t border-border flex items-center justify-between">
+                  <div className="pt-3 border-t border-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Users className="w-3.5 h-3.5" />
@@ -452,7 +524,7 @@ export const AgentProjects = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs"
+                      className="h-7 w-full text-xs sm:w-auto"
                       onClick={(e) => handleOpenUnits(e, project)}
                       data-testid={`manage-units-${project.project_id}`}
                     >
@@ -501,7 +573,7 @@ export const AgentProjects = () => {
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="total_units">Total Units</Label>
                 <Input
@@ -549,6 +621,159 @@ export const AgentProjects = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Project Impact & Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Delete project & linked data
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete the project
+              {deleteProject ? ` "${deleteProject.name}"` : ''} and all linked records listed below.
+              Review each dependency before proceeding.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            {deleteLoading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading linked data…
+              </div>
+            )}
+
+            {deleteError && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                {deleteError}
+              </div>
+            )}
+
+            {deleteImpact && (
+              <div className="space-y-3 max-h-64 overflow-y-auto border border-border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground mb-1">
+                  Click any item to inspect the impacted data before deletion.
+                </div>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('clients', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-muted-foreground" />
+                      <span>Clients</span>
+                    </span>
+                    <span className="font-medium">{deleteImpact.clients}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('units', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Home className="w-4 h-4 text-muted-foreground" />
+                      <span>Units</span>
+                    </span>
+                    <span className="font-medium">{deleteImpact.units}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('documents', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span>Documents (total / non-draft)</span>
+                    </span>
+                    <span className="font-medium">
+                      {deleteImpact.documents_total} / {deleteImpact.documents_non_draft}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('timeline', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                      <span>Timelines & steps</span>
+                    </span>
+                    <span className="font-medium">
+                      {deleteImpact.timelines} / {deleteImpact.timeline_steps}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('vault', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span>Vault documents</span>
+                    </span>
+                    <span className="font-medium">{deleteImpact.vault_documents}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted text-left text-sm"
+                    onClick={() => handleImpactNavigate('decisions', deleteImpact.project_id)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-muted-foreground" />
+                      <span>Decisions & change requests</span>
+                    </span>
+                    <span className="font-medium">
+                      {deleteImpact.decisions} / {deleteImpact.change_requests}
+                    </span>
+                  </button>
+
+                  <div className="text-xs text-muted-foreground pt-1 border-t border-border mt-2">
+                    Team members: <span className="font-medium text-foreground">{deleteImpact.team_members}</span> •
+                    Activities: <span className="font-medium text-foreground">{deleteImpact.activities}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="text-xs text-muted-foreground">
+              If issued financial documents exist, deletion requires force and will permanently remove those records too.
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleteLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={deleteLoading || !!deleteError}
+              data-testid="confirm-delete-project-btn"
+            >
+              {deleteLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                'Delete project & data'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Units Management Dialog */}
       <Dialog open={showUnitsDialog} onOpenChange={setShowUnitsDialog}>
         <DialogContent className="max-w-lg">
@@ -561,7 +786,7 @@ export const AgentProjects = () => {
           
           <div className="py-4">
             {/* Add new unit */}
-            <div className="flex gap-2 mb-4">
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
               <Input
                 value={newUnit}
                 onChange={(e) => setNewUnit(e.target.value)}
@@ -600,23 +825,37 @@ export const AgentProjects = () => {
                         </div>
                         <div>
                           <p className="font-medium text-sm">{unit.unit_reference}</p>
-                          {unit.client_name ? (
-                            <p className="text-xs text-muted-foreground">Assigned to {unit.client_name}</p>
+                          {(unit.assigned_clients_count || 0) > 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              {(unit.assigned_clients_count || 0)} client{(unit.assigned_clients_count || 0) !== 1 ? 's' : ''} assigned
+                            </p>
                           ) : (
                             <p className="text-xs text-amber-600">Available</p>
                           )}
                         </div>
                       </div>
-                      {!unit.client_id && (
+                      <div className="flex items-center gap-1">
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeleteUnit(unit.unit_id)}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowUnitsDialog(false);
+                            navigate(`/agent/units/${unit.unit_id}`);
+                          }}
                         >
-                          <X className="w-4 h-4" />
+                          Manage
                         </Button>
-                      )}
+                        {(unit.assigned_clients_count || 0) === 0 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeleteUnit(unit.unit_id)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -624,7 +863,7 @@ export const AgentProjects = () => {
             </div>
             
             <p className="text-xs text-muted-foreground mt-3">
-              {units.length} unit{units.length !== 1 ? 's' : ''} • {units.filter(u => !u.client_id).length} available
+              {units.length} unit{units.length !== 1 ? 's' : ''} • {units.filter(u => (u.assigned_clients_count || 0) === 0).length} available
             </p>
           </div>
           

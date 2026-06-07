@@ -20,7 +20,7 @@ class TestBillingSyncEndpoint:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token for tests"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}"}
@@ -63,7 +63,7 @@ class TestPlanLimitsConfiguration:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token for tests"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}"}
@@ -132,7 +132,7 @@ class TestQuoteUploadDescriptionField:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token for tests"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.user_id = res.json()['user_id']
@@ -204,7 +204,7 @@ class TestBillingStatusWithUnitUsage:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token for tests"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}"}

@@ -20,7 +20,7 @@ BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 def get_agent_session():
     """Login as demo agent and return session with auth token"""
     session = requests.Session()
-    response = session.post(f"{BASE_URL}/api/auth/demo/agent")
+    response = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
     if response.status_code == 200:
         token = response.json().get("token")
         session.headers.update({"Authorization": f"Bearer {token}"})
@@ -29,7 +29,7 @@ def get_agent_session():
 def get_buyer_session():
     """Login as demo buyer (Sophie) and return session with auth token"""
     session = requests.Session()
-    response = session.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+    response = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
     if response.status_code == 200:
         token = response.json().get("token")
         session.headers.update({"Authorization": f"Bearer {token}"})

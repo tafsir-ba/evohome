@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useDataContext } from '../context/DataContext';
+import { parseApiError } from '../lib/api';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Checkbox } from './ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +19,7 @@ import {
 } from './ui/dialog';
 import { toast } from 'sonner';
 import { CreateActivityDialog } from './CreateActivityDialog';
+import { ActivityFeedAttachmentImage } from './ActivityFeedAttachmentImage';
 import { 
   Plus, 
   MessageSquare, 
@@ -48,6 +51,15 @@ import { cn } from '../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
+/** API may return Spaces CDN URL or a path relative to the backend. */
+const resolveActivityFileUrl = (fileUrl) => {
+  if (!fileUrl) return null;
+  const u = String(fileUrl).trim();
+  if (u.startsWith('http://') || u.startsWith('https://')) return u;
+  const base = process.env.REACT_APP_BACKEND_URL || '';
+  return u.startsWith('/') ? `${base}${u}` : `${base}/${u}`;
+};
+
 const TYPE_CONFIG = {
   message: { icon: MessageSquare, label: 'Message', color: 'bg-blue-500' },
   image: { icon: ImageIcon, label: 'Image', color: 'bg-emerald-500' },
@@ -67,10 +79,61 @@ const formatDate = (dateStr) => {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-const isImageFile = (filename) => {
-  if (!filename) return false;
-  const ext = filename.toLowerCase().split('.').pop();
-  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
+/** Last segment of a path or URL, without query/hash. */
+const pathBasename = (pathOrUrl) => {
+  if (!pathOrUrl) return '';
+  const noQ = String(pathOrUrl).split(/[?#]/)[0];
+  const parts = noQ.replace(/\\/g, '/').split('/').filter(Boolean);
+  return parts.pop() || '';
+};
+
+/**
+ * Extension from the basename only, using the last dot (not split('.').pop(), which
+ * breaks names like "Screenshot 2026-04-12 at 19.00.00.png" and multi-dot iOS names).
+ */
+const getFilenameExtension = (pathOrUrl) => {
+  const base = pathBasename(pathOrUrl);
+  const i = base.lastIndexOf('.');
+  if (i <= 0 || i >= base.length - 1) return '';
+  return base.slice(i + 1).toLowerCase();
+};
+
+const IMAGE_FILE_EXTENSIONS = new Set([
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'bmp',
+  'svg',
+  'heic',
+  'heif',
+]);
+
+const isImageExtension = (ext) => Boolean(ext && IMAGE_FILE_EXTENSIONS.has(ext));
+
+/** One text block for display (legacy rows may have title + content). */
+const getActivityPostBody = (activity) => {
+  const t = activity.title?.trim();
+  const c = activity.content?.trim();
+  if (t && c) return `${t}\n\n${c}`;
+  return c || t || '';
+};
+
+const imageUrlLooksLikeImage = (url) =>
+  url && /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif)(\?|#|$)/i.test(url);
+
+const activityLooksLikeImageAttachment = (activity, fileUrlFull) => {
+  const nameExt = getFilenameExtension(activity.file_name || '');
+  const storageExt = getFilenameExtension(activity.file_url || '');
+  const mime = (activity.file_type || '').toLowerCase();
+  return (
+    activity.type === 'image' ||
+    isImageExtension(nameExt) ||
+    isImageExtension(storageExt) ||
+    mime.startsWith('image/') ||
+    imageUrlLooksLikeImage(fileUrlFull)
+  );
 };
 
 // Helper: get auth headers for fetch calls
@@ -85,22 +148,29 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
   const [replyText, setReplyText] = useState('');
   const [replying, setReplying] = useState(false);
   const [sending, setSending] = useState(false);
-  const [imageError, setImageError] = useState(false);
+  const [attachmentState, setAttachmentState] = useState({
+    phase: 'idle',
+    decodeFailed: false,
+    showInline: false,
+  });
   const [deleting, setDeleting] = useState(false);
   const [replies, setReplies] = useState(activity.replies || []);
   const [loadingReplies, setLoadingReplies] = useState(false);
-  
+
   const config = TYPE_CONFIG[activity.type] || TYPE_CONFIG.message;
   const Icon = config.icon;
   const isDraft = activity.is_draft;
-  
-  // Check if the attachment is an image
-  const hasImageAttachment = activity.file_name && isImageFile(activity.file_name);
-  const imageUrl = hasImageAttachment && activity.file_url 
-    ? `${API.replace('/api', '')}${activity.file_url}` 
-    : null;
-  
-  // Lazy-load replies when expanding
+  const postBody = getActivityPostBody(activity);
+  const fileUrlFull = resolveActivityFileUrl(activity.file_url);
+  const hasImageAttachment = activityLooksLikeImageAttachment(activity, fileUrlFull);
+  const loadAttachmentBlob = Boolean(hasImageAttachment && activity.file_url);
+
+  const showFileAttachmentRow =
+    Boolean(activity.file_name && fileUrlFull) &&
+    (!hasImageAttachment ||
+      attachmentState.phase === 'error' ||
+      attachmentState.decodeFailed);
+
   const fetchReplies = async () => {
     if (replies.length > 0 || !activity.reply_count) return;
     setLoadingReplies(true);
@@ -120,6 +190,30 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
     }
   };
 
+  useEffect(() => {
+    if (isAgent || !activity.reply_count) return;
+    if ((activity.replies || []).length > 0) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingReplies(true);
+      try {
+        const res = await fetch(`${API}/activities/${activity.activity_id}`, {
+          credentials: 'include',
+          headers: getAuthHeaders()
+        });
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setReplies(data.replies || []);
+        }
+      } catch (e) {
+        console.error('Failed to fetch replies:', e);
+      } finally {
+        if (!cancelled) setLoadingReplies(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAgent, activity.activity_id, activity.reply_count]);
+
   const handleExpand = () => {
     const next = !expanded;
     setExpanded(next);
@@ -134,8 +228,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
     try {
       await onReply(activity.activity_id, replyText);
       setReplyText('');
-      setShowReplyInput(false);
-      // Refresh replies after sending
+      if (isAgent) setShowReplyInput(false);
       setLoadingReplies(true);
       const res = await fetch(`${API}/activities/${activity.activity_id}`, {
         credentials: 'include',
@@ -171,6 +264,106 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
     }
   };
 
+  /* —— Buyer: simple social-style card (image → text → comments) —— */
+  if (!isAgent) {
+    return (
+      <Card
+        className="border-border rounded-xl overflow-hidden shadow-sm"
+        data-testid={`activity-card-${activity.activity_id}`}
+      >
+        <CardContent className="p-0">
+          <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">{activity.author_name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {formatDate(activity.created_at)}
+                {activity.unit_reference ? (
+                  <span className="text-muted-foreground"> · {activity.unit_reference}</span>
+                ) : null}
+              </p>
+            </div>
+          </div>
+
+          {loadAttachmentBlob && (
+            <ActivityFeedAttachmentImage
+              key={activity.activity_id}
+              activityId={activity.activity_id}
+              enabled={loadAttachmentBlob}
+              fileName={activity.file_name}
+              containerClassName="mt-2 border-y border-border bg-muted/30"
+              skeletonClassName="min-h-[200px] max-h-[min(70vh,520px)]"
+              imgClassName="w-full max-h-[min(70vh,520px)] object-contain bg-muted/20"
+              dataTestId={`image-preview-${activity.activity_id}`}
+              onStateChange={setAttachmentState}
+            />
+          )}
+
+          {showFileAttachmentRow && (
+            <div className="mx-4 mt-3 p-3 rounded-lg border border-border bg-muted/40 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm font-medium truncate">{activity.file_name}</span>
+                {activity.file_size ? (
+                  <span className="text-xs text-muted-foreground flex-shrink-0 hidden sm:inline">
+                    {(activity.file_size / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                ) : null}
+              </div>
+              <Button variant="outline" size="sm" className="flex-shrink-0" asChild>
+                <a href={`${API}/activities/${activity.activity_id}/attachment`} target="_blank" rel="noopener noreferrer" data-testid={`download-file-${activity.activity_id}`}>
+                  <Download className="w-4 h-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Open</span>
+                </a>
+              </Button>
+            </div>
+          )}
+
+          {postBody ? (
+            <div className="px-4 py-3">
+              <p className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed">{postBody}</p>
+            </div>
+          ) : null}
+
+          <div className="border-t border-border bg-muted/15 px-4 py-3 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Comments</p>
+            {loadingReplies && replies.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading…
+              </div>
+            ) : null}
+            {replies.map((reply) => (
+              <div key={reply.reply_id} className="rounded-lg bg-background/80 border border-border/60 px-3 py-2">
+                <p className="text-sm text-foreground">{reply.content}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {reply.author_name}
+                  {reply.author_role ? ` · ${reply.author_role}` : ''} · {formatDate(reply.created_at)}
+                </p>
+              </div>
+            ))}
+            {canReply ? (
+              <div className="space-y-2 pt-1">
+                <Textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Write a comment…"
+                  rows={3}
+                  className="resize-none text-sm"
+                  data-testid={`reply-input-${activity.activity_id}`}
+                />
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={handleReply} disabled={!replyText.trim() || replying} data-testid={`send-reply-${activity.activity_id}`}>
+                    {replying ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Comment'}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className={cn(
       "border-border rounded-lg overflow-hidden hover:shadow-md transition-shadow",
@@ -201,133 +394,110 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
                   </span>
                 )}
               </div>
-              <h3 className="font-semibold text-foreground mt-1 leading-tight text-sm sm:text-base break-words">
-                {activity.title || 'Update'}
-              </h3>
-              <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 truncate">
+              <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 truncate">
                 {activity.author_name} · {formatDate(activity.created_at)}
               </p>
             </div>
           </div>
           
-          {/* Recipients badge and Actions - only for agents */}
-          {isAgent && (
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {!isDraft && activity.recipients && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground mr-1">
-                  <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  <span>{activity.recipients.length}</span>
-                </div>
-              )}
-              
-              {/* Edit/Delete dropdown menu */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    data-testid={`activity-menu-${activity.activity_id}`}
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => onEdit && onEdit(activity)}
-                    className="cursor-pointer"
-                    data-testid={`edit-activity-${activity.activity_id}`}
-                  >
-                    <Edit2 className="w-4 h-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={handleDelete}
-                    className="cursor-pointer text-destructive focus:text-destructive"
-                    disabled={deleting}
-                    data-testid={`delete-activity-${activity.activity_id}`}
-                  >
-                    {deleting ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4 mr-2" />
-                    )}
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
-          
-          {/* Send button for drafts */}
-          {isDraft && isAgent && (
-            <Button
-              size="sm"
-              onClick={handleSendDraft}
-              disabled={sending}
-              className="bg-emerald-600 hover:bg-emerald-700"
-            >
-              {sending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <Send className="w-4 h-4 mr-1" />
-                  Send
-                </>
-              )}
-            </Button>
-          )}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Recipients badge and Actions - only for agents */}
+            {isAgent && (
+              <>
+                {!isDraft && activity.recipients && (
+                  <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground mr-1">
+                    <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                    <span>{activity.recipients.length}</span>
+                  </div>
+                )}
+                
+                {/* Edit/Delete dropdown menu */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      data-testid={`activity-menu-${activity.activity_id}`}
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => onEdit && onEdit(activity)}
+                      className="cursor-pointer"
+                      data-testid={`edit-activity-${activity.activity_id}`}
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleDelete}
+                      className="cursor-pointer text-destructive focus:text-destructive"
+                      disabled={deleting}
+                      data-testid={`delete-activity-${activity.activity_id}`}
+                    >
+                      {deleting ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4 mr-2" />
+                      )}
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+            
+            {/* Send button for drafts */}
+            {isDraft && isAgent && (
+              <Button
+                size="sm"
+                onClick={handleSendDraft}
+                disabled={sending}
+                className="bg-emerald-600 hover:bg-emerald-700 h-8 px-2.5 sm:px-3"
+              >
+                {sending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Send</span>
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       
       <CardContent className="pt-0 px-3 sm:px-6">
-        {/* Content preview */}
-        {activity.content && (
+        {/* Image first (social-style), then text — blob URL so JWT is applied */}
+        {loadAttachmentBlob && (
+          <ActivityFeedAttachmentImage
+            key={activity.activity_id}
+            activityId={activity.activity_id}
+            enabled={loadAttachmentBlob}
+            fileName={activity.file_name}
+            containerClassName="mt-3 rounded-lg overflow-hidden bg-muted/30"
+            imgClassName="w-full max-h-96 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+            dataTestId={`image-preview-${activity.activity_id}`}
+            onStateChange={setAttachmentState}
+          />
+        )}
+
+        {postBody ? (
           <p className={cn(
-            "text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap break-words",
-            !expanded && "line-clamp-3"
+            'text-xs sm:text-sm text-foreground whitespace-pre-wrap break-words mt-3',
+            !expanded && 'line-clamp-4'
           )}>
-            {activity.content}
+            {postBody}
           </p>
-        )}
+        ) : null}
         
-        {/* Image Preview - visual display for image attachments */}
-        {hasImageAttachment && imageUrl && !imageError && (
-          <div className="mt-3 rounded-lg overflow-hidden bg-muted/30">
-            <a 
-              href={imageUrl} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="block"
-              data-testid={`image-preview-${activity.activity_id}`}
-            >
-              <img 
-                src={imageUrl}
-                alt={activity.file_name || 'Image attachment'}
-                className="w-full max-h-96 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                onError={() => setImageError(true)}
-                loading="lazy"
-              />
-            </a>
-            <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
-              <span className="text-xs text-muted-foreground truncate">{activity.file_name}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                asChild
-              >
-                <a href={imageUrl} download target="_blank" rel="noopener noreferrer">
-                  <Download className="w-3 h-3 mr-1" />
-                  Download
-                </a>
-              </Button>
-            </div>
-          </div>
-        )}
-        
-        {/* File attachment - for non-image files or failed image loads */}
-        {activity.file_name && (!hasImageAttachment || imageError) && (
+        {/* File attachment - PDF/docs, or image when fetch/decode failed */}
+        {showFileAttachmentRow && (
           <div className="mt-3 p-2 sm:p-3 bg-muted rounded-lg flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <Paperclip className="w-4 h-4 text-muted-foreground flex-shrink-0" />
@@ -346,7 +516,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
                 asChild
                 data-testid={`download-file-${activity.activity_id}`}
               >
-                <a href={`${API.replace('/api', '')}${activity.file_url}`} download target="_blank" rel="noopener noreferrer">
+                <a href={`${API}/activities/${activity.activity_id}/attachment`} target="_blank" rel="noopener noreferrer">
                   <Download className="w-4 h-4" />
                 </a>
               </Button>
@@ -414,7 +584,7 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
         )}
         
         {/* Actions */}
-        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
+        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between gap-2">
           <Button
             variant="ghost"
             size="sm"
@@ -433,9 +603,9 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
               </>
             )}
           </Button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             {activity.reply_count > 0 && !expanded && (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground truncate">
                 {activity.reply_count} repl{activity.reply_count === 1 ? 'y' : 'ies'}
               </span>
             )}
@@ -443,12 +613,12 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8"
+                className="h-8 px-2.5 sm:px-3"
                 onClick={() => setShowReplyInput(!showReplyInput)}
                 data-testid={`reply-btn-${activity.activity_id}`}
               >
                 <Reply className="w-4 h-4 mr-1" />
-                Reply
+                <span className="hidden xs:inline sm:inline">Reply</span>
               </Button>
             )}
           </div>
@@ -465,9 +635,9 @@ const ActivityCard = ({ activity, onReply, onSendDraft, onEdit, onDelete, canRep
  * - isAgent: determines UI permissions (create post, view all recipients)
  * - Uses same /api/activities endpoint - backend handles role-based filtering
  */
-export const Feed = ({ isAgent = false, embedded = false }) => {
+export const Feed = ({ isAgent = false, embedded = false, highlightActivityId = null, compact = false, mobileFab = false }) => {
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const clientFilter = searchParams.get('client');
   const projectFilter = searchParams.get('project');
@@ -489,11 +659,13 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
   
   // Edit state
   const [editingActivity, setEditingActivity] = useState(null);
-  const [editFormData, setEditFormData] = useState({ title: '', content: '' });
+  const [editFormData, setEditFormData] = useState({ content: '', project_id: '', client_ids: [] });
+  const [editRecipientsResetNotice, setEditRecipientsResetNotice] = useState(false);
   const [saving, setSaving] = useState(false);
   
   // Delete confirmation state  
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, activity: null });
+  const highlightInjectAttempted = useRef(null);
 
   const fetchActivities = useCallback(async () => {
     setLoading(true);
@@ -538,7 +710,15 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
         const clientsData = await clientsRes.json();
         setClients(clientsData);
         if (clientFilter) {
-          setFilterClient(clientsData.find(c => c.client_id === clientFilter));
+          const client = clientsData.find(c => c.client_id === clientFilter);
+          setFilterClient(client);
+          if (!client) {
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete('client');
+              return next;
+            }, { replace: true });
+          }
         }
       }
     } catch (error) {
@@ -549,9 +729,18 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
   // Set filter project from URL when projects are loaded
   useEffect(() => {
     if (isAgent && projectFilter && projects.length > 0) {
-      setFilterProject(projects.find(p => p.project_id === projectFilter) || null);
+      const project = projects.find(p => p.project_id === projectFilter) || null;
+      setFilterProject(project);
+      if (!project) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('project');
+          next.delete('client');
+          return next;
+        }, { replace: true });
+      }
     }
-  }, [isAgent, projectFilter, projects]);
+  }, [isAgent, projectFilter, projects, setSearchParams]);
 
   useEffect(() => {
     fetchClients();
@@ -560,6 +749,59 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
   useEffect(() => {
     fetchActivities();
   }, [fetchActivities]);
+
+  useEffect(() => {
+    highlightInjectAttempted.current = null;
+  }, [highlightActivityId]);
+
+  useEffect(() => {
+    if (isAgent || !embedded || !highlightActivityId || loading) return;
+    if (activities.some((a) => a.activity_id === highlightActivityId)) return;
+    if (highlightInjectAttempted.current === highlightActivityId) return;
+    highlightInjectAttempted.current = highlightActivityId;
+
+    (async () => {
+      try {
+        const res = await fetch(`${API}/activities/${highlightActivityId}`, {
+          credentials: 'include',
+          headers: getAuthHeaders(),
+        });
+        if (res.ok) {
+          const one = await res.json();
+          setActivities((prev) =>
+            prev.some((a) => a.activity_id === one.activity_id) ? prev : [one, ...prev]
+          );
+        } else {
+          toast.error('This update is no longer available');
+          setSearchParams((prev) => {
+            const n = new URLSearchParams(prev);
+            n.delete('activity_id');
+            return n;
+          }, { replace: true });
+        }
+      } catch {
+        toast.error('This update is no longer available');
+        setSearchParams((prev) => {
+          const n = new URLSearchParams(prev);
+          n.delete('activity_id');
+          return n;
+        }, { replace: true });
+      }
+    })();
+  }, [isAgent, embedded, highlightActivityId, loading, activities, setSearchParams]);
+
+  useEffect(() => {
+    if (isAgent || !embedded || !highlightActivityId || loading) return;
+    if (!activities.some((a) => a.activity_id === highlightActivityId)) return;
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-testid="activity-card-${highlightActivityId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+      }
+    });
+  }, [isAgent, embedded, highlightActivityId, loading, activities]);
 
   const handleReply = async (activityId, content) => {
     try {
@@ -574,8 +816,8 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
         toast.success('Reply sent');
         fetchActivities();
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to send reply');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to send reply');
       }
     } catch (error) {
       toast.error(error.message);
@@ -593,8 +835,8 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
         toast.success('Message sent to client');
         fetchActivities();
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to send message');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to send message');
       }
     } catch (error) {
       toast.error(error.message);
@@ -603,14 +845,24 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
 
   const handleEditActivity = (activity) => {
     setEditingActivity(activity);
+    setEditRecipientsResetNotice(false);
     setEditFormData({
-      title: activity.title || '',
-      content: activity.content || ''
+      content: getActivityPostBody(activity),
+      project_id: activity.project_id || '',
+      client_ids: (activity.recipients || []).map((r) => r.client_id),
     });
   };
 
   const handleSaveEdit = async () => {
     if (!editingActivity) return;
+    if (!editFormData.project_id) {
+      toast.error('Please select a project');
+      return;
+    }
+    if (!editFormData.client_ids || editFormData.client_ids.length === 0) {
+      toast.error('Please select at least one recipient');
+      return;
+    }
     
     setSaving(true);
     try {
@@ -618,16 +870,22 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
-        body: JSON.stringify(editFormData)
+        body: JSON.stringify({
+          title: '',
+          content: editFormData.content,
+          project_id: editFormData.project_id,
+          client_ids: editFormData.client_ids,
+        })
       });
 
       if (res.ok) {
         toast.success('Activity updated');
         setEditingActivity(null);
+        setEditRecipientsResetNotice(false);
         fetchActivities();
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to update activity');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to update activity');
       }
     } catch (error) {
       toast.error(error.message);
@@ -648,8 +906,8 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
         setDeleteConfirm({ open: false, activity: null });
         fetchActivities();
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to delete activity');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to delete activity');
       }
     } catch (error) {
       toast.error(error.message);
@@ -661,6 +919,10 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
     setFilterClient(null);
     setFilterProject(null);
   };
+
+  const editProjectClients = clients.filter(
+    (c) => !editFormData.project_id || c.project_id === editFormData.project_id
+  );
 
   // Loading state
   if (loading && activities.length === 0) {
@@ -676,18 +938,24 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
   // Empty state
   if (activities.length === 0 && !loading) {
     return (
-      <div data-testid="feed-empty">
+      <div className="space-y-4" data-testid="feed-empty">
         {/* Header for agent view */}
         {isAgent && !embedded && (
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-outfit font-semibold text-foreground tracking-tight">
-                Activity Feed
+          <div className={cn(
+            'flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3',
+            compact ? 'mb-2 sm:mb-4' : 'mb-4 sm:mb-6'
+          )}>
+            <div className="min-w-0">
+              <h1 className={cn(
+                'font-outfit font-semibold text-foreground tracking-tight',
+                compact ? 'text-xl' : 'text-2xl sm:text-3xl'
+              )}>
+                {compact ? 'Client updates' : 'Activity Feed'}
               </h1>
-              <p className="text-muted-foreground mt-1">0 activities</p>
+              <p className="text-muted-foreground mt-1 text-sm">0 activities</p>
             </div>
             <Button 
-              className="rounded-lg"
+              className="rounded-lg w-full sm:w-auto"
               onClick={() => setShowCreateDialog(true)}
               data-testid="create-activity-btn"
             >
@@ -736,16 +1004,22 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
   }
 
   return (
-    <div className="space-y-6" data-testid="feed-container">
+    <div className={cn('space-y-5 sm:space-y-6', compact && 'space-y-4')} data-testid="feed-container">
       {/* Header - only for non-embedded agent view */}
       {isAgent && !embedded && (
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-outfit font-semibold text-foreground tracking-tight">
-              Activity Feed
+        <div className={cn(
+          'flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3',
+          compact && 'mb-1'
+        )}>
+          <div className="min-w-0">
+            <h1 className={cn(
+              'font-outfit font-semibold text-foreground tracking-tight',
+              compact ? 'text-xl' : 'text-2xl sm:text-3xl'
+            )}>
+              {compact ? 'Client updates' : 'Activity Feed'}
             </h1>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <p className="text-muted-foreground">{total} activit{total === 1 ? 'y' : 'ies'}</p>
+              <p className={cn('text-muted-foreground', compact && 'text-sm')}>{total} activit{total === 1 ? 'y' : 'ies'}</p>
               {filterClient && (
                 <button 
                   onClick={clearFilters}
@@ -769,7 +1043,7 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
             </div>
           </div>
           <Button 
-            className="rounded-lg"
+            className={cn('rounded-lg w-full sm:w-auto', mobileFab && 'mb-16 sm:mb-0')}
             onClick={() => setShowCreateDialog(true)}
             data-testid="create-activity-btn"
           >
@@ -790,7 +1064,7 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
       )}
 
       {/* Activities List */}
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         {activities.map(activity => (
           <ActivityCard 
             key={activity.activity_id} 
@@ -806,16 +1080,17 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
         
         {/* Pagination */}
         {total > limit && (
-          <div className="flex justify-center gap-2 pt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-2 pt-4">
             <Button
               variant="outline"
               size="sm"
               disabled={offset === 0}
               onClick={() => setOffset(Math.max(0, offset - limit))}
+              className="w-full sm:w-auto"
             >
               Previous
             </Button>
-            <span className="text-sm text-muted-foreground py-2">
+            <span className="text-sm text-muted-foreground py-1 text-center">
               {offset + 1} - {Math.min(offset + limit, total)} of {total}
             </span>
             <Button
@@ -823,6 +1098,7 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
               size="sm"
               disabled={offset + limit >= total}
               onClick={() => setOffset(offset + limit)}
+              className="w-full sm:w-auto"
             >
               Next
             </Button>
@@ -848,33 +1124,96 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
           <DialogHeader>
             <DialogTitle>Edit Activity</DialogTitle>
             <DialogDescription>
-              Update the title and content of this activity.
+              Edit the text of this post. Attachments stay the same.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-title">Title</Label>
-              <Input
-                id="edit-title"
-                value={editFormData.title}
-                onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                placeholder="Activity title"
-                data-testid="edit-activity-title"
-              />
+              <Label htmlFor="edit-project">Project</Label>
+              <Select
+                value={editFormData.project_id || ''}
+                onValueChange={(v) => setEditFormData((prev) => {
+                  const changed = prev.project_id && prev.project_id !== v;
+                  if (changed) setEditRecipientsResetNotice(true);
+                  return { ...prev, project_id: v, client_ids: [] };
+                })}
+              >
+                <SelectTrigger id="edit-project">
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.project_id} value={p.project_id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {editRecipientsResetNotice && (
+                <p className="text-xs text-amber-600">
+                  Project changed. Recipients were reset, please re-select recipients.
+                </p>
+              )}
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="edit-content">Content</Label>
+              <Label>Recipients</Label>
+              <div className="border border-border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                {editProjectClients.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No clients in this project</p>
+                ) : (
+                  <>
+                    <div className="flex items-center space-x-2 pb-2 border-b border-border">
+                      <Checkbox
+                        checked={editFormData.client_ids.length === editProjectClients.length && editProjectClients.length > 0}
+                        onCheckedChange={(checked) =>
+                          setEditFormData((prev) => ({
+                            ...prev,
+                            client_ids: checked ? editProjectClients.map((c) => c.client_id) : [],
+                          }))
+                        }
+                      />
+                      <label className="text-sm font-medium">Select all ({editProjectClients.length})</label>
+                    </div>
+                    {editProjectClients.map((client) => (
+                      <div key={client.client_id} className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={editFormData.client_ids.includes(client.client_id)}
+                          onCheckedChange={(checked) => {
+                            setEditFormData((prev) => ({
+                              ...prev,
+                              client_ids: checked
+                                ? [...prev.client_ids, client.client_id]
+                                : prev.client_ids.filter((id) => id !== client.client_id),
+                            }));
+                          }}
+                        />
+                        <label className="text-sm">
+                          {client.name}
+                          {client.unit_reference ? (
+                            <span className="text-muted-foreground ml-1">({client.unit_reference})</span>
+                          ) : null}
+                        </label>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-content">Post</Label>
               <Textarea
                 id="edit-content"
                 value={editFormData.content}
                 onChange={(e) => setEditFormData({ ...editFormData, content: e.target.value })}
-                placeholder="Activity content"
-                rows={4}
+                placeholder="Post text"
+                rows={6}
                 data-testid="edit-activity-content"
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setEditingActivity(null)}>
               Cancel
             </Button>
@@ -897,11 +1236,12 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
           </DialogHeader>
           {deleteConfirm.activity && (
             <div className="p-3 bg-muted rounded-lg">
-              <p className="font-medium">{deleteConfirm.activity.title || 'Untitled'}</p>
-              <p className="text-sm text-muted-foreground truncate">{deleteConfirm.activity.content}</p>
+              <p className="text-sm text-muted-foreground line-clamp-3">
+                {getActivityPostBody(deleteConfirm.activity) || 'This post'}
+              </p>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setDeleteConfirm({ open: false, activity: null })}>
               Cancel
             </Button>
@@ -916,6 +1256,17 @@ export const Feed = ({ isAgent = false, embedded = false }) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {isAgent && !embedded && mobileFab && (
+        <Button
+          onClick={() => setShowCreateDialog(true)}
+          className="fixed bottom-20 right-4 z-30 rounded-full h-12 px-4 shadow-lg sm:hidden"
+          data-testid="mobile-create-activity-fab"
+        >
+          <Plus className="w-4 h-4 mr-1.5" />
+          New Post
+        </Button>
+      )}
     </div>
   );
 };

@@ -11,6 +11,12 @@ Database Isolation Strategy:
 - Selection is made at boot time via DEMO_MODE env var, NOT at query time
 - This replaces the broken is_demo query filter pattern
 
+Demo HTTP:
+- Try Demo: POST /api/demo/enter (optional fresh=true to purge+seed demo_* data, then session).
+- Standalone seed/reset: POST or GET /api/demo/seed and POST /api/demo/reset when
+  DEMO_MODE is true OR PUBLIC_DEMO is not disabled.
+- Set PUBLIC_DEMO=false to turn off all of the above (404).
+
 Usage:
     from core.config import validate_config, get_config
     
@@ -45,6 +51,7 @@ class Config:
     
     # Critical - App will not start without these
     MONGO_URL: str
+    MONGO_URL_DEMO: str
     DB_NAME: str
     DB_NAME_DEMO: str  # Separate demo database
     JWT_SECRET: str
@@ -53,6 +60,9 @@ class Config:
     # Demo mode - determines which database to use
     DEMO_MODE: bool = False
     
+    # Public demo HTTP (Try Demo, seed when allowed). Set PUBLIC_DEMO=false to disable.
+    PUBLIC_DEMO_ALLOWED: bool = True
+
     # Optional with graceful degradation
     RESEND_API_KEY: Optional[str] = None
     SENDER_EMAIL: Optional[str] = None
@@ -76,6 +86,9 @@ class Config:
         self.MONGO_URL = os.environ.get('MONGO_URL', '')
         if not self.MONGO_URL:
             errors.append("MONGO_URL is required but not set")
+
+        # Demo MongoDB URI (required for demo deployment hard isolation)
+        self.MONGO_URL_DEMO = os.environ.get('MONGO_URL_DEMO', '')
         
         self.DB_NAME = os.environ.get('DB_NAME', '')
         if not self.DB_NAME:
@@ -110,6 +123,9 @@ class Config:
     
     def _load_optional(self):
         """Load optional environment variables with warnings."""
+        pd_raw = os.environ.get("PUBLIC_DEMO", "true").strip().lower()
+        self.PUBLIC_DEMO_ALLOWED = pd_raw not in ("0", "false", "no", "off")
+
         # Email
         self.RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
         self.SENDER_EMAIL = os.environ.get('SENDER_EMAIL', '')
@@ -144,6 +160,12 @@ class Config:
         # JWT_SECRET minimum length
         if len(self.JWT_SECRET) < 32:
             errors.append(f"JWT_SECRET must be at least 32 characters (current: {len(self.JWT_SECRET)})")
+
+        # Demo/prod DB isolation guardrails
+        if self.DEMO_MODE and self.DB_NAME_DEMO == self.DB_NAME:
+            errors.append("DB_NAME_DEMO must be different from DB_NAME when DEMO_MODE is enabled")
+        if self.DEMO_MODE and not self.MONGO_URL_DEMO:
+            errors.append("MONGO_URL_DEMO is required when DEMO_MODE is enabled")
         
         # CORS wildcard check in production
         if self.ENVIRONMENT == 'production':
@@ -206,11 +228,22 @@ class Config:
         if self.DEMO_MODE:
             return self.DB_NAME_DEMO
         return self.DB_NAME
+
+    def get_mongo_url(self) -> str:
+        """Get Mongo URI for current deployment mode."""
+        if self.DEMO_MODE:
+            return self.MONGO_URL_DEMO
+        return self.MONGO_URL
     
     @property
     def is_demo_deployment(self) -> bool:
         """Check if this is a demo deployment (separate from user is_demo flag)."""
         return self.DEMO_MODE
+
+    @property
+    def public_demo_allowed(self) -> bool:
+        """Whether Try Demo and related HTTP endpoints are enabled."""
+        return self.PUBLIC_DEMO_ALLOWED
 
 
 # Singleton config instance

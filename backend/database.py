@@ -11,7 +11,7 @@ load_dotenv(Path(__file__).parent / '.env')
 
 app_config = validate_config()
 
-mongo_url = app_config.MONGO_URL
+mongo_url = app_config.get_mongo_url()
 client = AsyncIOMotorClient(mongo_url)
 db_name = app_config.get_database_name()
 db = client[db_name]

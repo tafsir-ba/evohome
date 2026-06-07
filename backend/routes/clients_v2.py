@@ -6,11 +6,12 @@ Thin route layer. No is_demo. No business logic.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project, can_access_client, is_agent
+from core.access_control import can_access_project, can_access_client
+from core.access_scope import resolve_agent_access_scope
 from services import client_service
 
 logger = logging.getLogger(__name__)
@@ -42,10 +43,16 @@ class UpdateClientRequest(BaseModel):
 # ── Routes ──
 
 @router.get("/clients")
-async def list_clients(user=Depends(get_current_agent)):
-    """List all clients for the agent."""
-    clients = await client_service.list_clients_by_agent(user['user_id'])
-    return clients
+async def list_clients(project_id: Optional[str] = None, user=Depends(get_current_agent)):
+    """List clients for the agent, optionally filtered by project."""
+    scope = await resolve_agent_access_scope(user)
+    if project_id:
+        scope.ensure_project_access(project_id)
+        return await client_service.list_clients_by_project(project_id)
+    return await client_service.list_clients_by_agent(
+        scope.workspace_owner_id,
+        scope.accessible_project_ids,
+    )
 
 
 @router.get("/clients/{client_id}")
@@ -73,11 +80,12 @@ async def get_client_preview(client_id: str, user=Depends(get_current_agent)):
 @router.post("/clients")
 async def create_client(data: CreateClientRequest, user=Depends(get_current_agent)):
     """Create a new client. Agent only."""
-    if data.project_id and not await can_access_project(user, data.project_id):
-        raise HTTPException(status_code=403, detail="Access denied to project")
+    scope = await resolve_agent_access_scope(user)
+    if data.project_id:
+        scope.ensure_project_access(data.project_id)
 
     client = await client_service.create_client(
-        agent_id=user['user_id'],
+        agent_id=scope.workspace_owner_id,
         name=data.name,
         email=data.email,
         phone=data.phone,
@@ -102,11 +110,29 @@ async def update_client(client_id: str, data: UpdateClientRequest, user=Depends(
 
 
 @router.delete("/clients/{client_id}")
-async def delete_client(client_id: str, user=Depends(get_current_agent)):
-    """Delete a client. Agent only."""
+async def delete_client(
+    client_id: str,
+    force: bool = Query(False),
+    user=Depends(get_current_agent),
+):
+    """Delete a client with dependency guards."""
     if not await can_access_client(user, client_id):
         raise HTTPException(status_code=403, detail="Access denied")
-    deleted = await client_service.delete_client(client_id)
+    try:
+        deleted = await client_service.delete_client(client_id, force=force)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not deleted:
         raise HTTPException(status_code=404, detail="Client not found")
     return {"message": "Client deleted"}
+
+
+@router.get("/clients/{client_id}/delete-impact")
+async def get_client_delete_impact(client_id: str, user=Depends(get_current_agent)):
+    """Preview linked records and risks before deleting a client."""
+    if not await can_access_client(user, client_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    client = await client_service.get_client(client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return await client_service.get_client_delete_impact(client_id)

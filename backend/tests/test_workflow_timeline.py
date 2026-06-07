@@ -19,14 +19,17 @@ class TestTimelineWorkflow:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Login as demo agent before each test"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Demo agent login failed: {res.text}"
         data = res.json()
         self.agent_token = data.get('token')
         self.agent_headers = {"Authorization": f"Bearer {self.agent_token}"}
         
         # Also login as demo buyer for buyer view tests
-        res_buyer = requests.post(f"{BASE_URL}/api/auth/demo/buyer")
+        res_buyer = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+        )
         if res_buyer.status_code == 200:
             self.buyer_token = res_buyer.json().get('token')
             self.buyer_headers = {"Authorization": f"Bearer {self.buyer_token}"}
@@ -392,7 +395,10 @@ class TestBuyerTimelineView:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Login as demo buyer"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/buyer")
+        res = requests.post(
+            f"{BASE_URL}/api/demo/enter",
+            json={"persona": "buyer", "buyer_slot": 1, "fresh": False},
+        )
         if res.status_code != 200:
             pytest.skip(f"Buyer login failed: {res.text}")
         

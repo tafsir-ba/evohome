@@ -39,9 +39,9 @@ export const getConfidenceDisplay = (confidence) => {
 export const getSuggestedAction = (intent) => {
   switch (intent) {
     case 'create_invoice':
-      return { label: 'Create Invoice', path: '/agent/invoices/new' };
+      return { label: 'Create Invoice', path: '/agent/documents/new?type=invoice' };
     case 'create_quote':
-      return { label: 'Create Quote', path: '/agent/quotes/new' };
+      return { label: 'Create Quote', path: '/agent/documents/new?type=quote' };
     case 'send_message':
       return { label: 'Send Message', path: '/agent/feed' };
     case 'create_feed_post':
@@ -50,9 +50,9 @@ export const getSuggestedAction = (intent) => {
     case 'extract_timeline':
       return { label: 'Go to Timeline', path: '/agent/timeline' };
     case 'extract_invoice':
-      return { label: 'Upload Invoice', path: '/agent/invoices/new' };
+      return { label: 'Upload Invoice', path: '/agent/documents/new?type=invoice' };
     case 'extract_quote':
-      return { label: 'Upload Quote', path: '/agent/quotes/new' };
+      return { label: 'Upload Quote', path: '/agent/documents/new?type=quote' };
     case 'upload_document':
       return { label: 'Go to Vault', path: '/agent/vault' };
     default:

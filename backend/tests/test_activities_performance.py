@@ -22,7 +22,7 @@ class TestActivitiesPerformanceOptimization:
     def agent_session(self):
         """Get authenticated session for demo agent"""
         session = requests.Session()
-        res = session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Agent login failed: {res.text}"
         data = res.json()
         assert data.get('role') == 'agent', f"Expected agent role, got {data.get('role')}"
@@ -192,7 +192,7 @@ class TestActivitiesCreateAndVerify:
     def agent_session(self):
         """Get authenticated session for demo agent"""
         session = requests.Session()
-        res = session.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Agent login failed: {res.text}"
         return session
     

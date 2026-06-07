@@ -12,10 +12,68 @@ from typing import Optional, List, Dict, Any
 from database import db
 
 logger = logging.getLogger(__name__)
+NON_DRAFT_DOCUMENT_STATUS = {"Draft"}
 
 
 def _make_client_id() -> str:
     return f"client_{uuid.uuid4().hex[:12]}"
+
+
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs from row dicts without KeyError."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
+
+
+def _normalize_unit_id(unit_id: Optional[str]) -> Optional[str]:
+    if not unit_id:
+        return None
+    value = str(unit_id).strip()
+    if not value or value.lower() in {"none", "general", "null"}:
+        return None
+    return value
+
+
+async def _attach_client_to_unit(unit_id: str, client_id: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    await db.units.update_one(
+        {"unit_id": unit_id},
+        {
+            "$addToSet": {"assigned_client_ids": client_id},
+            "$set": {
+                "assigned_client_id": client_id,  # backward compatibility
+                "is_available": False,
+                "updated_at": now,
+            },
+        },
+    )
+
+
+async def _detach_client_from_unit(unit_id: str, client_id: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    await db.units.update_one(
+        {"unit_id": unit_id},
+        {"$pull": {"assigned_client_ids": client_id}, "$set": {"updated_at": now}},
+    )
+    remaining_clients = await db.clients.find(
+        {"unit_id": unit_id, "client_id": {"$ne": client_id}},
+        {"_id": 0, "client_id": 1},
+    ).to_list(1)
+    next_client_id = remaining_clients[0]["client_id"] if remaining_clients else None
+    await db.units.update_one(
+        {"unit_id": unit_id},
+        {
+            "$set": {
+                "assigned_client_id": next_client_id,
+                "is_available": next_client_id is None,
+                "updated_at": now,
+            }
+        },
+    )
 
 
 async def create_client(
@@ -29,6 +87,7 @@ async def create_client(
 ) -> Dict[str, Any]:
     """Create a client."""
     client_id = _make_client_id()
+    normalized_unit_id = _normalize_unit_id(unit_id)
     doc = {
         "client_id": client_id,
         "agent_id": agent_id,
@@ -36,40 +95,93 @@ async def create_client(
         "email": email,
         "phone": phone,
         "project_id": project_id,
-        "unit_id": unit_id,
+        "unit_id": normalized_unit_id,
         "buyer_id": None,
         "status": "active",
         "notes": notes,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # If unit_id is provided, mark unit as assigned
-    if unit_id:
-        await db.units.update_one(
-            {"unit_id": unit_id},
-            {"$set": {"assigned_client_id": client_id, "is_available": False,
-                      "updated_at": datetime.now(timezone.utc).isoformat()}}
-        )
-
     await db.clients.insert_one(doc)
+    if normalized_unit_id:
+        await _attach_client_to_unit(normalized_unit_id, client_id)
     doc.pop('_id', None)
     return doc
 
 
 async def get_client(client_id: str) -> Optional[Dict[str, Any]]:
-    return await db.clients.find_one({"client_id": client_id}, {"_id": 0})
+    client = await db.clients.find_one({"client_id": client_id}, {"_id": 0})
+    if not client:
+        return None
+    # Enrich with project name
+    if client.get("project_id"):
+        project = await db.projects.find_one(
+            {"project_id": client["project_id"]}, {"_id": 0, "name": 1}
+        )
+        if project:
+            client["project_name"] = project["name"]
+    # Enrich with unit reference
+    if client.get("unit_id"):
+        unit = await db.units.find_one(
+            {"unit_id": client["unit_id"]}, {"_id": 0, "unit_reference": 1}
+        )
+        if unit:
+            client["unit_reference"] = unit.get("unit_reference") or client.get("unit_reference")
+    return client
 
 
-async def list_clients_by_agent(agent_id: str) -> List[Dict[str, Any]]:
-    return await db.clients.find(
-        {"agent_id": agent_id}, {"_id": 0}
-    ).sort("created_at", -1).to_list(1000)
+async def list_clients_by_agent(agent_id: str, project_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    query: Dict[str, Any] = {"agent_id": agent_id}
+    if project_ids is not None:
+        if not project_ids:
+            return []
+        query["project_id"] = {"$in": project_ids}
+    clients = await db.clients.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+    # Batch-enrich with project names
+    project_ids = list({c["project_id"] for c in clients if c.get("project_id")})
+    if project_ids:
+        projects = await db.projects.find(
+            {"project_id": {"$in": project_ids}}, {"_id": 0, "project_id": 1, "name": 1}
+        ).to_list(len(project_ids))
+        project_map = {p["project_id"]: p["name"] for p in projects}
+        for c in clients:
+            c["project_name"] = project_map.get(c.get("project_id"))
+
+    # Batch-enrich with unit_reference from units collection
+    unit_ids = list({c["unit_id"] for c in clients if c.get("unit_id")})
+    if unit_ids:
+        units = await db.units.find(
+            {"unit_id": {"$in": unit_ids}}, {"_id": 0, "unit_id": 1, "unit_reference": 1}
+        ).to_list(len(unit_ids))
+        unit_map = {u["unit_id"]: u.get("unit_reference") for u in units}
+        for c in clients:
+            c["unit_reference"] = unit_map.get(c.get("unit_id")) or c.get("unit_reference")
+
+    return clients
 
 
 async def list_clients_by_project(project_id: str) -> List[Dict[str, Any]]:
-    return await db.clients.find(
+    clients = await db.clients.find(
         {"project_id": project_id}, {"_id": 0}
     ).to_list(500)
+
+    # Enrich with project name
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "name": 1})
+    project_name = project.get("name") if project else None
+
+    # Batch-enrich with unit_reference
+    unit_ids = list({c["unit_id"] for c in clients if c.get("unit_id")})
+    if unit_ids:
+        units = await db.units.find(
+            {"unit_id": {"$in": unit_ids}}, {"_id": 0, "unit_id": 1, "unit_reference": 1}
+        ).to_list(len(unit_ids))
+        unit_map = {u["unit_id"]: u.get("unit_reference") for u in units}
+        for c in clients:
+            c["unit_reference"] = unit_map.get(c.get("unit_id")) or c.get("unit_reference")
+            c["project_name"] = project_name
+
+    return clients
 
 
 async def update_client(
@@ -86,36 +198,78 @@ async def update_client(
     old_client = await get_client(client_id)
     if "unit_id" in filtered and old_client:
         old_unit_id = old_client.get("unit_id")
-        new_unit_id = filtered.get("unit_id")
+        new_unit_id = _normalize_unit_id(filtered.get("unit_id"))
+        filtered["unit_id"] = new_unit_id
 
-        # Unassign old unit
         if old_unit_id and old_unit_id != new_unit_id:
-            await db.units.update_one(
-                {"unit_id": old_unit_id},
-                {"$set": {"assigned_client_id": None, "is_available": True,
-                          "updated_at": datetime.now(timezone.utc).isoformat()}}
-            )
+            await _detach_client_from_unit(old_unit_id, client_id)
 
-        # Assign new unit
         if new_unit_id:
-            await db.units.update_one(
-                {"unit_id": new_unit_id},
-                {"$set": {"assigned_client_id": client_id, "is_available": False,
-                          "updated_at": datetime.now(timezone.utc).isoformat()}}
-            )
+            await _attach_client_to_unit(new_unit_id, client_id)
 
     filtered["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.clients.update_one({"client_id": client_id}, {"$set": filtered})
     return await get_client(client_id)
 
 
-async def delete_client(client_id: str) -> bool:
+async def get_client_delete_impact(client_id: str) -> Dict[str, Any]:
+    """Summarize linked records and deletion risks for a client."""
+    doc_status_pipeline = [
+        {"$match": {"client_id": client_id}},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+    ]
+    status_rows = await db.documents.aggregate(doc_status_pipeline).to_list(50)
+    documents_by_status = {row.get("_id") or "unknown": row.get("count", 0) for row in status_rows}
+    non_draft_documents = sum(
+        count for status, count in documents_by_status.items() if status not in NON_DRAFT_DOCUMENT_STATUS
+    )
+    return {
+        "client_id": client_id,
+        "documents_total": await db.documents.count_documents({"client_id": client_id}),
+        "documents_non_draft": non_draft_documents,
+        "documents_by_status": documents_by_status,
+        "activity_recipients": await db.activity_recipients.count_documents({"client_id": client_id}),
+        "decision_recipients": await db.decision_recipients.count_documents({"client_id": client_id}),
+    }
+
+
+async def delete_client(client_id: str, force: bool = False) -> bool:
     client = await get_client(client_id)
-    if client and client.get("unit_id"):
-        await db.units.update_one(
-            {"unit_id": client["unit_id"]},
-            {"$set": {"assigned_client_id": None, "is_available": True}}
+    if not client:
+        return False
+
+    impact = await get_client_delete_impact(client_id)
+    if impact["documents_non_draft"] > 0:
+        raise ValueError(
+            "Cannot delete client with issued documents (Sent/Approved/Paid/etc). "
+            "Reassign/archive records first."
         )
+
+    # Clean up draft document files and rows.
+    from services.file_service import delete_file
+    draft_docs = await db.documents.find(
+        {"client_id": client_id, "status": "Draft"},
+        {"_id": 0, "document_id": 1, "pdf_stored_filename": 1, "hero_image_stored_filename": 1},
+    ).to_list(10000)
+    draft_doc_ids = _collect_string_ids(draft_docs, "document_id")
+    for doc in draft_docs:
+        for fk in ("pdf_stored_filename", "hero_image_stored_filename"):
+            if doc.get(fk):
+                delete_file(doc[fk])
+    if draft_doc_ids:
+        await db.change_requests.delete_many({"entity_id": {"$in": draft_doc_ids}})
+    await db.documents.delete_many({"client_id": client_id, "status": "Draft"})
+
+    # Remove recipient links tied to this client.
+    await db.activity_recipients.delete_many({"client_id": client_id})
+    await db.decision_recipients.delete_many({"client_id": client_id})
+
+    # Optionally detach buyer mapping from the client before deletion.
+    if force and client.get("buyer_id"):
+        await db.clients.update_one({"client_id": client_id}, {"$set": {"buyer_id": None}})
+
+    if client and client.get("unit_id"):
+        await _detach_client_from_unit(client["unit_id"], client_id)
     result = await db.clients.delete_one({"client_id": client_id})
     return result.deleted_count > 0
 
@@ -141,8 +295,14 @@ async def get_client_preview(client_id: str) -> Dict[str, Any]:
     ).sort("created_at", -1).to_list(20)
 
     # Get recent activities involving this client
+    recipient_rows = await db.activity_recipients.find(
+        {"client_id": client_id},
+        {"_id": 0, "activity_id": 1},
+    ).to_list(200)
+    activity_ids = [row.get("activity_id") for row in recipient_rows if row.get("activity_id")]
     activities = await db.activities.find(
-        {"client_ids": client_id}, {"_id": 0}
+        {"activity_id": {"$in": activity_ids}},
+        {"_id": 0},
     ).sort("created_at", -1).to_list(10)
 
     # Get unit info

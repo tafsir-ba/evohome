@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
+import { useDataContext } from '../../context/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
+import { formatDocContext, formatContextSubtitle } from '../../lib/utils';
 import { 
   ArrowLeft,
   Eye,
@@ -41,17 +43,25 @@ const getAuthHeaders = () => {
  */
 export const ClientPreview = () => {
   const { clientId } = useParams();
+  const { projects, loading: projectsLoading } = useDataContext();
   const [loading, setLoading] = useState(true);
   const [previewData, setPreviewData] = useState(null);
   const [activeTab, setActiveTab] = useState('documents');
 
   useEffect(() => {
+    if (projectsLoading) return;
     const fetchPreviewData = async () => {
       try {
         const res = await fetch(`${API}/clients/${clientId}/preview`, { credentials: 'include', headers: getAuthHeaders() });
         
         if (res.ok) {
           const data = await res.json();
+          const previewProjectId = data?.client?.project_id;
+          if (previewProjectId && !projects.some((p) => p.project_id === previewProjectId)) {
+            toast.error('This client is outside your project access');
+            setPreviewData(null);
+            return;
+          }
           setPreviewData(data);
         } else {
           toast.error('Failed to load client preview');
@@ -65,7 +75,7 @@ export const ClientPreview = () => {
     };
 
     fetchPreviewData();
-  }, [clientId]);
+  }, [clientId, projectsLoading, projects.length]);
 
   if (loading) {
     return (
@@ -151,16 +161,10 @@ export const ClientPreview = () => {
                 <div>
                   <h2 className="text-xl font-outfit font-semibold">{client.name}</h2>
                   <div className="flex items-center gap-3 text-sm text-muted-foreground mt-0.5">
-                    {project && (
+                    {(project || client.unit_reference) && (
                       <span className="flex items-center gap-1">
                         <Building2 className="w-3.5 h-3.5" />
-                        {project.name}
-                      </span>
-                    )}
-                    {client.unit_reference && (
-                      <span className="flex items-center gap-1">
-                        <Home className="w-3.5 h-3.5" />
-                        Unit {client.unit_reference}
+                        {formatContextSubtitle({ project_name: project?.name, unit_reference: client.unit_reference })}
                       </span>
                     )}
                   </div>
@@ -272,7 +276,7 @@ export const ClientPreview = () => {
                           {/* Title and number */}
                           <h3 className="font-semibold text-foreground">{doc.title}</h3>
                           <p className="text-sm text-muted-foreground mt-0.5">
-                            {doc.document_number} · {doc.unit_reference}
+                            {formatDocContext({ document_number: doc.document_number, unit_reference: doc.unit_reference })}
                           </p>
                           
                           {/* Summary */}

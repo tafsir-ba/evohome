@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 
 from database import db
+from core.access_scope import resolve_agent_access_scope
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +18,11 @@ logger = logging.getLogger(__name__)
 async def _verify_project_access(project_id: str, user: dict) -> dict:
     """Verify user has access to the project. Returns project dict."""
     if user["role"] == "agent":
+        scope = await resolve_agent_access_scope(user)
+        if not scope.can_access_all_projects and project_id not in set(scope.accessible_project_ids):
+            return None
         project = await db.projects.find_one(
-            {"project_id": project_id, "agent_id": user["user_id"]}, {"_id": 0}
+            {"project_id": project_id, "agent_id": scope.workspace_owner_id}, {"_id": 0}
         )
     else:
         client = await db.clients.find_one(
@@ -107,6 +111,7 @@ async def delete_team_member(
 
 async def get_directory(
     agent_id: str,
+    accessible_project_ids: Optional[List[str]] = None,
     search: Optional[str] = None,
     project_id: Optional[str] = None,
     limit: int = 50,
@@ -115,6 +120,10 @@ async def get_directory(
     query: dict = {"agent_id": agent_id}
     if project_id:
         query["project_id"] = project_id
+    elif accessible_project_ids is not None:
+        if not accessible_project_ids:
+            return []
+        query["project_id"] = {"$in": accessible_project_ids}
 
     members = await db.team_members.find(query, {"_id": 0}).to_list(500)
 

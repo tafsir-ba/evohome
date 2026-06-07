@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { toast } from 'sonner';
 import { useSettings } from '../../context/SettingsContext';
 import { useDataContext } from '../../context/DataContext';
+import { parseApiError } from '../../lib/api';
 import { 
   Plus, 
   Search, 
@@ -17,6 +18,7 @@ import {
   Mail,
   Phone,
   Building2,
+  Home,
   ArrowRight,
   Pencil,
   Trash2,
@@ -72,8 +74,15 @@ export const AgentClients = () => {
     if (projectFilter && projects.length > 0) {
       const proj = projects.find(p => p.project_id === projectFilter);
       setFilterProject(proj || null);
+      if (!proj) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('project');
+          return next;
+        }, { replace: true });
+      }
     }
-  }, [projectFilter, projects]);
+  }, [projectFilter, projects, setSearchParams]);
 
   const fetchClients = async () => {
     setLoading(true);
@@ -82,7 +91,7 @@ export const AgentClients = () => {
         ? `${API}/clients?project_id=${projectFilter}`
         : `${API}/clients`;
       
-      const clientsRes = await fetch(clientsUrl, { credentials: 'include' });
+      const clientsRes = await fetch(clientsUrl, { credentials: 'include', headers: getAuthHeaders() });
       
       if (clientsRes.ok) setClients(await clientsRes.json());
     } catch (error) {
@@ -117,12 +126,18 @@ export const AgentClients = () => {
     e.preventDefault();
     setFormLoading(true);
     
+    const payload = {
+      ...clientForm,
+      unit_id: !clientForm.unit_id || clientForm.unit_id === 'none' || clientForm.unit_id === 'general'
+        ? null
+        : clientForm.unit_id,
+    };
     try {
       const response = await fetch(`${API}/clients`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
-        body: JSON.stringify(clientForm)
+        body: JSON.stringify(payload)
       });
       
       if (response.ok) {
@@ -133,8 +148,8 @@ export const AgentClients = () => {
         fetchClients();
         refreshProjects(); // Update client_count on project cards
       } else {
-        const error = await response.json();
-        toast.error(error.detail);
+        const error = await parseApiError(response);
+        toast.error(error.message || 'Failed to create client');
       }
     } catch (error) {
       toast.error('Failed to create client');
@@ -162,8 +177,8 @@ export const AgentClients = () => {
         refreshProjects(); // Refresh projects in DataContext
         fetchClients();
       } else {
-        const error = await response.json();
-        toast.error(error.detail);
+        const error = await parseApiError(response);
+        toast.error(error.message || 'Failed to create project');
       }
     } catch (error) {
       toast.error('Failed to create project');
@@ -194,14 +209,14 @@ export const AgentClients = () => {
   };
 
   const filteredClients = clients.filter(client =>
-    client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (client.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (client.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (client.unit_reference || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getProjectName = (projectId) => {
     const project = projects.find(p => p.project_id === projectId);
-    return project?.name || 'Unknown Project';
+    return project?.name;
   };
 
   if (loading) {
@@ -289,14 +304,14 @@ export const AgentClients = () => {
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
                       <div className="w-12 h-12 bg-[#2E3A45] rounded-full flex items-center justify-center text-white font-medium">
-                        {client.name.charAt(0)}
+                        {(client.name || '?').charAt(0)}
                       </div>
                       <div>
-                        <h3 className="font-medium text-[#1A1A1A]">{client.name}</h3>
+                        <h3 className="font-medium text-[#1A1A1A]">{client.name || 'Unnamed Client'}</h3>
                         <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Mail className="w-3 h-3" />
-                            {client.email}
+                            {client.email || 'No email'}
                           </span>
                           {client.phone && (
                             <span className="flex items-center gap-1">
@@ -306,16 +321,28 @@ export const AgentClients = () => {
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-2">
-                          <span className="text-xs font-medium px-2 py-1 bg-[#F0F2F5] rounded-lg">
-                            {getProjectName(client.project_id)}
-                          </span>
-                          <span className="text-xs font-medium px-2 py-1 bg-[#F0F2F5] rounded-lg">
-                            {client.unit_reference}
-                          </span>
+                          {(client.project_name || getProjectName(client.project_id)) && (
+                            <span className="text-xs font-medium px-2 py-1 bg-[#F0F2F5] rounded-lg">
+                              {client.project_name || getProjectName(client.project_id)}
+                            </span>
+                          )}
+                          {client.unit_reference && (
+                            <span className="text-xs font-medium px-2 py-1 bg-[#F0F2F5] rounded-lg">
+                              {client.unit_reference}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {client.unit_id && (
+                        <Link to={`/agent/units/${client.unit_id}`}>
+                          <Button variant="outline" size="sm" className="rounded-lg gap-1.5" data-testid={`manage-unit-${client.client_id}`}>
+                            <Home className="w-4 h-4" />
+                            Unit
+                          </Button>
+                        </Link>
+                      )}
                       <Link to={`/agent/clients/${client.client_id}/preview`}>
                         <Button variant="outline" size="sm" className="rounded-lg gap-1.5" data-testid={`view-client-${client.client_id}`}>
                           <Eye className="w-4 h-4" />
@@ -440,7 +467,7 @@ export const AgentClients = () => {
                     } />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="general">General (No specific unit)</SelectItem>
+                    <SelectItem value="none">General (No specific unit)</SelectItem>
                     {projectUnits.map(unit => (
                       <SelectItem key={unit.unit_id} value={unit.unit_id}>
                         {unit.name || unit.unit_reference}

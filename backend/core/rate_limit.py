@@ -1,20 +1,26 @@
 """
 Rate Limiting Module
 
-Simple in-memory rate limiting for critical endpoints.
-Protects against brute force and abuse without external dependencies.
-
-For production scale, replace with Redis-backed implementation.
+Redis-backed when REDIS_URL is configured (multi-instance safe).
+Falls back to in-memory limiter when Redis is unavailable.
 """
 
+import os
 import time
+import uuid
 import logging
 from typing import Dict, Tuple, Optional
 from collections import defaultdict
 from functools import wraps
 from fastapi import Request, HTTPException
 
+try:
+    from redis.asyncio import Redis as AsyncRedis
+except Exception:  # pragma: no cover - optional dependency
+    AsyncRedis = None
+
 logger = logging.getLogger("evohome.ratelimit")
+REDIS_URL = os.environ.get("REDIS_URL", "").strip()
 
 
 class RateLimiter:
@@ -96,6 +102,8 @@ class RateLimiter:
 
 # Global rate limiter instance
 _limiter = RateLimiter()
+_redis_client: Optional["AsyncRedis"] = None
+_redis_init_failed = False
 
 
 # Rate limit configurations per endpoint category
@@ -132,7 +140,68 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def check_rate_limit(
+async def _get_redis_client() -> Optional["AsyncRedis"]:
+    """Create and cache Redis client if configured."""
+    global _redis_client, _redis_init_failed
+
+    if _redis_client is not None:
+        return _redis_client
+    if _redis_init_failed or not REDIS_URL or AsyncRedis is None:
+        return None
+
+    try:
+        client = AsyncRedis.from_url(REDIS_URL, decode_responses=True)
+        await client.ping()
+        _redis_client = client
+        logger.info("Rate limiter using Redis backend")
+        return _redis_client
+    except Exception as e:
+        _redis_init_failed = True
+        logger.warning(f"Redis rate limiter unavailable; using in-memory fallback: {e}")
+        return None
+
+
+async def _check_rate_limit_redis(
+    key: str,
+    max_requests: int,
+    window_seconds: int,
+) -> Tuple[bool, int, int]:
+    """Sliding-window rate limiting in Redis with sorted sets."""
+    redis = await _get_redis_client()
+    if redis is None:
+        return _limiter.is_allowed(key, max_requests, window_seconds)
+
+    now_ms = int(time.time() * 1000)
+    window_start_ms = now_ms - (window_seconds * 1000)
+    redis_key = f"rate_limit:{key}"
+    member = f"{now_ms}-{uuid.uuid4().hex[:8]}"
+
+    try:
+        pipe = redis.pipeline(transaction=True)
+        pipe.zremrangebyscore(redis_key, 0, window_start_ms)
+        pipe.zcard(redis_key)
+        pipe.zadd(redis_key, {member: now_ms})
+        pipe.expire(redis_key, max(window_seconds, 60))
+        _, current_count, _, _ = await pipe.execute()
+
+        if current_count >= max_requests:
+            await redis.zrem(redis_key, member)
+            oldest = await redis.zrange(redis_key, 0, 0, withscores=True)
+            if oldest:
+                oldest_ms = int(oldest[0][1])
+                reset_in = max(1, int((oldest_ms + (window_seconds * 1000) - now_ms) / 1000) + 1)
+            else:
+                reset_in = window_seconds
+            return False, 0, reset_in
+
+        remaining = max_requests - current_count - 1
+        return True, remaining, window_seconds
+    except Exception as e:
+        logger.warning(f"Redis rate-limit check failed; using in-memory fallback: {e}")
+        return _limiter.is_allowed(key, max_requests, window_seconds)
+
+
+async def check_rate_limit(
     request: Request,
     category: str,
     key_suffix: str = ""
@@ -154,11 +223,9 @@ def check_rate_limit(
     key = f"{category}:{client_ip}"
     if key_suffix:
         key = f"{key}:{key_suffix}"
-    
-    allowed, remaining, reset_in = _limiter.is_allowed(
-        key,
-        config["max"],
-        config["window"]
+
+    allowed, remaining, reset_in = await _check_rate_limit_redis(
+        key, config["max"], config["window"]
     )
     
     headers = {
@@ -194,7 +261,7 @@ def rate_limit(category: str):
                         break
             
             if request:
-                allowed, headers = check_rate_limit(request, category)
+                allowed, headers = await check_rate_limit(request, category)
                 
                 if not allowed:
                     raise HTTPException(
@@ -208,7 +275,7 @@ def rate_limit(category: str):
     return decorator
 
 
-def rate_limit_check(request: Request, category: str) -> None:
+async def rate_limit_check(request: Request, category: str) -> None:
     """
     Inline rate limit check for use inside endpoints.
     
@@ -218,7 +285,7 @@ def rate_limit_check(request: Request, category: str) -> None:
     Raises:
         HTTPException: If rate limit exceeded
     """
-    allowed, headers = check_rate_limit(request, category)
+    allowed, headers = await check_rate_limit(request, category)
     
     if not allowed:
         raise HTTPException(

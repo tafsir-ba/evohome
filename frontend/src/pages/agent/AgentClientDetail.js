@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AgentLayout } from '../../components/AgentLayout';
 import { useSettings } from '../../context/SettingsContext';
+import { useDataContext } from '../../context/DataContext';
+import { formatContextSubtitle } from '../../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -14,16 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../components/ui/select';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../../components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { 
   ArrowLeft, 
@@ -33,9 +25,10 @@ import {
   User, 
   Mail, 
   Phone,
-  AlertTriangle,
-  Loader2
+  Loader2,
+  Plus
 } from 'lucide-react';
+import { parseApiError } from '../../lib/api';
 import { cn } from '../../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
@@ -49,45 +42,52 @@ export const AgentClientDetail = () => {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const { t } = useSettings();
+  const { projects, loading: projectsLoading } = useDataContext();
   const [client, setClient] = useState(null);
   const [project, setProject] = useState(null);
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [newUnitReference, setNewUnitReference] = useState('');
+  const [creatingUnit, setCreatingUnit] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    unit_id: '',
-    force_unit_reassign: false
+    project_id: '',
+    unit_id: ''
   });
-  
-  // Confirmation dialog state for reassigning units
-  const [showReassignConfirm, setShowReassignConfirm] = useState(false);
-  const [pendingUnitChange, setPendingUnitChange] = useState(null);
-  const [conflictingClient, setConflictingClient] = useState(null);
 
   useEffect(() => {
+    if (projectsLoading) return;
     fetchClient();
-  }, [clientId]);
+  }, [clientId, projectsLoading, projects.length]);
 
   const fetchClient = async () => {
     try {
       const response = await fetch(`${API}/clients/${clientId}`, { credentials: 'include', headers: getAuthHeaders() });
       if (response.ok) {
         const data = await response.json();
+        if (data.project_id && !projects.some((p) => p.project_id === data.project_id)) {
+          toast.error('This client is outside your project access');
+          navigate('/agent/clients');
+          return;
+        }
         setClient(data);
         setFormData({
           name: data.name,
           email: data.email,
           phone: data.phone || '',
-          unit_id: data.unit_id || '',
-          force_unit_reassign: false
+          project_id: data.project_id || '',
+          unit_id: data.unit_id || ''
         });
         
         // Fetch project and units
         if (data.project_id) {
           fetchProjectAndUnits(data.project_id);
+        } else {
+          setProject(null);
+          setUnits([]);
         }
       } else {
         toast.error('Client not found');
@@ -120,31 +120,50 @@ export const AgentClientDetail = () => {
   };
 
   const handleUnitChange = (newUnitId) => {
-    // Check if unit is assigned to another client
-    const selectedUnit = units.find(u => u.unit_id === newUnitId);
-    
-    if (selectedUnit && !selectedUnit.is_available && selectedUnit.assigned_client_id !== clientId) {
-      // Unit is assigned to someone else - show confirmation
-      setConflictingClient(selectedUnit.assigned_client_name);
-      setPendingUnitChange(newUnitId);
-      setShowReassignConfirm(true);
+    setFormData({ ...formData, unit_id: newUnitId });
+  };
+
+  const handleProjectChange = async (projectId) => {
+    setFormData((prev) => ({ ...prev, project_id: projectId, unit_id: '' }));
+    if (projectId) {
+      await fetchProjectAndUnits(projectId);
     } else {
-      // Unit is available or already assigned to this client
-      setFormData({ ...formData, unit_id: newUnitId });
+      setProject(null);
+      setUnits([]);
     }
   };
 
-  const confirmUnitReassign = () => {
-    setFormData({ ...formData, unit_id: pendingUnitChange, force_unit_reassign: true });
-    setShowReassignConfirm(false);
-    setPendingUnitChange(null);
-    setConflictingClient(null);
-  };
-
-  const cancelUnitReassign = () => {
-    setShowReassignConfirm(false);
-    setPendingUnitChange(null);
-    setConflictingClient(null);
+  const handleCreateUnitInline = async () => {
+    if (!formData.project_id) {
+      toast.error('Select a project first');
+      return;
+    }
+    if (!newUnitReference.trim()) {
+      toast.error('Enter a unit reference');
+      return;
+    }
+    setCreatingUnit(true);
+    try {
+      const res = await fetch(`${API}/projects/${formData.project_id}/units`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
+        body: JSON.stringify({ unit_reference: newUnitReference.trim() }),
+      });
+      if (!res.ok) {
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to create unit');
+      }
+      const created = await res.json();
+      setNewUnitReference('');
+      toast.success('Unit created');
+      await fetchProjectAndUnits(formData.project_id);
+      setFormData((prev) => ({ ...prev, unit_id: created.unit_id }));
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setCreatingUnit(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -160,24 +179,17 @@ export const AgentClientDetail = () => {
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
-          unit_id: formData.unit_id || null,
-          force_unit_reassign: formData.force_unit_reassign
+          project_id: formData.project_id || null,
+          unit_id: formData.unit_id || null
         })
       });
 
       if (response.ok) {
         toast.success('Client updated successfully');
-        // Reset force flag and refresh client data
-        setFormData(prev => ({ ...prev, force_unit_reassign: false }));
         fetchClient();
       } else {
-        const error = await response.json();
-        if (response.status === 409) {
-          // Unit conflict - show error with client name
-          toast.error(error.detail);
-        } else {
-          toast.error(error.detail || 'Failed to update client');
-        }
+        const error = await parseApiError(response);
+        toast.error(error.message || 'Failed to update client');
       }
     } catch (error) {
       toast.error('Failed to update client');
@@ -198,8 +210,6 @@ export const AgentClientDetail = () => {
   }
 
   const currentUnit = units.find(u => u.unit_id === formData.unit_id);
-  const availableUnits = units.filter(u => u.is_available || u.unit_id === client?.unit_id);
-
   return (
     <AgentLayout>
       <div className="max-w-3xl space-y-6" data-testid="agent-client-detail">
@@ -225,14 +235,7 @@ export const AgentClientDetail = () => {
                 {project?.name && (
                   <span className="flex items-center gap-1">
                     <Building2 className="w-4 h-4" />
-                    {project.name}
-                    {client?.unit_reference && client.unit_reference !== 'General' && (
-                      <>
-                        <span className="mx-1">•</span>
-                        <Home className="w-4 h-4" />
-                        {client.unit_reference}
-                      </>
-                    )}
+                    {formatContextSubtitle({ project_name: project.name, unit_reference: client?.unit_reference !== 'General' ? client?.unit_reference : undefined })}
                   </span>
                 )}
               </p>
@@ -319,15 +322,30 @@ export const AgentClientDetail = () => {
                   <Building2 className="w-4 h-4" />
                   Project
                 </Label>
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <Building2 className="w-5 h-5 text-primary" />
+                <Select value={formData.project_id || 'none'} onValueChange={(value) => handleProjectChange(value === 'none' ? '' : value)}>
+                  <SelectTrigger className="rounded-lg">
+                    <SelectValue placeholder="Select project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No project selected</SelectItem>
+                    {projects.map((p) => (
+                      <SelectItem key={p.project_id} value={p.project_id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {project && (
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <Building2 className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{project?.name}</p>
+                      <p className="text-sm text-muted-foreground">{project?.address || 'No address'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">{project?.name || client?.project_id}</p>
-                    <p className="text-sm text-muted-foreground">{project?.address || 'No address'}</p>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Unit Selection */}
@@ -337,17 +355,34 @@ export const AgentClientDetail = () => {
                   Assigned Unit
                 </Label>
                 
-                {units.length === 0 ? (
+                {!formData.project_id ? (
+                  <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      Select a project first to manage unit assignment.
+                    </p>
+                  </div>
+                ) : units.length === 0 ? (
                   <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                     <p className="text-sm text-amber-800 dark:text-amber-200">
                       No units defined for this project yet. 
                       <Link 
-                        to={`/agent/projects/${client?.project_id}`}
+                        to="/agent/projects"
                         className="underline ml-1 hover:text-amber-900 dark:hover:text-amber-100"
                       >
                         Add units to the project
                       </Link>
                     </p>
+                    <div className="mt-3 flex gap-2">
+                      <Input
+                        placeholder="New unit reference (e.g. A-301)"
+                        value={newUnitReference}
+                        onChange={(e) => setNewUnitReference(e.target.value)}
+                        className="bg-background"
+                      />
+                      <Button onClick={handleCreateUnitInline} disabled={creatingUnit || !newUnitReference.trim()}>
+                        {creatingUnit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -361,7 +396,7 @@ export const AgentClientDetail = () => {
                           {formData.unit_id ? (
                             <span className="flex items-center gap-2">
                               <Home className="w-4 h-4" />
-                              {currentUnit?.unit_reference || currentUnit?.name || 'Unit'}
+                              {currentUnit?.unit_reference || currentUnit?.name}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">No unit assigned</span>
@@ -374,27 +409,24 @@ export const AgentClientDetail = () => {
                         </SelectItem>
                         {units.map(unit => {
                           const isCurrentClientUnit = unit.unit_id === client?.unit_id;
-                          const isAssignedToOther = !unit.is_available && !isCurrentClientUnit;
+                          const assignedCount = Number(unit.assigned_clients_count || 0);
+                          const hasOtherAssignees = assignedCount > (isCurrentClientUnit ? 1 : 0);
                           
                           return (
                             <SelectItem 
                               key={unit.unit_id} 
                               value={unit.unit_id}
-                              className={cn(isAssignedToOther && "text-muted-foreground")}
                             >
                               <div className="flex items-center justify-between w-full gap-4">
                                 <span className="flex items-center gap-2">
-                                  <Home className={cn(
-                                    "w-4 h-4",
-                                    isAssignedToOther ? "text-muted-foreground" : "text-primary"
-                                  )} />
+                                  <Home className="w-4 h-4 text-primary" />
                                   {unit.unit_reference || unit.name}
                                 </span>
                                 {isCurrentClientUnit ? (
                                   <Badge variant="secondary" className="text-xs">Current</Badge>
-                                ) : isAssignedToOther ? (
-                                  <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                                    {unit.assigned_client_name}
+                                ) : hasOtherAssignees ? (
+                                  <Badge variant="outline" className="text-xs">
+                                    {assignedCount} clients
                                   </Badge>
                                 ) : (
                                   <Badge variant="outline" className="text-xs text-green-600 border-green-300">
@@ -448,6 +480,13 @@ export const AgentClientDetail = () => {
                               ? 'Currently assigned to this client'
                               : 'Will be assigned after saving'}
                           </p>
+                          {currentUnit.unit_id === client?.unit_id && (
+                            <Link to={`/agent/units/${currentUnit.unit_id}`}>
+                              <Button variant="link" className="h-auto p-0 text-xs">
+                                Manage this unit
+                              </Button>
+                            </Link>
+                          )}
                         </div>
                       </div>
                     )}
@@ -490,29 +529,6 @@ export const AgentClientDetail = () => {
         </form>
       </div>
 
-      {/* Reassignment Confirmation Dialog */}
-      <AlertDialog open={showReassignConfirm} onOpenChange={setShowReassignConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
-              Unit Already Assigned
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This unit is currently assigned to <strong>{conflictingClient}</strong>. 
-              Reassigning it to {client?.name} will remove it from the other client.
-              <br /><br />
-              Do you want to proceed with the reassignment?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelUnitReassign}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmUnitReassign} className="bg-amber-600 hover:bg-amber-700">
-              Reassign Unit
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AgentLayout>
   );
 };

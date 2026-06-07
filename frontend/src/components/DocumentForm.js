@@ -22,9 +22,10 @@ import {
   Eye,
   ImageIcon
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatClientContextCompact } from '../lib/utils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
+const BASE_URL = process.env.REACT_APP_BACKEND_URL;
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('auth_token');
@@ -248,16 +249,28 @@ export const LineItemsEditor = ({ items, onChange }) => {
 };
 
 // Hero Image Uploader Component
-export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
+export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate, onAutoSave }) => {
   const [uploading, setUploading] = useState(false);
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !documentId) return;
+    if (!file) return;
 
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      toast.error('Please upload a JPEG, PNG, or WebP image');
+    // Auto-save draft if document doesn't exist yet
+    let docId = documentId;
+    if (!docId && onAutoSave) {
+      try {
+        docId = await onAutoSave();
+        if (!docId) {
+          toast.error('Failed to save draft. Please try again.');
+          return;
+        }
+      } catch (err) {
+        toast.error('Failed to save draft. Please try again.');
+        return;
+      }
+    } else if (!docId) {
+      toast.error('Please save the document as a draft first before uploading a hero image');
       return;
     }
 
@@ -267,7 +280,7 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
 
     try {
       const token = localStorage.getItem('auth_token');
-      const res = await fetch(`${API}/documents/${documentId}/hero-image`, {
+      const res = await fetch(`${API}/documents/${docId}/hero-image`, {
         method: 'POST',
         credentials: 'include',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
@@ -276,11 +289,12 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
 
       if (res.ok) {
         const data = await res.json();
-        onUpdate(data.hero_image_url);
+        onUpdate(data.url);
         toast.success('Hero image uploaded');
       } else {
         const error = await res.json();
-        throw new Error(error.detail || 'Upload failed');
+        const msg = error.message || error.detail?.message || error.detail || 'Upload failed';
+        throw new Error(typeof msg === 'string' ? msg : 'Upload failed');
       }
     } catch (error) {
       toast.error(error.message || 'Failed to upload hero image');
@@ -318,7 +332,7 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
       {heroImageUrl ? (
         <div className="relative group">
           <img
-            src={`${API.replace('/api', '')}${heroImageUrl}`}
+            src={heroImageUrl.startsWith('http') ? heroImageUrl : `${BASE_URL}${heroImageUrl}`}
             alt="Hero"
             className="w-full h-32 object-cover rounded-lg border border-border"
           />
@@ -326,7 +340,7 @@ export const HeroImageUploader = ({ documentId, heroImageUrl, onUpdate }) => {
             <label className="cursor-pointer">
               <input
                 type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp"
+                accept="image/*"
                 onChange={handleUpload}
                 className="hidden"
                 disabled={uploading}
@@ -434,12 +448,7 @@ export const ClientSelector = ({ clients, selectedClient, onSelect, loading }) =
         <SelectContent>
           {clients.map(client => (
             <SelectItem key={client.client_id} value={client.client_id}>
-              {client.name}
-              {(client.project_name || client.unit_reference) && (
-                <span className="text-muted-foreground ml-1">
-                  ({[client.project_name, client.unit_reference].filter(Boolean).join(' / ')})
-                </span>
-              )}
+              {formatClientContextCompact(client)}
             </SelectItem>
           ))}
         </SelectContent>

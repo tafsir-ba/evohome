@@ -318,7 +318,7 @@ export const CommandBar = forwardRef(({ context, onPreviewReady }, ref) => {
   return (
     <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent shadow-sm">
       <CardContent className="pt-5 pb-4 space-y-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+        <div className="mb-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <Sparkles className="w-4 h-4 text-primary" />
           <span>Command Bar</span>
           <span className="text-xs text-muted-foreground/60 ml-auto">Type, speak, or drop a file</span>
@@ -355,19 +355,19 @@ export const CommandBar = forwardRef(({ context, onPreviewReady }, ref) => {
             </div>
           )}
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {voiceSupported ? (
               <Button
                 variant={isListening ? 'default' : 'outline'}
                 size="icon"
-                className={cn('rounded-full flex-shrink-0', isListening && 'bg-red-500 hover:bg-red-600')}
+                className={cn('order-1 rounded-full flex-shrink-0', isListening && 'bg-red-500 hover:bg-red-600')}
                 onClick={toggleVoiceInput}
                 data-testid="voice-input-btn"
               >
                 {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
               </Button>
             ) : (
-              <Button variant="outline" size="icon" className="rounded-full flex-shrink-0 opacity-50" disabled data-testid="voice-input-btn-disabled">
+              <Button variant="outline" size="icon" className="order-1 rounded-full flex-shrink-0 opacity-50" disabled data-testid="voice-input-btn-disabled">
                 <Mic className="w-5 h-5" />
               </Button>
             )}
@@ -378,16 +378,16 @@ export const CommandBar = forwardRef(({ context, onPreviewReady }, ref) => {
               onChange={(e) => setCommandText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleCommandSubmit()}
               placeholder={isDragActive ? 'Drop file to upload...' : 'Type a command or drop a file... (Cmd+K)'}
-              className="flex-1 border-0 bg-transparent text-lg focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="order-2 basis-full sm:order-none sm:basis-auto flex-1 min-w-0 border-0 bg-transparent text-base sm:text-lg focus-visible:ring-0 focus-visible:ring-offset-0"
               disabled={isProcessing || isDragActive}
               data-testid="command-input"
             />
 
-            <Button variant="outline" size="icon" className="rounded-full flex-shrink-0 relative z-20" onClick={triggerFileUpload} type="button" data-testid="file-upload-btn">
+            <Button variant="outline" size="icon" className="order-1 rounded-full flex-shrink-0 relative z-20" onClick={triggerFileUpload} type="button" data-testid="file-upload-btn">
               <Upload className="w-5 h-5" />
             </Button>
 
-            <Button size="icon" className="rounded-full flex-shrink-0" onClick={handleCommandSubmit} disabled={isProcessing || (!commandText.trim() && attachments.length === 0)} data-testid="submit-command-btn">
+            <Button size="icon" className="order-1 rounded-full flex-shrink-0" onClick={handleCommandSubmit} disabled={isProcessing || (!commandText.trim() && attachments.length === 0)} data-testid="submit-command-btn">
               {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </Button>
           </div>

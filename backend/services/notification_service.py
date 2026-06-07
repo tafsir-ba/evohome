@@ -43,6 +43,15 @@ async def create_notification(
         "is_read": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
+
+    # Record side effect in trace (non-blocking, non-failing)
+    try:
+        from core.trace import trace_side_effect, trace_db_mutation
+        trace_side_effect("notification", target=user_id, detail=f"{notification_type}: {title}")
+        trace_db_mutation("notifications", "insert_one", notification_id)
+    except Exception:
+        pass
+
     return notification_id
 
 
@@ -98,6 +107,14 @@ async def list_notifications_with_count(user_id: str) -> Dict[str, Any]:
     unread_count = await db.notifications.count_documents(
         {"user_id": user_id, "is_read": False}
     )
+
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "role": 1})
+    role = (u or {}).get("role") or "buyer"
+    try:
+        from core.notification_routing import enrich_notification_record
+        notifications = [enrich_notification_record(n, role) for n in notifications]
+    except Exception as e:
+        logger.warning(f"Notification enrich failed: {e}")
 
     return {"notifications": notifications, "unread_count": unread_count}
 

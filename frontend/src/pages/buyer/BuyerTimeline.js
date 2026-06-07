@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -10,7 +11,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { toast } from 'sonner';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { NotificationCenter } from '../../components/NotificationCenter';
-import { PdfViewer } from '../../components/PdfViewer';
 import { 
   Home, 
   LogOut, 
@@ -24,7 +24,6 @@ import {
   ChevronDown,
   ChevronUp,
   HardHat,
-  CreditCard,
   Send,
   Loader2,
   Calendar,
@@ -36,24 +35,204 @@ import {
   ExternalLink,
   ImageIcon,
   Bell,
-  Users,
-  Mail,
-  Phone,
   Building2,
   FolderOpen,
   FileCheck,
   AlertTriangle,
   File,
-  FileSpreadsheet
+  FileSpreadsheet,
+  CheckSquare,
+  Paperclip,
+  UserCircle,
+  Mail,
+  Phone
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { Feed } from '../../components/Feed';
+
+const BUYER_CATEGORY_COLORS = {
+  quote: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+  invoice: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+  update: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+  vault: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+  decision: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20',
+};
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('auth_token');
   return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
+// Change Request Thread — shows the full buyer-agent exchange
+const ChangeRequestThread = ({
+  entityType,
+  entityId,
+  buyerComment,
+  preferredChangeRequestId = null,
+  onPreferredMiss = null,
+}) => {
+  const [thread, setThread] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [replyText, setReplyText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const fetchThread = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `${API}/change-requests/entity/${entityType}/${entityId}`,
+        { credentials: 'include', headers: getAuthHeaders() }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const list = data.change_requests || [];
+        let chosen = null;
+        if (preferredChangeRequestId) {
+          const match = list.find((cr) => cr.change_request_id === preferredChangeRequestId);
+          if (match) {
+            chosen = match;
+          } else {
+            toast.error('This change request is no longer available');
+            onPreferredMiss?.();
+          }
+        } else {
+          chosen = list[0] || null;
+        }
+        setThread(chosen);
+      }
+    } catch {
+      // Fallback to just showing the buyer comment
+    } finally {
+      setLoading(false);
+    }
+  }, [entityType, entityId, preferredChangeRequestId, onPreferredMiss]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchThread();
+  }, [fetchThread]);
+
+  useEffect(() => {
+    if (!thread?.change_request_id || !preferredChangeRequestId) return;
+    if (thread.change_request_id !== preferredChangeRequestId) return;
+    requestAnimationFrame(() => {
+      const el = document.querySelector(
+        `[data-testid="change-request-thread-${thread.change_request_id}"]`
+      );
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+      }
+    });
+  }, [thread, preferredChangeRequestId]);
+
+  const handleSendReply = async () => {
+    if (!thread?.change_request_id || !replyText.trim()) return;
+    setSending(true);
+    try {
+      const res = await fetch(`${API}/change-requests/${thread.change_request_id}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
+        body: JSON.stringify({ message: replyText.trim() }),
+      });
+      if (res.ok) {
+        toast.success('Message sent');
+        setReplyText('');
+        await fetchThread();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail?.message || err.detail || 'Failed to send');
+      }
+    } catch {
+      toast.error('Failed to send');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // If no canonical thread exists and no legacy comment, hide
+  if (loading) return null;
+
+  if (!thread) {
+    if (!buyerComment) return null;
+    return (
+      <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+        <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Your question</p>
+        <p className="text-sm text-foreground">{buyerComment}</p>
+      </div>
+    );
+  }
+
+  const canReply = thread.status === 'open' || thread.status === 'under_review';
+
+  return (
+    <div
+      className="rounded-lg border border-blue-500/20 overflow-hidden"
+      data-testid={thread.change_request_id ? `change-request-thread-${thread.change_request_id}` : 'change-request-thread'}
+    >
+      <div className="px-3 py-2 bg-blue-500/10 border-b border-blue-500/20">
+        <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+          Change Request
+          {thread.status === 'closed' && (
+            <span className="ml-2 text-muted-foreground font-normal">Closed</span>
+          )}
+          {thread.status === 'resolved' && (
+            <span className="ml-2 text-emerald-600 font-normal">Resolved</span>
+          )}
+          {thread.status === 'open' && (
+            <span className="ml-2 text-amber-600 font-normal">Awaiting response</span>
+          )}
+          {thread.status === 'under_review' && (
+            <span className="ml-2 text-blue-600 font-normal">Under review</span>
+          )}
+        </p>
+      </div>
+      <div className="p-3 space-y-2">
+        {thread.messages.map(msg => (
+          <div
+            key={msg.message_id}
+            className={cn(
+              'p-2 rounded-lg text-sm',
+              msg.author_role === 'buyer' ? 'bg-muted/50' : 'bg-primary/5 ml-3'
+            )}
+          >
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-xs font-medium capitalize text-muted-foreground">
+                {msg.author_role === 'buyer' ? 'You' : 'Agent'}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {new Date(msg.created_at).toLocaleDateString('de-CH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+            <p className="whitespace-pre-wrap">{msg.content}</p>
+          </div>
+        ))}
+        {canReply && (
+          <div className="pt-2 border-t border-blue-500/10 space-y-2">
+            <Textarea
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="Add a message to your agent..."
+              rows={3}
+              className="text-sm resize-none"
+              data-testid="change-request-reply-input"
+            />
+            <Button
+              size="sm"
+              disabled={sending || !replyText.trim()}
+              onClick={handleSendReply}
+              data-testid="change-request-reply-send"
+            >
+              {sending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+              Send
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 const formatCurrency = (amount, currency = 'CHF') => {
@@ -70,6 +249,7 @@ const formatDate = (dateStr) => {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+
 const formatRelativeTime = (dateStr) => {
   const date = new Date(dateStr);
   const now = new Date();
@@ -80,6 +260,272 @@ const formatRelativeTime = (dateStr) => {
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
   return formatDate(dateStr);
+};
+
+const mapLegacyTabToFilter = (tab) => {
+  const normalized = (tab || '').toLowerCase();
+  if (normalized === 'documents') return 'all';
+  if (normalized === 'updates') return 'updates';
+  if (normalized === 'vault') return 'vault';
+  if (normalized === 'decisions') return 'decisions';
+  return null;
+};
+
+const FEED_FILTERS = [
+  { key: 'all', label: 'All', icon: Home },
+  { key: 'quotes', label: 'Quotes', icon: FileText },
+  { key: 'invoices', label: 'Invoices', icon: Receipt },
+  { key: 'updates', label: 'Updates', icon: Bell },
+  { key: 'vault', label: 'Vault', icon: FolderOpen },
+  { key: 'decisions', label: 'Decisions', icon: CheckSquare },
+];
+
+const resolveFeedFileUrl = (fileUrl) => {
+  if (!fileUrl) return null;
+  if (String(fileUrl).startsWith('http')) return fileUrl;
+  return `${process.env.REACT_APP_BACKEND_URL}${fileUrl}`;
+};
+
+const sortVaultDocuments = (docs = []) => {
+  return [...docs].sort((a, b) => {
+    const aArch = a.is_architect_plan || a.doc_type === 'architect_plan' || a.category === 'architect_plans';
+    const bArch = b.is_architect_plan || b.doc_type === 'architect_plan' || b.category === 'architect_plans';
+    if (aArch !== bArch) return aArch ? -1 : 1;
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  });
+};
+
+const getActivityBody = (activity) => {
+  const title = activity?.title?.trim();
+  const content = activity?.content?.trim();
+  if (title && content) return `${title}\n\n${content}`;
+  return content || title || '';
+};
+
+const normalizeTimelineStatus = (rawStatus) => {
+  const normalized = String(rawStatus || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, '_');
+
+  if (['approved', 'completed', 'done', 'closed'].includes(normalized)) return 'completed';
+  if (['in_progress', 'inprogress', 'active', 'started', 'ongoing'].includes(normalized)) return 'in_progress';
+  if (['pending', 'not_started', 'todo', 'queued'].includes(normalized)) return 'pending';
+  return normalized || 'pending';
+};
+
+const BuyerUpdateFeedCard = ({ activity, highlight = false }) => {
+  const fileUrl = resolveFeedFileUrl(activity.file_url);
+  const postBody = getActivityBody(activity);
+  const ext = String(activity.file_name || '').split('.').pop()?.toLowerCase();
+  const isImage = activity.type === 'image' || Boolean(activity.file_type?.startsWith('image/')) || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
+
+  return (
+    <Card
+      className={cn(
+        'mb-6 overflow-hidden transition-all duration-200 hover:shadow-md',
+        highlight && 'ring-2 ring-primary/40'
+      )}
+      data-testid={`buyer-update-${activity.activity_id}`}
+    >
+      <CardContent className="p-0">
+        <div className="px-4 pt-4 pb-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">{activity.author_name || 'Your agent'}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{formatRelativeTime(activity.created_at)}</p>
+            </div>
+            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase tracking-wider bg-blue-500/10 text-blue-600 border-blue-500/20">
+              Update
+            </span>
+          </div>
+        </div>
+
+        {isImage && fileUrl && (
+          <div className="border-y border-border bg-muted/30">
+            <img src={fileUrl} alt={activity.file_name || 'Update attachment'} className="w-full max-h-[420px] object-contain" />
+          </div>
+        )}
+
+        {!isImage && fileUrl && (
+          <div className="mx-4 mt-2 p-3 rounded-lg border border-border bg-muted/30 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <span className="text-sm truncate">{activity.file_name || 'Attachment'}</span>
+            </div>
+            <Button variant="outline" size="sm" asChild className="flex-shrink-0">
+              <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                <Eye className="w-4 h-4 mr-1.5" />
+                Open
+              </a>
+            </Button>
+          </div>
+        )}
+
+        {postBody && (
+          <div className="px-4 py-3">
+            <p className="text-sm text-foreground whitespace-pre-wrap break-words">{postBody}</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+const DecisionFeedCard = ({
+  decision,
+  onRespond,
+  highlighted = false,
+  preferredChangeRequestId = null,
+  onPreferredMiss = null,
+}) => {
+  const [expanded, setExpanded] = useState(Boolean(highlighted));
+  const [comment, setComment] = useState('');
+  const [responding, setResponding] = useState(false);
+  const [threadReloadTick, setThreadReloadTick] = useState(0);
+  const isPending = decision?.buyer_status === 'pending';
+  const isOverdue = decision?.deadline && decision?.status === 'pending' && new Date(decision.deadline) < new Date();
+
+  useEffect(() => {
+    if (highlighted || preferredChangeRequestId) setExpanded(true);
+  }, [highlighted, preferredChangeRequestId]);
+
+  const handleRespond = async (action) => {
+    setResponding(true);
+    try {
+      await onRespond(decision.decision_id, action, action === 'request_change' ? comment : null);
+      if (action === 'request_change') setComment('');
+      // Ensure freshly-created/updated thread appears immediately.
+      setThreadReloadTick((v) => v + 1);
+    } finally {
+      setResponding(false);
+    }
+  };
+
+  return (
+    <Card
+      className={cn(
+        'mb-6 overflow-hidden transition-all duration-200 hover:shadow-md',
+        isPending && 'border-amber-500/30',
+        isOverdue && 'border-red-500/30',
+        highlighted && 'ring-2 ring-primary/40'
+      )}
+      data-testid={`feed-card-decision-${decision.decision_id}`}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3 cursor-pointer" onClick={() => setExpanded((v) => !v)}>
+          {decision.buyer_status === 'approved' ? (
+            <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+          ) : decision.buyer_status === 'rejected' ? (
+            <XCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+          ) : (
+            <Clock className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={cn('inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase tracking-wider', BUYER_CATEGORY_COLORS.decision)}>
+                Decision
+              </span>
+              <span className="text-xs text-muted-foreground capitalize">{decision.buyer_status}</span>
+            </div>
+            <p className="font-semibold text-foreground mt-2">{decision.title}</p>
+            {decision.deadline && (
+              <p className={cn('text-xs mt-1', isOverdue ? 'text-red-600 font-medium' : 'text-muted-foreground')}>
+                Due: {new Date(decision.deadline).toLocaleDateString('de-CH')}
+              </p>
+            )}
+          </div>
+          {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </div>
+
+        {expanded && (
+          <div className="mt-4 pt-4 border-t space-y-3">
+            {decision.description && <p className="text-sm whitespace-pre-wrap">{decision.description}</p>}
+            {decision.contact_person && (
+              <div className="p-3 rounded-lg border bg-muted/20">
+                <div className="flex items-start gap-2">
+                  <UserCircle className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact person</p>
+                    <p className="text-sm font-medium">{decision.contact_person.name || 'Contact'}</p>
+                    {(decision.contact_person.company_name || decision.contact_person.role) && (
+                      <p className="text-xs text-muted-foreground">
+                        {[decision.contact_person.role, decision.contact_person.company_name].filter(Boolean).join(' - ')}
+                      </p>
+                    )}
+                    {decision.contact_person.email && (
+                      <p className="text-xs mt-1 flex items-center gap-1"><Mail className="w-3 h-3" />{decision.contact_person.email}</p>
+                    )}
+                    {decision.contact_person.phone && (
+                      <p className="text-xs mt-1 flex items-center gap-1"><Phone className="w-3 h-3" />{decision.contact_person.phone}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {decision.external_link && (
+              <a href={decision.external_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+                <ExternalLink className="w-4 h-4" />
+                Open linked file
+              </a>
+            )}
+            {decision.attachments?.length > 0 && (
+              <div className="space-y-1.5">
+                {decision.attachments.map((att, idx) => (
+                  <a
+                    key={att.filename || idx}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 hover:bg-muted text-sm"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                    {att.filename || 'Attachment'}
+                  </a>
+                ))}
+              </div>
+            )}
+
+            <ChangeRequestThread
+              key={`decision-thread-${decision.decision_id}-${threadReloadTick}`}
+              entityType="decision"
+              entityId={decision.decision_id}
+              preferredChangeRequestId={preferredChangeRequestId}
+              onPreferredMiss={preferredChangeRequestId ? onPreferredMiss : undefined}
+            />
+
+            {isPending && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleRespond('approved')} disabled={responding}>
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Approve
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-red-600 border-red-500/30 hover:bg-red-500/10" onClick={() => handleRespond('rejected')} disabled={responding}>
+                    <XCircle className="w-4 h-4 mr-1" />
+                    Decline
+                  </Button>
+                </div>
+                <Textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Ask a question or request changes..."
+                  rows={2}
+                  className="text-sm"
+                />
+                {comment.trim() && (
+                  <Button size="sm" variant="outline" onClick={() => handleRespond('request_change')} disabled={responding}>
+                    <Send className="w-4 h-4 mr-1" />
+                    Send request
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 };
 
 // Status configurations
@@ -117,8 +563,21 @@ const statusConfig = {
 };
 
 // E-Commerce Style Timeline Card
-const TimelineCard = ({ event, onAction, onDownloadPdf, onPreviewPdf, onShowQrPayment }) => {
-  const [expanded, setExpanded] = useState(event.actionRequired);
+const TimelineCard = ({
+  event,
+  onAction,
+  onDownloadPdf,
+  onPreviewPdf,
+  onShowQrPayment,
+  initialExpanded = false,
+  highlightChangeRequestId = null,
+  onClearChangeRequestParam = null,
+}) => {
+  const [expanded, setExpanded] = useState(() => event.actionRequired || initialExpanded);
+
+  useEffect(() => {
+    if (initialExpanded) setExpanded(true);
+  }, [initialExpanded]);
   const [showQuestionInput, setShowQuestionInput] = useState(false);
   const [question, setQuestion] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -155,7 +614,7 @@ const TimelineCard = ({ event, onAction, onDownloadPdf, onPreviewPdf, onShowQrPa
           {event.heroImageUrl ? (
             <>
               <img 
-                src={`${API.replace('/api', '')}${event.heroImageUrl}`}
+                src={event.heroImageUrl?.startsWith('http') ? event.heroImageUrl : `${process.env.REACT_APP_BACKEND_URL}${event.heroImageUrl}`}
                 alt={event.title}
                 className="w-full h-full object-cover"
               />
@@ -271,7 +730,7 @@ const TimelineCard = ({ event, onAction, onDownloadPdf, onPreviewPdf, onShowQrPa
                     {event.items.slice(0, 4).map((item, idx) => (
                       <div key={idx} className="flex items-center justify-between text-sm py-1.5 px-3 bg-background rounded-lg">
                         <span className="text-foreground">{item.description}</span>
-                        <span className="text-muted-foreground font-medium">{formatCurrency(item.total, event.currency)}</span>
+                        <span className="text-muted-foreground font-medium">{formatCurrency(item.total || 0, event.currency)}</span>
                       </div>
                     ))}
                     {event.items.length > 4 && (
@@ -281,38 +740,39 @@ const TimelineCard = ({ event, onAction, onDownloadPdf, onPreviewPdf, onShowQrPa
                 </div>
               )}
 
-              {/* Change Request Comment */}
-              {event.changeComment && (
-                <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                  <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Your question</p>
-                  <p className="text-sm text-foreground">{event.changeComment}</p>
-                </div>
+              {/* Change Request Thread — always attempt render, component handles empty state */}
+              {event.status !== 'Draft' && (
+                <ChangeRequestThread
+                  entityType={event.type?.toLowerCase() || 'document'}
+                  entityId={event.id}
+                  buyerComment={event.changeComment}
+                  preferredChangeRequestId={highlightChangeRequestId}
+                  onPreferredMiss={highlightChangeRequestId ? onClearChangeRequestParam : undefined}
+                />
               )}
 
-              {/* Document Actions */}
+              {/* Document Actions — same source-pdf endpoint for View (new tab) and Download (save). */}
               <div className="flex gap-2">
-                {event.hasSourcePdf && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPreviewPdf(event.id, event.title);
-                    }}
-                    data-testid={`preview-pdf-${event.id}`}
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Document
-                  </Button>
-                )}
                 <Button
                   variant="outline"
                   size="sm"
                   className="flex-1"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDownloadPdf(event.id);
+                    onPreviewPdf(event.id, event.title);
+                  }}
+                  data-testid={`preview-pdf-${event.id}`}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  View Document
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDownloadPdf(event.id, event.title);
                   }}
                   data-testid={`download-pdf-${event.id}`}
                 >
@@ -617,8 +1077,13 @@ const ConstructionPhaseCard = ({ stages }) => {
 
 // Vault Document Card for Buyers
 const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
+  const categoryLabel = String(document.category || 'other')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
   const getCategoryColor = (category) => {
     const colors = {
+      'Architect Plans': 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
       'Contracts': 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
       'Plans': 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
       'Permits': 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
@@ -658,11 +1123,19 @@ const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const isArchitectPlan = document.is_architect_plan || document.doc_type === 'architect_plan' || document.category === 'architect_plans';
+  const isPdf = document.content_type?.includes('pdf') || (document.original_filename || '').toLowerCase().endsWith('.pdf');
+  const isImage = document.content_type?.includes('image') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes((document.original_filename || '').split('.').pop()?.toLowerCase());
+  // Same URL rule as Download: only a public `document.url` can be embedded inline (no second fetch path).
+  const architectInlineSrc =
+    document.url && String(document.url).startsWith('http') ? document.url : null;
+
   return (
     <Card 
       className={cn(
         "overflow-hidden transition-all duration-200 hover:shadow-md mb-3",
-        document.doc_type === 'action_required' && "ring-1 ring-amber-500/30"
+        document.doc_type === 'action_required' && "ring-1 ring-amber-500/30",
+        isArchitectPlan && "ring-1 ring-blue-500/30"
       )}
       data-testid={`vault-doc-${document.vault_id}`}
     >
@@ -689,14 +1162,19 @@ const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className={cn(
                     "inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase tracking-wider",
-                    getCategoryColor(document.category)
+                    getCategoryColor(categoryLabel)
                   )}>
-                    {document.category}
+                    {categoryLabel}
                   </span>
                   <span className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground">
                     {getDocTypeIcon(document.doc_type)}
                     <span className="hidden xs:inline">{document.doc_type === 'action_required' ? 'Action Required' : 'General'}</span>
                   </span>
+                  {isArchitectPlan && (
+                    <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                      Architect Plan
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -704,6 +1182,24 @@ const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
             {/* Notes */}
             {document.notes && (
               <p className="text-xs sm:text-sm text-muted-foreground mt-2 line-clamp-2">{document.notes}</p>
+            )}
+
+            {isArchitectPlan && (isPdf || isImage) && architectInlineSrc && (
+              <div className="mt-3 rounded-lg border border-border overflow-hidden bg-muted/20">
+                {isImage ? (
+                  <img
+                    src={architectInlineSrc}
+                    alt={document.title || 'Architect plan'}
+                    className="w-full h-[62vh] object-contain bg-black/5"
+                  />
+                ) : (
+                  <iframe
+                    src={`${architectInlineSrc}#toolbar=0&navpanes=0`}
+                    title={document.title || 'Architect plan preview'}
+                    className="w-full h-[62vh] border-0"
+                  />
+                )}
+              </div>
             )}
             
             {/* Meta & Actions */}
@@ -726,7 +1222,7 @@ const VaultDocumentCard = ({ document, onPreview, onDownload }) => {
                   data-testid={`preview-vault-doc-${document.vault_id}`}
                 >
                   <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                  View
+                  {isArchitectPlan ? 'Fullscreen' : 'View'}
                 </Button>
                 <Button
                   variant="outline"
@@ -848,7 +1344,33 @@ const QrPaymentModal = ({ isOpen, onClose, invoice, qrData, loading }) => {
 // Main Buyer Timeline Page
 export const BuyerTimeline = () => {
   const { user, logout } = useAuth();
-  const { getLogo, getCompanyName, t, formatCurrency: settingsFormatCurrency } = useSettings();
+  const { getLogo, getCompanyName, t } = useSettings();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab') || 'all';
+  const legacyMappedFilter = mapLegacyTabToFilter(rawTab);
+  const feedFilter = FEED_FILTERS.some((f) => f.key === rawTab) ? rawTab : (legacyMappedFilter || 'all');
+  const deepLinkHandled = useRef(new Set());
+  const setFeedFilter = useCallback((nextFilter) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', nextFilter);
+      ['document_id', 'vault_document_id', 'activity_id', 'decision_id', 'milestone_step_id', 'change_request_id'].forEach((k) => next.delete(k));
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const clearChangeRequestParam = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('change_request_id');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const documentId = searchParams.get('document_id');
+  const vaultDocumentId = searchParams.get('vault_document_id');
+  const milestoneStepId = searchParams.get('milestone_step_id');
+  const decisionIdFromUrl = searchParams.get('decision_id');
+  const activityIdFromUrl = searchParams.get('activity_id');
+  const changeRequestIdFromUrl = searchParams.get('change_request_id');
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState([]);
   const [projectInfo, setProjectInfo] = useState(null);
@@ -857,15 +1379,13 @@ export const BuyerTimeline = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [activeView, setActiveView] = useState('documents'); // 'documents', 'updates', 'team', or 'vault'
   const [unreadCount, setUnreadCount] = useState(0);
   const [teamMembers, setTeamMembers] = useState([]);
   const [constructionTimeline, setConstructionTimeline] = useState(null);
+  const [buyerActivities, setBuyerActivities] = useState([]);
   const [vaultDocuments, setVaultDocuments] = useState([]);
-  const [vaultLoading, setVaultLoading] = useState(false);
+  const [buyerDecisions, setBuyerDecisions] = useState([]);
   
-  // PDF Viewer state
-  const [pdfViewer, setPdfViewer] = useState({ open: false, url: '', filename: '' });
 
   // Get agent branding
   const logoUrl = getLogo();
@@ -874,140 +1394,241 @@ export const BuyerTimeline = () => {
   // QR Payment Modal
   const [qrModal, setQrModal] = useState({ open: false, invoice: null, qrData: null, loading: false });
 
-  // WebSocket for real-time updates
-  const handleWebSocketMessage = useCallback((message) => {
-    if (message.type === 'document_sent') {
-      // Refresh data when new document is received
-      fetchData();
-    }
-  }, []);
-  
-  const { isConnected } = useWebSocket(user?.user_id, handleWebSocketMessage);
-
   const fetchData = useCallback(async () => {
     try {
-      const timelineRes = await fetch(`${API}/timeline`, { credentials: 'include', headers: getAuthHeaders() });
+      const portalRes = await fetch(`${API}/buyer/portal`, { credentials: 'include', headers: getAuthHeaders() });
       
-      if (timelineRes.ok) {
-        const data = await timelineRes.json();
-        setEvents(data.documents || []);
-        setProjectInfo(data.project_info);
+      if (portalRes.ok) {
+        const portal = await portalRes.json();
+
+        // Documents
+        setEvents(portal.documents || []);
         
-        if (data.project_info?.project_id) {
-          // Fetch construction timeline (new workflow system)
-          const ctRes = await fetch(`${API}/project-timeline`, { credentials: 'include', headers: getAuthHeaders() });
-          if (ctRes.ok) {
-            const ctData = await ctRes.json();
-            setConstructionTimeline(ctData);
-            // Use canonical field names directly
-            if (ctData.steps && ctData.steps.length > 0) {
-              const stepsFromTimeline = ctData.steps.map(step => ({
-                step_id: step.step_id,
-                title: step.title,
-                status: step.status === 'approved' ? 'completed' : step.status,
-                description: step.description,
-                planned_date: step.planned_date,
-                completed_at: step.completed_at,
-                documents: step.documents
-              }));
-              setStages(stepsFromTimeline);
-            }
-          }
-          
-          // Fetch team members
-          const teamRes = await fetch(`${API}/projects/${data.project_info.project_id}/team`, { credentials: 'include', headers: getAuthHeaders() });
-          if (teamRes.ok) {
-            const teamData = await teamRes.json();
-            setTeamMembers(teamData);
+        // Project info
+        setProjectInfo(portal.project);
+        
+        // Construction timeline + stages
+        if (portal.construction_timeline) {
+          setConstructionTimeline(portal.construction_timeline);
+          if (portal.construction_timeline.steps?.length > 0) {
+            setStages(portal.construction_timeline.steps.map(step => ({
+              step_id: step.step_id,
+              title: step.title,
+              status: normalizeTimelineStatus(step.status),
+              description: step.description,
+              planned_date: step.planned_date,
+              completed_at: step.completed_at,
+              documents: step.documents
+            })));
           }
         }
-      }
-      
-      // Fetch unread count
-      const unreadRes = await fetch(`${API}/activities/unread-count`, { credentials: 'include', headers: getAuthHeaders() });
-      if (unreadRes.ok) {
-        const unreadData = await unreadRes.json();
-        setUnreadCount(unreadData.unread_count);
+        
+        // Team
+        setTeamMembers(portal.team || []);
+        
+        // Buyer activities (agent feed posts)
+        setBuyerActivities(portal.activities || []);
+        
+        // Unread count
+        setUnreadCount(portal.unread_count || 0);
+        
+        // Decisions
+        setBuyerDecisions(portal.decisions || []);
+        
+        // Vault
+        setVaultDocuments(sortVaultDocuments(portal.vault_files || []));
       }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      console.error('Failed to fetch portal data:', error);
       toast.error('Failed to load timeline');
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // WebSocket: refresh portal when quotes/invoices or vault change on the agent side
+  const handleWebSocketMessage = useCallback((message) => {
+    if (
+      message.type === 'document_sent' ||
+      message.type === 'vault_updated' ||
+      message.type === 'vault_shared' ||
+      message.type === 'decision_updated'
+    ) {
+      fetchData();
+    }
+  }, [fetchData]);
+
+  useWebSocket(user?.user_id, handleWebSocketMessage);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Mark activities as seen when viewing Updates tab
-  useEffect(() => {
-    if (activeView === 'updates') {
-      const markSeen = async () => {
-        try {
-          await fetch(`${API}/activities/mark-seen`, {
-            method: 'POST',
-            credentials: 'include'
-          });
-          setUnreadCount(0);
-        } catch (error) {
-          console.error('Failed to mark activities as seen:', error);
-        }
-      };
-      markSeen();
+  // Helper: send action through sync layer, get fresh portal state
+  const portalAction = async (actionData) => {
+    const res = await fetch(`${API}/buyer/portal/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      credentials: 'include',
+      body: JSON.stringify(actionData)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || err.detail || 'Action failed');
     }
-  }, [activeView]);
+    // Response is the updated portal — refresh all state
+    const portal = await res.json();
+    setEvents(portal.documents || []);
+    setProjectInfo(portal.project);
+    setVaultDocuments(sortVaultDocuments(portal.vault_files || []));
+    setBuyerDecisions(portal.decisions || []);
+    setUnreadCount(portal.unread_count || 0);
+    setTeamMembers(portal.team || []);
+    setBuyerActivities(portal.activities || []);
+    return portal;
+  };
 
-  // Fetch vault documents when vault tab is selected
+  // Mark activities as seen when viewing Updates filter
   useEffect(() => {
-    if (activeView === 'vault' && vaultDocuments.length === 0) {
-      const fetchVaultDocuments = async () => {
-        setVaultLoading(true);
-        try {
-          const res = await fetch(`${API}/vault/buyer`, { credentials: 'include', headers: getAuthHeaders() });
-          if (res.ok) {
-            const data = await res.json();
-            setVaultDocuments(data);
-          }
-        } catch (error) {
-          console.error('Failed to fetch vault documents:', error);
-        } finally {
-          setVaultLoading(false);
-        }
-      };
-      fetchVaultDocuments();
+    if (feedFilter === 'updates') {
+      portalAction({ action: 'mark_seen' }).catch(() => {});
     }
-  }, [activeView, vaultDocuments.length]);
+    if (feedFilter === 'vault' || feedFilter === 'decisions') {
+      fetchData();
+    }
+  }, [feedFilter, fetchData]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const d = e.detail || {};
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        Object.entries(d).forEach(([k, v]) => {
+          if (v != null && v !== '') next.set(k, String(v));
+        });
+        return next;
+      }, { replace: true });
+    };
+    window.addEventListener('navigate-tab', handler);
+    return () => window.removeEventListener('navigate-tab', handler);
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    if (loading || !decisionIdFromUrl) return;
+    if (feedFilter !== 'decisions' || buyerDecisions.length === 0) return;
+    const ok = buyerDecisions.some((d) => d.decision_id === decisionIdFromUrl);
+    if (!ok) {
+      const k = `nodec-${decisionIdFromUrl}`;
+      if (!deepLinkHandled.current.has(k)) {
+        deepLinkHandled.current.add(k);
+        toast.error('This decision is no longer available');
+        setSearchParams((prev) => {
+          const n = new URLSearchParams(prev);
+          n.delete('decision_id');
+          return n;
+        }, { replace: true });
+      }
+    }
+  }, [loading, decisionIdFromUrl, feedFilter, buyerDecisions, setSearchParams]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const run = () => {
+      if (documentId && ['all', 'quotes', 'invoices'].includes(feedFilter)) {
+        const exists = events.some((e) => e.id === documentId);
+        const el = document.querySelector(`[data-testid="timeline-event-${documentId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+        } else if (events.length > 0 && !exists) {
+          const k = `nodoc-${documentId}`;
+          if (!deepLinkHandled.current.has(k)) {
+            deepLinkHandled.current.add(k);
+            toast.error('This document is no longer available');
+            setSearchParams((prev) => {
+              const n = new URLSearchParams(prev);
+              n.delete('document_id');
+              return n;
+            }, { replace: true });
+          }
+        }
+      }
+      if (vaultDocumentId && feedFilter === 'vault' && vaultDocuments.length > 0) {
+        const match = vaultDocuments.find(
+          (d) => d.vault_id === vaultDocumentId || d.vault_document_id === vaultDocumentId
+        );
+        if (match) {
+          const el = document.querySelector(`[data-testid="vault-doc-${match.vault_id}"]`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+            setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+          }
+        } else {
+          const k = `novault-${vaultDocumentId}`;
+          if (!deepLinkHandled.current.has(k)) {
+            deepLinkHandled.current.add(k);
+            toast.error('This file is no longer shared with you');
+            setSearchParams((prev) => {
+              const n = new URLSearchParams(prev);
+              n.delete('vault_document_id');
+              return n;
+            }, { replace: true });
+          }
+        }
+      }
+      if (milestoneStepId && stages.length > 0) {
+        const exists = stages.some((s) => s.step_id === milestoneStepId);
+        const el = document.querySelector(`[data-testid="construction-stage-${milestoneStepId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
+        } else if (!exists) {
+          const k = `nomile-${milestoneStepId}`;
+          if (!deepLinkHandled.current.has(k)) {
+            deepLinkHandled.current.add(k);
+            toast.error('This milestone is no longer on your timeline');
+            setSearchParams((prev) => {
+              const n = new URLSearchParams(prev);
+              n.delete('milestone_step_id');
+              return n;
+            }, { replace: true });
+          }
+        }
+      }
+    };
+
+    const id = requestAnimationFrame(run);
+    return () => cancelAnimationFrame(id);
+  }, [
+    loading,
+    feedFilter,
+    documentId,
+    vaultDocumentId,
+    milestoneStepId,
+    events,
+    vaultDocuments,
+    stages,
+    setSearchParams,
+  ]);
 
   const handleAction = async (eventId, action, comment = null) => {
     if (action === 'approve' || action === 'reject') {
       setConfirmDialog({ open: true, type: action, eventId });
       return;
     }
-
     if (action === 'confirm_payment') {
       setConfirmDialog({ open: true, type: 'payment', eventId });
       return;
     }
-
     if (action === 'request_change' && comment) {
       setIsProcessing(true);
       try {
-        const res = await fetch(`${API}/documents/${eventId}/action`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-          credentials: 'include',
-          body: JSON.stringify({ action: 'request_change', comment })
-        });
-        
-        if (res.ok) {
-          toast.success('Question sent to your agent');
-          fetchData();
-        } else {
-          const err = await res.json();
-          throw new Error(err.detail || 'Failed to send question');
-        }
+        await portalAction({ action: 'request_change', document_id: eventId, comment });
+        toast.success('Question sent to your agent');
       } catch (error) {
         toast.error(error.message || 'Failed to send question');
       } finally {
@@ -1019,27 +1640,11 @@ export const BuyerTimeline = () => {
   const confirmAction = async () => {
     const { type, eventId } = confirmDialog;
     setIsProcessing(true);
-
     try {
-      const res = await fetch(`${API}/documents/${eventId}/action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        credentials: 'include',
-        body: JSON.stringify({ action: type === 'payment' ? 'confirm_payment' : type })
-      });
-
-      if (res.ok) {
-        const messages = {
-          'approve': 'Quote approved! Invoice will be generated.',
-          'reject': 'Quote declined',
-          'payment': 'Payment confirmed'
-        };
-        toast.success(messages[type] || 'Action completed');
-        fetchData();
-      } else {
-        const err = await res.json();
-        throw new Error(err.detail || 'Action failed');
-      }
+      const actionName = type === 'payment' ? 'confirm_payment' : type;
+      await portalAction({ action: actionName, document_id: eventId });
+      const messages = { 'approve': 'Quote approved! Invoice will be generated.', 'reject': 'Quote declined', 'payment': 'Payment confirmed' };
+      toast.success(messages[type] || 'Action completed');
     } catch (error) {
       toast.error(error.message || 'Action failed. Please try again.');
     } finally {
@@ -1048,42 +1653,47 @@ export const BuyerTimeline = () => {
     }
   };
 
-  const handleDownloadPdf = async (documentId) => {
+  const openBuyerSourcePdfSameAsDownload = async (documentId, documentTitle, { asDownload }) => {
+    let base = (documentTitle || `document_${documentId}`).replace(/[/\\?%*:|"<>]/g, '_').trim().slice(0, 180);
+    if (!base) base = `document_${documentId}`;
     try {
-      // Use source-pdf endpoint to download the original uploaded PDF
-      const res = await fetch(`${API}/documents/${documentId}/source-pdf`, { credentials: 'include', headers: getAuthHeaders() });
-      
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
+      const res = await fetch(`${API}/documents/${documentId}/source-pdf`, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        toast.error(asDownload ? 'Failed to download PDF' : 'Failed to open document');
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      if (asDownload) {
         const a = document.createElement('a');
         a.href = url;
-        a.download = `document_${documentId}.pdf`;
-        // Required for Safari and mobile browsers
+        const name = base.toLowerCase().endsWith('.pdf') ? base : `${base}.pdf`;
+        a.download = name;
         a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
-        // Cleanup
-        setTimeout(() => {
+        // Revoke only after the browser has picked up the blob URL (100ms was too short and broke saves).
+        window.setTimeout(() => {
           document.body.removeChild(a);
           window.URL.revokeObjectURL(url);
-        }, 100);
+        }, 120000);
       } else {
-        throw new Error('Download failed');
+        window.open(url, '_blank', 'noopener,noreferrer');
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 120000);
       }
-    } catch (error) {
-      toast.error('Failed to download PDF');
+    } catch {
+      toast.error(asDownload ? 'Failed to download PDF' : 'Failed to open document');
     }
   };
 
-  const handlePreviewPdf = (documentId, documentTitle) => {
-    // Open the PDF in the in-app viewer
-    setPdfViewer({
-      open: true,
-      url: `${API}/documents/${documentId}/source-pdf`,
-      filename: documentTitle ? `${documentTitle}.pdf` : `document_${documentId}.pdf`
-    });
-  };
+  const handleDownloadPdf = (documentId, documentTitle) =>
+    openBuyerSourcePdfSameAsDownload(documentId, documentTitle, { asDownload: true });
+
+  const handlePreviewPdf = (documentId, documentTitle) =>
+    openBuyerSourcePdfSameAsDownload(documentId, documentTitle, { asDownload: false });
 
   const handleShowQrPayment = async (invoice) => {
     setQrModal({ open: true, invoice, qrData: null, loading: true });
@@ -1104,43 +1714,83 @@ export const BuyerTimeline = () => {
     }
   };
 
-  const handleVaultPreview = (document) => {
-    // Use the download endpoint for preview - it handles auth and file serving properly
-    setPdfViewer({
-      open: true,
-      url: `${API}/vault/${document.vault_id}/download`,
-      filename: document.original_filename || document.name || 'document.pdf'
-    });
-  };
+  const vaultAuthDownloadUrl = (document) =>
+    `${API}/vault/documents/${document.vault_document_id || document.vault_id}/download`;
 
-  const handleVaultDownload = async (document) => {
+  /**
+   * Single code path for vault file access (same resolution as Download).
+   * View = same flow; only the final browser action differs (new tab vs save).
+   */
+  const openVaultFileSameAsDownload = async (document, { openInNewTab }) => {
+    const fileUrl = document.url;
+    if (fileUrl && fileUrl.startsWith('http')) {
+      if (openInNewTab) {
+        window.open(fileUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        const a = window.document.createElement('a');
+        a.href = fileUrl;
+        a.download = document.original_filename || document.name || 'document';
+        a.target = '_blank';
+        window.document.body.appendChild(a);
+        a.click();
+        window.document.body.removeChild(a);
+      }
+      return;
+    }
     try {
-      const res = await fetch(`${API}/vault/${document.vault_id}/download`, { credentials: 'include', headers: getAuthHeaders() });
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
+      const res = await fetch(vaultAuthDownloadUrl(document), {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        toast.error(openInNewTab ? 'Failed to open document' : 'Failed to download document');
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      if (openInNewTab) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 120000);
+      } else {
         const a = window.document.createElement('a');
         a.href = url;
-        a.download = document.original_filename || document.name || 'document';
+        let fname = document.original_filename || document.name || 'document';
+        if (!fname.toLowerCase().includes('.') && (document.content_type || '').includes('pdf')) {
+          fname = `${fname}.pdf`;
+        }
+        a.download = fname;
         a.style.display = 'none';
         window.document.body.appendChild(a);
         a.click();
-        setTimeout(() => {
+        window.setTimeout(() => {
           window.document.body.removeChild(a);
           window.URL.revokeObjectURL(url);
-        }, 100);
-      } else {
-        throw new Error('Download failed');
+        }, 120000);
       }
-    } catch (error) {
-      toast.error('Failed to download document');
+    } catch {
+      toast.error(openInNewTab ? 'Failed to open document' : 'Failed to download document');
     }
   };
 
-  const currentPhase = stages.find(s => s.status === 'in_progress')?.name || 
-                       (stages.every(s => s.status === 'completed') ? 'Complete' : 'Not started');
+  const handleVaultPreview = (document) => openVaultFileSameAsDownload(document, { openInNewTab: true });
+  const handleVaultDownload = (document) => openVaultFileSameAsDownload(document, { openInNewTab: false });
 
-  const pendingCount = events.filter(e => e.actionRequired).length;
+  const currentPhase = useMemo(() => {
+    if (!stages.length) return 'Not started';
+
+    const inProgress = stages.find((s) => normalizeTimelineStatus(s.status) === 'in_progress');
+    if (inProgress?.title) return inProgress.title;
+
+    const pending = stages.find((s) => normalizeTimelineStatus(s.status) === 'pending');
+    if (pending?.title) return pending.title;
+
+    const allCompleted = stages.every((s) => normalizeTimelineStatus(s.status) === 'completed');
+    return allCompleted ? 'Complete' : 'Not started';
+  }, [stages]);
+
+  const actionableDocuments = events.filter((e) => Boolean(e.actionRequired));
+  const actionableDecisions = buyerDecisions.filter((d) => d?.buyer_status === 'pending');
+  const pendingCount = actionableDocuments.length + actionableDecisions.length;
 
   const filteredEvents = events.filter(event => {
     if (!searchQuery.trim()) return true;
@@ -1156,6 +1806,176 @@ export const BuyerTimeline = () => {
       String(event.amount)?.includes(query)
     );
   });
+
+  const filteredDocumentsForSearch = filteredEvents;
+  const filteredVaultForSearch = vaultDocuments.filter((doc) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      doc.name?.toLowerCase().includes(query) ||
+      doc.original_filename?.toLowerCase().includes(query) ||
+      doc.category?.toLowerCase().includes(query) ||
+      doc.notes?.toLowerCase().includes(query)
+    );
+  });
+  const filteredDecisionsForSearch = buyerDecisions.filter((decision) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      decision.title?.toLowerCase().includes(query) ||
+      decision.description?.toLowerCase().includes(query) ||
+      decision.buyer_status?.toLowerCase().includes(query)
+    );
+  });
+  const filteredActivitiesForSearch = buyerActivities.filter((activity) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const body = getActivityBody(activity).toLowerCase();
+    return (
+      activity.author_name?.toLowerCase().includes(query) ||
+      activity.file_name?.toLowerCase().includes(query) ||
+      body.includes(query)
+    );
+  });
+
+  const socialFeedItems = useMemo(() => {
+    const entries = [];
+
+    if (feedFilter === 'all' || feedFilter === 'quotes' || feedFilter === 'invoices') {
+      filteredDocumentsForSearch.forEach((doc) => {
+        const normalizedType = String(doc.type || '').toLowerCase();
+        const kind = normalizedType === 'invoice' ? 'invoice' : 'quote';
+        if (feedFilter === 'quotes' && kind !== 'quote') return;
+        if (feedFilter === 'invoices' && kind !== 'invoice') return;
+        entries.push({
+          id: `document-${doc.id}`,
+          kind,
+          sortDate: doc.date || doc.created_at || doc.updated_at,
+          payload: doc,
+        });
+      });
+    }
+
+    if (feedFilter === 'all' || feedFilter === 'vault') {
+      filteredVaultForSearch.forEach((doc) => {
+        entries.push({
+          id: `vault-${doc.vault_id || doc.vault_document_id}`,
+          kind: 'vault',
+          sortDate: doc.created_at || doc.updated_at,
+          payload: doc,
+        });
+      });
+    }
+
+    if (feedFilter === 'all' || feedFilter === 'decisions') {
+      filteredDecisionsForSearch.forEach((decision) => {
+        entries.push({
+          id: `decision-${decision.decision_id}`,
+          kind: 'decision',
+          sortDate: decision.updated_at || decision.created_at || decision.deadline,
+          payload: decision,
+        });
+      });
+    }
+
+    if (feedFilter === 'all' || feedFilter === 'updates') {
+      filteredActivitiesForSearch.forEach((activity) => {
+        entries.push({
+          id: `activity-${activity.activity_id}`,
+          kind: 'updates',
+          sortDate: activity.created_at || activity.updated_at,
+          payload: activity,
+        });
+      });
+    }
+
+    return entries.sort((a, b) => {
+      const aTime = a.sortDate ? new Date(a.sortDate).getTime() : 0;
+      const bTime = b.sortDate ? new Date(b.sortDate).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [
+    feedFilter,
+    filteredDocumentsForSearch,
+    filteredVaultForSearch,
+    filteredDecisionsForSearch,
+    filteredActivitiesForSearch,
+  ]);
+
+  const pendingDecisionCount = buyerDecisions.filter((d) => d.buyer_status === 'pending').length;
+  const filterBadgeCounts = {
+    all: socialFeedItems.length,
+    quotes: filteredDocumentsForSearch.filter((d) => String(d.type || '').toLowerCase() !== 'invoice').length,
+    invoices: filteredDocumentsForSearch.filter((d) => String(d.type || '').toLowerCase() === 'invoice').length,
+    updates: unreadCount,
+    vault: filteredVaultForSearch.length,
+    decisions: pendingDecisionCount,
+  };
+
+  const renderFeedCard = (item) => {
+    if (item.kind === 'updates') {
+      return (
+        <BuyerUpdateFeedCard
+          key={item.id}
+          activity={item.payload}
+          highlight={searchParams.get('activity_id') === item.payload?.activity_id}
+        />
+      );
+    }
+
+    if (item.kind === 'vault') {
+      return (
+        <VaultDocumentCard
+          key={item.id}
+          document={item.payload}
+          onPreview={handleVaultPreview}
+          onDownload={handleVaultDownload}
+        />
+      );
+    }
+
+    if (item.kind === 'decision') {
+      return (
+        <DecisionFeedCard
+          key={item.id}
+          decision={item.payload}
+          onRespond={async (decisionId, action, comment) => {
+            try {
+              await portalAction({ action: 'respond_decision', decision_id: decisionId, option_id: action, comment });
+              toast.success(action === 'approved' ? 'Decision approved' : action === 'rejected' ? 'Decision declined' : 'Change request sent');
+            } catch {
+              toast.error('Failed to respond');
+            }
+          }}
+          highlighted={decisionIdFromUrl === item.payload?.decision_id}
+          preferredChangeRequestId={
+            decisionIdFromUrl === item.payload?.decision_id
+              ? changeRequestIdFromUrl
+              : null
+          }
+          onPreferredMiss={clearChangeRequestParam}
+        />
+      );
+    }
+
+    if (item.kind === 'quote' || item.kind === 'invoice') {
+      return (
+        <TimelineCard
+          key={item.id}
+          event={item.payload}
+          onAction={handleAction}
+          onDownloadPdf={handleDownloadPdf}
+          onPreviewPdf={handlePreviewPdf}
+          onShowQrPayment={handleShowQrPayment}
+          initialExpanded={!!(documentId === item.payload.id && changeRequestIdFromUrl)}
+          highlightChangeRequestId={documentId === item.payload.id ? changeRequestIdFromUrl : null}
+          onClearChangeRequestParam={clearChangeRequestParam}
+        />
+      );
+    }
+
+    return null;
+  };
 
   if (loading) {
     return (
@@ -1173,29 +1993,33 @@ export const BuyerTimeline = () => {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-start justify-between gap-2 sm:items-center">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               {logoUrl ? (
                 <img 
                   src={logoUrl} 
                   alt={companyName} 
-                  className="w-10 h-10 rounded-xl object-contain"
+                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl object-contain"
                 />
               ) : (
-                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary rounded-xl flex items-center justify-center">
                   <Building2 className="w-5 h-5 text-primary-foreground" />
                 </div>
               )}
-              <div>
-                <h1 className="font-semibold text-foreground">
-                  {projectInfo?.unit_reference || t('buyer.yourProperty')}
+              <div className="min-w-0">
+                <h1 className="font-semibold text-foreground break-words leading-tight">
+                  {projectInfo?.name 
+                    ? (projectInfo.unit_reference 
+                      ? `${projectInfo.name} — ${projectInfo.unit_reference}` 
+                      : projectInfo.name)
+                    : (projectInfo?.unit_reference || t('buyer.yourProperty'))}
                 </h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">
                   {companyName}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
               <Button
                 variant="ghost"
                 size="icon"
@@ -1266,24 +2090,29 @@ export const BuyerTimeline = () => {
             {pendingCount > 0 && (
               <button
                 onClick={() => {
-                  // Find first actionable event and scroll to it
-                  const firstActionable = filteredEvents.find(e => 
-                    (e.type === 'quote' && e.status === 'Sent') ||
-                    (e.type === 'invoice' && e.status === 'Sent')
-                  );
-                  if (firstActionable) {
-                    const el = document.querySelector(`[data-testid="timeline-event-${firstActionable.id}"]`);
-                    if (el) {
-                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
-                      setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
-                    }
+                  // Find first pending action across documents and decisions, then jump to it.
+                  const actionableFeedItems = socialFeedItems.filter((item) => {
+                    if (item.kind === 'decision') return item.payload?.buyer_status === 'pending';
+                    if (item.kind === 'quote' || item.kind === 'invoice') return Boolean(item.payload?.actionRequired);
+                    return false;
+                  });
+                  if (!actionableFeedItems.length) return;
+
+                  const first = actionableFeedItems[0];
+                  const selector = first.kind === 'decision'
+                    ? `[data-testid="feed-card-decision-${first.payload?.decision_id}"]`
+                    : `[data-testid="timeline-event-${first.payload?.id}"]`;
+                  const el = document.querySelector(selector);
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+                    setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2000);
                   }
                 }}
                 className="text-xs px-2 py-0.5 rounded-full bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors cursor-pointer"
                 data-testid="action-needed-badge"
               >
-                {pendingCount} action{pendingCount > 1 ? 's' : ''} needed
+                {pendingCount} pending action{pendingCount > 1 ? 's' : ''}
               </button>
             )}
           </div>
@@ -1292,249 +2121,52 @@ export const BuyerTimeline = () => {
         {/* Construction Progress */}
         <ConstructionPhaseCard stages={stages} />
 
-        {/* View Tabs */}
-        <div className="flex gap-1 p-1 bg-muted rounded-lg mb-6">
-          <button
-            onClick={() => setActiveView('documents')}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
-              activeView === 'documents'
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            data-testid="tab-documents"
-          >
-            <Receipt className="w-4 h-4" />
-            <span className="hidden sm:inline">Quotes & Invoices</span>
-            <span className="sm:hidden">Quotes</span>
-            {pendingCount > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-primary text-primary-foreground">
-                {pendingCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveView('vault')}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
-              activeView === 'vault'
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            data-testid="tab-vault"
-          >
-            <FolderOpen className="w-4 h-4" />
-            <span className="hidden sm:inline">Shared Files</span>
-            <span className="sm:hidden">Files</span>
-            {vaultDocuments.length > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-muted-foreground/20 text-muted-foreground">
-                {vaultDocuments.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveView('updates')}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
-              activeView === 'updates'
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            data-testid="tab-updates"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="hidden sm:inline">Updates</span>
-            {unreadCount > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-primary text-primary-foreground animate-pulse">
-                {unreadCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveView('team')}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
-              activeView === 'team'
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            data-testid="tab-team"
-          >
-            <Users className="w-4 h-4" />
-            <span className="hidden sm:inline">Team</span>
-          </button>
+        {/* Unified social feed filters */}
+        <div className="mb-4">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {FEED_FILTERS.map((filter) => {
+              const Icon = filter.icon;
+              const isActive = feedFilter === filter.key;
+              return (
+                <button
+                  key={filter.key}
+                  onClick={() => setFeedFilter(filter.key)}
+                  className={cn(
+                    'inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium border whitespace-nowrap transition-colors',
+                    isActive
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:text-foreground'
+                  )}
+                  data-testid={`tab-${filter.key}`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {filter.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Documents View */}
-        {activeView === 'documents' && (
-          <div className="relative">
-            {filteredEvents.length === 0 ? (
-              <Card className="text-center py-12">
-                <CardContent>
-                  <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground">
-                    {searchQuery ? 'No matching documents' : 'No documents yet'}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {searchQuery 
-                      ? 'Try a different search term' 
-                      : 'Your upgrade proposals and invoices will appear here'}
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              filteredEvents.map(event => (
-                <TimelineCard
-                  key={event.id}
-                  event={event}
-                  onAction={handleAction}
-                  onDownloadPdf={handleDownloadPdf}
-                  onPreviewPdf={handlePreviewPdf}
-                  onShowQrPayment={handleShowQrPayment}
-                />
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Vault Documents View */}
-        {activeView === 'vault' && (
-          <div className="space-y-3" data-testid="buyer-vault-view">
-            {vaultLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : vaultDocuments.length === 0 ? (
-              <Card className="text-center py-12">
-                <CardContent>
-                  <FolderOpen className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground font-medium">No shared files yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    When your agent shares contracts, plans, or other documents with you, they'll appear here.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <>
-                {/* Section Header */}
-                <div className="mb-4 pb-3 border-b border-border">
-                  <p className="text-sm text-muted-foreground">
-                    {vaultDocuments.length} file{vaultDocuments.length !== 1 ? 's' : ''} shared with you
-                  </p>
-                </div>
-                
-                {/* Action Required Documents First */}
-                {vaultDocuments.filter(d => d.doc_type === 'action_required').length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Action Required
-                    </p>
-                    {vaultDocuments
-                      .filter(d => d.doc_type === 'action_required')
-                      .map(doc => (
-                        <VaultDocumentCard
-                          key={doc.vault_id}
-                          document={doc}
-                          onPreview={handleVaultPreview}
-                          onDownload={handleVaultDownload}
-                        />
-                      ))}
-                  </div>
-                )}
-                
-                {/* General Documents */}
-                {vaultDocuments.filter(d => d.doc_type !== 'action_required').length > 0 && (
-                  <div>
-                    {vaultDocuments.filter(d => d.doc_type === 'action_required').length > 0 && (
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                        All Documents
-                      </p>
-                    )}
-                    {vaultDocuments
-                      .filter(d => d.doc_type !== 'action_required')
-                      .map(doc => (
-                        <VaultDocumentCard
-                          key={doc.vault_id}
-                          document={doc}
-                          onPreview={handleVaultPreview}
-                          onDownload={handleVaultDownload}
-                        />
-                      ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Updates/Feed View */}
-        {activeView === 'updates' && (
-          <Feed isAgent={false} embedded={true} />
-        )}
-
-        {/* Team View */}
-        {activeView === 'team' && (
-          <div className="space-y-3">
-            {teamMembers.length === 0 ? (
-              <Card className="text-center py-12">
-                <CardContent>
-                  <Users className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground">No team contacts yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Your agent will add team contacts here
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              teamMembers.map(member => (
-                <Card key={member.member_id} className="border-border" data-testid={`team-member-${member.member_id}`}>
-                  <CardContent className="py-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-primary font-semibold text-sm">
-                            {(member.company_name || member.name || '').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                          </span>
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-foreground">{member.company_name || member.name}</h3>
-                          {member.contact_name && (
-                            <p className="text-sm text-muted-foreground">{member.contact_name}</p>
-                          )}
-                          <p className="text-sm text-primary">{member.role}</p>
-                          <div className="flex items-center gap-4 mt-2 flex-wrap">
-                            {member.email && (
-                              <a 
-                                href={`mailto:${member.email}`}
-                                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                              >
-                                <Mail className="w-3.5 h-3.5" />
-                                <span>{member.email}</span>
-                              </a>
-                            )}
-                            {member.phone && (
-                              <a 
-                                href={`tel:${member.phone}`}
-                                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                              >
-                                <Phone className="w-3.5 h-3.5" />
-                                <span>{member.phone}</span>
-                              </a>
-                            )}
-                          </div>
-                          {member.notes && (
-                            <p className="text-sm text-muted-foreground mt-2">{member.notes}</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        )}
+        {/* Unified social feed stack */}
+        <div className="space-y-4" data-testid="buyer-social-feed">
+          {socialFeedItems.length === 0 ? (
+            <Card className="text-center py-12">
+              <CardContent>
+                <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                <p className="text-muted-foreground">
+                  {searchQuery ? 'No matching items' : 'No feed items yet'}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {searchQuery
+                    ? 'Try another search term or filter'
+                    : 'Updates, quotes, invoices, decisions, and shared files will appear here'}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            socialFeedItems.map((item) => renderFeedCard(item))
+          )}
+        </div>
       </main>
 
       {/* Confirmation Dialog */}
@@ -1591,13 +2223,6 @@ export const BuyerTimeline = () => {
         loading={qrModal.loading}
       />
 
-      {/* PDF Viewer Modal */}
-      <PdfViewer
-        isOpen={pdfViewer.open}
-        onClose={() => setPdfViewer({ open: false, url: '', filename: '' })}
-        url={pdfViewer.url}
-        filename={pdfViewer.filename}
-      />
     </div>
   );
 };

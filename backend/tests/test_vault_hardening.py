@@ -38,7 +38,7 @@ def buyer_session():
     session = requests.Session()
     
     # Demo buyer login
-    res = session.post(f'{BASE_URL}/api/auth/demo/buyer', json={'buyer_num': 1})
+    res = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
     
     if res.status_code != 200:
         pytest.skip(f'Buyer login failed: {res.status_code} - {res.text}')

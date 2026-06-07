@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { useDataContext } from '../../context/DataContext';
+import { parseApiError } from '../../lib/api';
 import { 
   Plus, 
   CheckCircle2,
@@ -58,7 +59,7 @@ const NEXT_STATUS = {
 };
 
 export const AgentWorkflow = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const projectFilter = searchParams.get('project');
   
   // SINGLE SOURCE OF TRUTH: DataContext for projects
@@ -112,9 +113,15 @@ export const AgentWorkflow = () => {
       const projectExists = projects.some(p => p.project_id === projectFilter);
       if (projectExists) {
         setSelectedProjectId(projectFilter);
+      } else {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('project');
+          return next;
+        }, { replace: true });
       }
     }
-  }, [projectFilter, projects.length]); // Only depend on length, not full array
+  }, [projectFilter, projects.length, selectedProjectId, setSearchParams]); // Only depend on length, not full array
 
   // Single canonical fetch for workflow data
   // Backend is source of truth. No fallbacks.
@@ -227,8 +234,8 @@ export const AgentWorkflow = () => {
         fetchWorkflow(selectedProjectId);
         setTemplateDialog(false);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to apply template');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to apply template');
       }
     } catch (error) {
       toast.error(error.message);
@@ -334,8 +341,8 @@ export const AgentWorkflow = () => {
         fetchWorkflow(selectedProjectId);
         setStepDialog({ open: false, step: null });
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to update');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to update');
       }
     } catch (error) {
       toast.error(error.message);
@@ -376,8 +383,8 @@ export const AgentWorkflow = () => {
         setNewStep({ title: '', description: '', planned_date: '' });
         fetchWorkflow(selectedProjectId);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to add step');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to add step');
       }
     } catch (error) {
       toast.error(error.message);
@@ -399,8 +406,8 @@ export const AgentWorkflow = () => {
         toast.success('Step deleted');
         fetchWorkflow(selectedProjectId);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to delete step');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to delete step');
       }
     } catch (error) {
       toast.error(error.message);
@@ -445,8 +452,8 @@ export const AgentWorkflow = () => {
         setManualSteps([{ name: '', description: '', planned_date: '' }]);
         fetchWorkflow(selectedProjectId);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to create timeline');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to create timeline');
       }
     } catch (error) {
       toast.error(error.message);
@@ -486,8 +493,8 @@ export const AgentWorkflow = () => {
         fetchWorkflow(selectedProjectId);
         setLinkDialog({ open: false, step: null });
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to link');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to link');
       }
     } catch (error) {
       toast.error(error.message);
@@ -564,8 +571,8 @@ export const AgentWorkflow = () => {
         setEditingPhases(data.extracted_data.phases || []);
         toast.success('Timeline extracted! Review and approve below.');
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Extraction failed');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Extraction failed');
       }
     } catch (error) {
       toast.error(error.message);
@@ -601,8 +608,8 @@ export const AgentWorkflow = () => {
         setExtractFile(null);
         fetchWorkflow(selectedProjectId);
       } else {
-        const error = await res.json();
-        throw new Error(error.detail || 'Failed to approve');
+        const error = await parseApiError(res);
+        throw new Error(error.message || 'Failed to approve');
       }
     } catch (error) {
       toast.error(error.message);
@@ -655,10 +662,10 @@ export const AgentWorkflow = () => {
         {/* Project Selector */}
         <Card className="border-border">
           <CardContent className="py-4">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <Building2 className="w-5 h-5 text-muted-foreground" />
               <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                <SelectTrigger className="w-64" data-testid="project-selector">
+                <SelectTrigger className="w-full sm:w-64 max-w-full" data-testid="project-selector">
                   <SelectValue placeholder="Select a project" />
                 </SelectTrigger>
                 <SelectContent>
@@ -670,7 +677,7 @@ export const AgentWorkflow = () => {
                 </SelectContent>
               </Select>
               {selectedProjectData && timeline && (
-                <div className="flex items-center gap-4 ml-auto">
+                <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center sm:justify-end">
                   <div className="text-sm">
                     <span className="text-muted-foreground">Progress: </span>
                     <span className="font-semibold text-primary">{progressPercent}%</span>
@@ -679,7 +686,7 @@ export const AgentWorkflow = () => {
                     variant="outline"
                     size="sm"
                     onClick={handleDeleteTimeline}
-                    className="text-destructive hover:text-destructive"
+                    className="w-full text-destructive hover:text-destructive sm:w-auto"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     Delete Timeline
@@ -753,13 +760,13 @@ export const AgentWorkflow = () => {
                   data-testid={`step-${step.step_id}`}
                 >
                   <CardContent className="py-4">
-                    <div className="flex items-start gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                       {/* Reorder controls */}
-                      <div className="flex flex-col items-center gap-0.5 flex-shrink-0 pt-1">
+                      <div className="flex flex-row items-center gap-1 flex-shrink-0 pt-0 sm:flex-col sm:gap-0.5 sm:pt-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6"
+                          className="h-8 w-8"
                           disabled={isFirst}
                           onClick={() => handleMoveStep(step.step_id, 'up')}
                         >
@@ -769,7 +776,7 @@ export const AgentWorkflow = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6"
+                          className="h-8 w-8"
                           disabled={isLast}
                           onClick={() => handleMoveStep(step.step_id, 'down')}
                         >
@@ -821,7 +828,7 @@ export const AgentWorkflow = () => {
                         )}
                         
                         {/* Dates */}
-                        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                           {step.planned_date && (
                             <span className="flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
@@ -876,7 +883,7 @@ export const AgentWorkflow = () => {
                       </div>
                       
                       {/* Actions */}
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="flex w-full items-center justify-end gap-1 border-t border-border/50 pt-2 sm:w-auto sm:flex-shrink-0 sm:border-0 sm:pt-0">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1287,7 +1294,7 @@ export const AgentWorkflow = () => {
                             placeholder="Description"
                             className="text-sm"
                           />
-                          <div className="flex gap-2 items-center">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
                             <Label className="text-xs text-muted-foreground shrink-0">Date:</Label>
                             <Input
                               value={phase.planned_date || ''}

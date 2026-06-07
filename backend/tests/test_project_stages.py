@@ -26,13 +26,13 @@ class TestProjectStagesAPI:
         assert seed_response.status_code == 200, f"Failed to seed demo data: {seed_response.text}"
         
         # Login as demo agent
-        agent_response = requests.post(f"{self.base_url}/api/auth/demo/agent")
+        agent_response = requests.post(f"{self.base_url}/api/demo/enter", json={"persona": "agent", "fresh": False}))
         assert agent_response.status_code == 200, f"Failed agent login: {agent_response.text}"
         agent_data = agent_response.json()
         self.agent_token = agent_data.get('token')
         
         # Login as demo buyer 1
-        buyer_response = requests.post(f"{self.base_url}/api/auth/demo/buyer?buyer_num=1")
+        buyer_response = requests.post(f"{self.base_url}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
         assert buyer_response.status_code == 200, f"Failed buyer login: {buyer_response.text}"
         buyer_data = buyer_response.json()
         self.buyer_token = buyer_data.get('token')
@@ -392,7 +392,7 @@ class TestProjectsAPI:
         requests.post(f"{self.base_url}/api/demo/seed")
         
         # Login as demo agent
-        agent_response = requests.post(f"{self.base_url}/api/auth/demo/agent")
+        agent_response = requests.post(f"{self.base_url}/api/demo/enter", json={"persona": "agent", "fresh": False}))
         assert agent_response.status_code == 200
         self.agent_token = agent_response.json().get('token')
     

@@ -108,7 +108,7 @@ class TestAgentSettings:
     def setup(self):
         self.session = requests.Session()
         # Login as demo agent
-        response = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         if response.status_code == 200:
             data = response.json()
             self.token = data.get('token')
@@ -195,7 +195,7 @@ class TestDemoAgentProPlan:
     def setup(self):
         self.session = requests.Session()
         # Login as demo agent
-        response = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         if response.status_code == 200:
             data = response.json()
             self.token = data.get('token')
@@ -222,7 +222,7 @@ class TestLogoUpload:
     def setup(self):
         self.session = requests.Session()
         # Login as demo agent (has Pro plan)
-        response = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         if response.status_code == 200:
             data = response.json()
             self.token = data.get('token')
@@ -338,7 +338,7 @@ class TestDocumentUploadEndpoint:
     def setup(self):
         self.session = requests.Session()
         # Login as demo agent
-        response = self.session.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = self.session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         if response.status_code == 200:
             data = response.json()
             self.token = data.get('token')
@@ -422,7 +422,7 @@ class TestNavigationHasSettings:
         session = requests.Session()
         
         # Login as demo agent
-        response = session.post(f"{BASE_URL}/api/auth/demo/agent")
+        response = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert response.status_code == 200, "Demo agent login should work"
         
         token = response.json().get('token')

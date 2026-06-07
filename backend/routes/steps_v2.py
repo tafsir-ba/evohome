@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from core.auth import get_current_user, get_current_agent
-from core.access_control import can_access_project
+from core.access_scope import resolve_agent_access_scope
 from services import step_service
 
 logger = logging.getLogger(__name__)
@@ -44,12 +44,12 @@ class UpdateStepRequest(BaseModel):
 @router.post("/projects/{project_id}/steps")
 async def create_step(project_id: str, data: CreateStepRequest, user=Depends(get_current_agent)):
     """Create a timeline step. Agent only."""
-    if not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied to this project")
+    scope = await resolve_agent_access_scope(user)
+    scope.ensure_project_access(project_id)
 
     step = await step_service.create_step(
         project_id=project_id,
-        agent_id=user['user_id'],
+        agent_id=scope.workspace_owner_id,
         title=data.title,
         description=data.description,
         order_index=data.order_index,
@@ -62,8 +62,8 @@ async def create_step(project_id: str, data: CreateStepRequest, user=Depends(get
 @router.get("/projects/{project_id}/steps")
 async def list_steps(project_id: str, user=Depends(get_current_user)):
     """List all steps for a project."""
-    if not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied to this project")
+    if user.get("role") == "agent":
+        (await resolve_agent_access_scope(user)).ensure_project_access(project_id)
 
     steps = await step_service.list_steps_by_project(project_id)
     return {"steps": steps, "total": len(steps)}
@@ -75,16 +75,15 @@ async def get_step(step_id: str, user=Depends(get_current_user)):
     step = await step_service.get_step(step_id)
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
-    if not await can_access_project(user, step['project_id']):
-        raise HTTPException(status_code=403, detail="Access denied")
+    if user.get("role") == "agent":
+        (await resolve_agent_access_scope(user)).ensure_project_access(step["project_id"])
     return step
 
 
 @router.put("/projects/{project_id}/steps/{step_id}")
 async def update_step(project_id: str, step_id: str, data: UpdateStepRequest, user=Depends(get_current_agent)):
     """Update a step. Agent only."""
-    if not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied to this project")
+    (await resolve_agent_access_scope(user)).ensure_project_access(project_id)
 
     step = await step_service.get_step(step_id)
     if not step or step['project_id'] != project_id:
@@ -101,8 +100,7 @@ async def update_step(project_id: str, step_id: str, data: UpdateStepRequest, us
 @router.delete("/projects/{project_id}/steps/{step_id}")
 async def delete_step(project_id: str, step_id: str, user=Depends(get_current_agent)):
     """Delete a step. Agent only."""
-    if not await can_access_project(user, project_id):
-        raise HTTPException(status_code=403, detail="Access denied to this project")
+    (await resolve_agent_access_scope(user)).ensure_project_access(project_id)
 
     step = await step_service.get_step(step_id)
     if not step or step['project_id'] != project_id:

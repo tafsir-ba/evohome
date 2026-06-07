@@ -167,7 +167,7 @@ export const AgentAnalytics = () => {
             <p className="text-muted-foreground mt-1">Overview of your business performance</p>
           </div>
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <Calendar className="w-4 h-4 mr-2" />
               <SelectValue />
             </SelectTrigger>

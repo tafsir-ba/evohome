@@ -31,14 +31,49 @@ def is_buyer(user: Dict[str, Any]) -> bool:
     return user.get('role') == 'buyer'
 
 
+def get_workspace_owner_id(user: Dict[str, Any]) -> str:
+    """Return effective workspace owner id for agent-scoped access."""
+    return user.get('workspace_owner_id') or user.get('user_id')
+
+
+def is_workspace_owner(user: Dict[str, Any]) -> bool:
+    """Workspace owner has no workspace_owner_id set."""
+    return not bool(user.get('workspace_owner_id'))
+
+
+def is_workspace_admin(user: Dict[str, Any]) -> bool:
+    """Workspace admin includes owner and invited admin role."""
+    return is_workspace_owner(user) or user.get('workspace_role') == 'admin'
+
+
+def _normalized_assigned_project_ids(user: Dict[str, Any]) -> List[str]:
+    assigned = user.get("assigned_project_ids") or []
+    return [project_id for project_id in assigned if project_id]
+
+
+def _uses_explicit_project_assignment(user: Dict[str, Any]) -> bool:
+    return "assigned_project_ids" in user
+
+
 # ── Project access ──
 
 async def can_access_project(user: Dict[str, Any], project_id: str) -> bool:
     db = get_db()
     if user['role'] == 'agent':
-        return await db.projects.find_one(
-            {"project_id": project_id, "agent_id": user['user_id']}
-        ) is not None
+        scope_agent_id = get_workspace_owner_id(user)
+        project = await db.projects.find_one(
+            {"project_id": project_id, "agent_id": scope_agent_id}
+        )
+        if project is None:
+            return False
+        if is_workspace_owner(user):
+            return True
+        assigned_project_ids = _normalized_assigned_project_ids(user)
+        if not _uses_explicit_project_assignment(user):
+            return True
+        if user.get("workspace_role") == "admin" and not assigned_project_ids:
+            return True
+        return project_id in assigned_project_ids
     elif user['role'] == 'buyer':
         return await db.clients.find_one(
             {"buyer_id": user['user_id'], "project_id": project_id}
@@ -49,10 +84,19 @@ async def can_access_project(user: Dict[str, Any], project_id: str) -> bool:
 async def get_accessible_project_ids(user: Dict[str, Any]) -> List[str]:
     db = get_db()
     if user['role'] == 'agent':
+        scope_agent_id = get_workspace_owner_id(user)
         projects = await db.projects.find(
-            {"agent_id": user['user_id']}, {"project_id": 1}
+            {"agent_id": scope_agent_id}, {"project_id": 1}
         ).to_list(1000)
-        return [p['project_id'] for p in projects]
+        project_ids = [p['project_id'] for p in projects]
+        if is_workspace_owner(user):
+            return project_ids
+        assigned_project_ids = set(_normalized_assigned_project_ids(user))
+        if not _uses_explicit_project_assignment(user):
+            return project_ids
+        if user.get("workspace_role") == "admin" and not assigned_project_ids:
+            return project_ids
+        return [project_id for project_id in project_ids if project_id in assigned_project_ids]
     elif user['role'] == 'buyer':
         clients = await db.clients.find(
             {"buyer_id": user['user_id']}, {"project_id": 1}
@@ -66,9 +110,17 @@ async def get_accessible_project_ids(user: Dict[str, Any]) -> List[str]:
 async def can_access_client(user: Dict[str, Any], client_id: str) -> bool:
     db = get_db()
     if user['role'] == 'agent':
-        return await db.clients.find_one(
-            {"client_id": client_id, "agent_id": user['user_id']}
-        ) is not None
+        scope_agent_id = get_workspace_owner_id(user)
+        client = await db.clients.find_one(
+            {"client_id": client_id, "agent_id": scope_agent_id},
+            {"_id": 0, "project_id": 1},
+        )
+        if client is None:
+            return False
+        project_id = client.get("project_id")
+        if not project_id:
+            return is_workspace_owner(user)
+        return await can_access_project(user, project_id)
     elif user['role'] == 'buyer':
         return await db.clients.find_one(
             {"client_id": client_id, "buyer_id": user['user_id']}
@@ -79,9 +131,13 @@ async def can_access_client(user: Dict[str, Any], client_id: str) -> bool:
 async def get_accessible_client_ids(user: Dict[str, Any]) -> List[str]:
     db = get_db()
     if user['role'] == 'agent':
-        clients = await db.clients.find(
-            {"agent_id": user['user_id']}, {"client_id": 1}
-        ).to_list(1000)
+        accessible_project_ids = await get_accessible_project_ids(user)
+        query: Dict[str, Any] = {"agent_id": get_workspace_owner_id(user)}
+        if accessible_project_ids:
+            query["project_id"] = {"$in": accessible_project_ids}
+        elif not is_workspace_owner(user):
+            return []
+        clients = await db.clients.find(query, {"client_id": 1}).to_list(1000)
         return [c['client_id'] for c in clients]
     elif user['role'] == 'buyer':
         clients = await db.clients.find(
@@ -93,12 +149,20 @@ async def get_accessible_client_ids(user: Dict[str, Any]) -> List[str]:
 
 # ── Vault access ──
 
-async def can_access_vault_doc(user: Dict[str, Any], vault_id: str) -> bool:
+async def can_access_vault_doc(user: Dict[str, Any], vault_document_id: str) -> bool:
     db = get_db()
     if user['role'] == 'agent':
-        return await db.vault_documents.find_one(
-            {"vault_id": vault_id, "agent_id": user['user_id']}
-        ) is not None
+        scope_agent_id = get_workspace_owner_id(user)
+        doc = await db.vault_documents.find_one(
+            {"vault_document_id": vault_document_id, "agent_id": scope_agent_id},
+            {"_id": 0, "project_id": 1},
+        )
+        if doc is None:
+            return False
+        project_id = doc.get("project_id")
+        if not project_id:
+            return is_workspace_owner(user)
+        return await can_access_project(user, project_id)
     elif user['role'] == 'buyer':
         client = await db.clients.find_one(
             {"buyer_id": user['user_id']}, {"client_id": 1, "agent_id": 1}
@@ -106,10 +170,13 @@ async def can_access_vault_doc(user: Dict[str, Any], vault_id: str) -> bool:
         if not client:
             return False
         return await db.vault_documents.find_one({
-            "vault_id": vault_id,
+            "vault_document_id": vault_document_id,
             "agent_id": client.get('agent_id'),
             "access_level": "shared",
-            "shared_with_clients": client.get('client_id')
+            "$or": [
+                {"buyer_ids": user['user_id']},
+                {"client_ids": client.get('client_id')},
+            ]
         }) is not None
     return False
 
@@ -119,9 +186,17 @@ async def can_access_vault_doc(user: Dict[str, Any], vault_id: str) -> bool:
 async def can_access_document(user: Dict[str, Any], document_id: str) -> bool:
     db = get_db()
     if user['role'] == 'agent':
-        return await db.documents.find_one(
-            {"document_id": document_id, "agent_id": user['user_id']}
-        ) is not None
+        scope_agent_id = get_workspace_owner_id(user)
+        doc = await db.documents.find_one(
+            {"document_id": document_id, "agent_id": scope_agent_id},
+            {"_id": 0, "project_id": 1},
+        )
+        if doc is None:
+            return False
+        project_id = doc.get("project_id")
+        if not project_id:
+            return is_workspace_owner(user)
+        return await can_access_project(user, project_id)
     elif user['role'] == 'buyer':
         clients = await db.clients.find(
             {"buyer_id": user['user_id']}, {"client_id": 1}

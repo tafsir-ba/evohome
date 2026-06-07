@@ -16,7 +16,7 @@ BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 def agent_session():
     """Login as demo agent and return authenticated session"""
     session = requests.Session()
-    res = session.post(f"{BASE_URL}/api/auth/demo/agent")
+    res = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
     assert res.status_code == 200, f"Agent login failed: {res.text}"
     return session
 
@@ -24,7 +24,7 @@ def agent_session():
 def buyer_session():
     """Login as demo buyer and return authenticated session"""
     session = requests.Session()
-    res = session.post(f"{BASE_URL}/api/auth/demo/buyer?buyer_num=1")
+    res = session.post(f"{BASE_URL}/api/demo/enter", json={"persona": "buyer", "buyer_slot": 1, "fresh": False})
     assert res.status_code == 200, f"Buyer login failed: {res.text}"
     return session
 

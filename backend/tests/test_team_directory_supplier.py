@@ -14,7 +14,7 @@ BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 @pytest.fixture(scope="module")
 def auth_token():
     """Get demo agent auth token"""
-    response = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+    response = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
     assert response.status_code == 200, f"Demo login failed: {response.text}"
     return response.json()['token']
 

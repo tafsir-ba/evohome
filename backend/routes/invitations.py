@@ -8,14 +8,17 @@ import uuid
 import secrets
 import logging
 import bcrypt
+import html
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, Literal
 
 from fastapi import APIRouter, HTTPException, Depends, Response, Form
 from pydantic import BaseModel, EmailStr
 
 from database import db
 from core.auth import get_current_user, get_current_agent, create_access_token, JWT_EXPIRY_DAYS
+from core.access_scope import resolve_agent_access_scope
+from core.audit import log_audit_event
 from services.email_service import send_email_async, send_notification_email, get_email_template
 
 logger = logging.getLogger(__name__)
@@ -26,8 +29,12 @@ router = APIRouter()
 
 class TeamInviteCreate(BaseModel):
     email: EmailStr
-    role: str = "member"
+    role: Literal["member", "admin"] = "member"
     message: Optional[str] = None
+
+
+class TeamMemberRoleUpdate(BaseModel):
+    role: str
 
 
 # ── Endpoints ──
@@ -35,16 +42,23 @@ class TeamInviteCreate(BaseModel):
 @router.post("/team/invitations")
 async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(get_current_agent)):
     """Invite a new team member to the agent's workspace"""
-    existing_agent = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
+        raise HTTPException(status_code=403, detail="Only workspace admins can invite team members")
+    workspace_owner_id = scope.workspace_owner_id
+    normalized_email = data.email.lower().strip()
+    cleaned_message = (data.message or "").strip()
+
+    existing_agent = await db.users.find_one({"email": normalized_email, "role": "agent"}, {"_id": 0})
     if existing_agent:
-        if existing_agent.get('workspace_owner_id') == user['user_id']:
+        if existing_agent.get('workspace_owner_id') == workspace_owner_id:
             raise HTTPException(status_code=400, detail="This user is already part of your team")
         if existing_agent.get('workspace_owner_id'):
             raise HTTPException(status_code=400, detail="This user is already part of another workspace")
 
     existing_invite = await db.team_invitations.find_one({
-        "email": data.email,
-        "invited_by": user['user_id'],
+        "email": normalized_email,
+        "invited_by": workspace_owner_id,
         "status": "pending",
     })
     if existing_invite:
@@ -56,11 +70,11 @@ async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(ge
 
     invitation_doc = {
         "invitation_id": invitation_id,
-        "email": data.email.lower(),
+        "email": normalized_email,
         "role": data.role,
-        "message": data.message,
+        "message": cleaned_message if cleaned_message else None,
         "status": "pending",
-        "invited_by": user['user_id'],
+        "invited_by": workspace_owner_id,
         "invited_by_name": user.get('name', 'Unknown'),
         "invitation_token": invitation_token,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -72,45 +86,50 @@ async def create_team_invitation(data: TeamInviteCreate, user: dict = Depends(ge
     frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://evohome.ch').replace('/api', '')
     invite_link = f"{frontend_url}/team/accept?token={invitation_token}"
     company_name = user.get('settings', {}).get('company_name') or user.get('name', 'Evohome')
+    inviter_name = user.get('name', 'Votre equipe')
 
-    subject = f"You've been invited to join {company_name} on Evohome"
-    html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #2563EB;">Team Invitation</h2>
-        <p>Hi,</p>
-        <p><strong>{user.get('name', 'A team member')}</strong> has invited you to join <strong>{company_name}</strong> on Evohome as a <strong>{data.role}</strong>.</p>
-        {f'<p style="color: #666; font-style: italic;">"{data.message}"</p>' if data.message else ''}
-        <p style="text-align: center; margin: 30px 0;">
-            <a href="{invite_link}" style="background-color: #2563EB; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                Accept Invitation
-            </a>
-        </p>
-        <p style="color: #666; font-size: 14px;">This invitation will expire in 7 days.</p>
-        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-        <p style="color: #999; font-size: 12px;">Evohome - Real Estate Management</p>
-    </div>
-    """
+    subject, html_content = get_email_template("team_invitation", {
+        "company_name": html.escape(company_name),
+        "invited_by_name": html.escape(inviter_name),
+        "role": data.role,
+        "invite_link": invite_link,
+        "message": html.escape(cleaned_message) if cleaned_message else "",
+    })
 
-    await send_email_async(data.email, subject, html_content)
-    logger.info(f"Team invitation sent to {data.email} by {user['user_id']}")
+    email_result = await send_email_async(normalized_email, subject, html_content)
+    if email_result.get("status") != "success":
+        await db.team_invitations.delete_one({"invitation_id": invitation_id})
+        logger.error(
+            "Team invitation email failed; rolled back invite %s for %s (%s)",
+            invitation_id,
+            normalized_email,
+            email_result.get("reason") or email_result.get("error") or "unknown",
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Invitation email could not be delivered. Please verify email configuration and try again.",
+        )
+    logger.info(f"Team invitation sent to {normalized_email} by {user['user_id']}")
 
     return {
         "invitation_id": invitation_id,
-        "email": data.email,
+        "email": normalized_email,
         "role": data.role,
         "status": "pending",
-        "invited_by": user['user_id'],
+        "invited_by": workspace_owner_id,
         "invited_by_name": user.get('name', 'Unknown'),
         "created_at": invitation_doc['created_at'],
         "expires_at": invitation_doc['expires_at'],
+        "delivery_status": "sent",
     }
 
 
 @router.get("/team/invitations")
 async def list_team_invitations(user: dict = Depends(get_current_agent)):
     """List all team invitations sent by this agent"""
+    workspace_owner_id = (await resolve_agent_access_scope(user)).workspace_owner_id
     invitations = await db.team_invitations.find(
-        {"invited_by": user['user_id']},
+        {"invited_by": workspace_owner_id},
         {"_id": 0, "invitation_token": 0},
     ).sort("created_at", -1).to_list(100)
     return invitations
@@ -119,15 +138,27 @@ async def list_team_invitations(user: dict = Depends(get_current_agent)):
 @router.delete("/team/invitations/{invitation_id}")
 async def cancel_team_invitation(invitation_id: str, user: dict = Depends(get_current_agent)):
     """Cancel a pending team invitation"""
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
+        raise HTTPException(status_code=403, detail="Only workspace admins can cancel invitations")
+    workspace_owner_id = scope.workspace_owner_id
     invitation = await db.team_invitations.find_one({
         "invitation_id": invitation_id,
-        "invited_by": user['user_id'],
+        "invited_by": workspace_owner_id,
     })
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitation not found")
     if invitation['status'] != 'pending':
         raise HTTPException(status_code=400, detail="Can only cancel pending invitations")
     await db.team_invitations.delete_one({"invitation_id": invitation_id})
+    await log_audit_event(
+        actor_user=user,
+        action="team_invitation_cancelled",
+        target_type="team_invitation",
+        target_id=invitation_id,
+        workspace_owner_id=workspace_owner_id,
+        metadata={"email": invitation.get("email")},
+    )
     return {"message": "Invitation cancelled"}
 
 
@@ -199,6 +230,12 @@ async def accept_team_invitation(token: str, response: Response):
         {"invitation_id": invitation['invitation_id']},
         {"$set": {"status": "accepted", "accepted_at": datetime.now(timezone.utc).isoformat(), "accepted_by": user_id}},
     )
+    await send_notification_email("welcome_onboarding", email, {
+        "name": existing_user.get("name", ""),
+        "role": "agent",
+        "project_name": "your shared workspace",
+        "agent_name": invitation.get("invited_by_name", "Your workspace owner"),
+    })
 
     jwt_token = create_access_token(user_id, "agent")
 
@@ -219,10 +256,17 @@ async def register_invited_user(
     response: Response = None,
 ):
     """Register a new user from a team invitation"""
+    email_normalized = email.lower().strip()
+    name_cleaned = name.strip()
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if not name_cleaned:
+        raise HTTPException(status_code=400, detail="Name is required")
+
     invitation = await db.team_invitations.find_one({
         "invitation_token": token,
         "status": "pending",
-        "email": email.lower(),
+        "email": email_normalized,
     })
     if not invitation:
         raise HTTPException(status_code=404, detail="Invalid invitation token")
@@ -231,7 +275,7 @@ async def register_invited_user(
     if datetime.now(timezone.utc) > expires_at:
         raise HTTPException(status_code=400, detail="Invitation has expired")
 
-    existing = await db.users.find_one({"email": email.lower(), "role": "agent"})
+    existing = await db.users.find_one({"email": email_normalized, "role": "agent"})
     if existing:
         raise HTTPException(status_code=400, detail="Account already exists. Please login and accept the invitation.")
 
@@ -240,8 +284,8 @@ async def register_invited_user(
 
     user_doc = {
         "user_id": user_id,
-        "email": email.lower(),
-        "name": name,
+        "email": email_normalized,
+        "name": name_cleaned,
         "password_hash": hashed_password.decode('utf-8'),
         "role": "agent",
         "picture": None,
@@ -256,6 +300,12 @@ async def register_invited_user(
         {"invitation_id": invitation['invitation_id']},
         {"$set": {"status": "accepted", "accepted_at": datetime.now(timezone.utc).isoformat(), "accepted_by": user_id}},
     )
+    await send_notification_email("welcome_onboarding", email_normalized, {
+        "name": name_cleaned,
+        "role": "agent",
+        "project_name": "your shared workspace",
+        "agent_name": invitation.get("invited_by_name", "Your workspace owner"),
+    })
 
     jwt_token = create_access_token(user_id, "agent")
 
@@ -268,8 +318,8 @@ async def register_invited_user(
 
     return {
         "user_id": user_id,
-        "email": email,
-        "name": name,
+        "email": email_normalized,
+        "name": name_cleaned,
         "role": "agent",
         "workspace_owner_id": invitation['invited_by'],
         "workspace_role": invitation['role'],
@@ -279,21 +329,75 @@ async def register_invited_user(
 
 @router.delete("/team/members/{member_id}")
 async def remove_team_member(member_id: str, user: dict = Depends(get_current_agent)):
-    """Remove a team member from the workspace (owner only)"""
-    if user.get('workspace_owner_id'):
-        raise HTTPException(status_code=403, detail="Only workspace owner can remove team members")
+    """Remove a team member from the workspace with role guards."""
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_admin:
+        raise HTTPException(status_code=403, detail="Only workspace admins can remove team members")
+    workspace_owner_id = scope.workspace_owner_id
 
     member = await db.users.find_one({
         "user_id": member_id,
-        "workspace_owner_id": user['user_id'],
+        "workspace_owner_id": workspace_owner_id,
     })
     if not member:
         raise HTTPException(status_code=404, detail="Team member not found")
+    if member_id == workspace_owner_id:
+        raise HTTPException(status_code=400, detail="Cannot remove workspace owner")
+    if member.get("workspace_role") == "admin" and not scope.is_owner:
+        raise HTTPException(status_code=403, detail="Only workspace owner can remove another admin")
 
     await db.users.update_one(
         {"user_id": member_id},
         {"$unset": {"workspace_owner_id": "", "workspace_role": ""}},
     )
+    await db.team_invitations.update_many(
+        {"accepted_by": member_id, "invited_by": workspace_owner_id},
+        {"$set": {"status": "revoked", "revoked_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    await log_audit_event(
+        actor_user=user,
+        action="team_member_removed",
+        target_type="user",
+        target_id=member_id,
+        workspace_owner_id=workspace_owner_id,
+        metadata={"workspace_role": member.get("workspace_role", "member")},
+    )
 
     logger.info(f"Team member {member_id} removed from workspace by {user['user_id']}")
     return {"message": "Team member removed from workspace"}
+
+
+@router.patch("/team/members/{member_id}/role")
+async def update_team_member_role(
+    member_id: str,
+    data: TeamMemberRoleUpdate,
+    user: dict = Depends(get_current_agent),
+):
+    """Update workspace role for a team member (owner only)."""
+    scope = await resolve_agent_access_scope(user)
+    if not scope.is_owner:
+        raise HTTPException(status_code=403, detail="Only workspace owner can change team roles")
+    if data.role not in {"member", "admin"}:
+        raise HTTPException(status_code=400, detail="Invalid role; must be 'member' or 'admin'")
+
+    workspace_owner_id = scope.workspace_owner_id
+    member = await db.users.find_one(
+        {"user_id": member_id, "workspace_owner_id": workspace_owner_id, "role": "agent"},
+        {"_id": 0, "user_id": 1},
+    )
+    if not member:
+        raise HTTPException(status_code=404, detail="Team member not found")
+
+    await db.users.update_one(
+        {"user_id": member_id},
+        {"$set": {"workspace_role": data.role}},
+    )
+    await log_audit_event(
+        actor_user=user,
+        action="team_member_role_updated",
+        target_type="user",
+        target_id=member_id,
+        workspace_owner_id=workspace_owner_id,
+        metadata={"workspace_role": data.role},
+    )
+    return {"message": "Team member role updated", "member_id": member_id, "role": data.role}

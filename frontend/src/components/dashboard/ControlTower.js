@@ -14,9 +14,15 @@ import {
   DollarSign,
   BarChart3,
   MessageSquareWarning,
+  CheckSquare,
 } from 'lucide-react';
 
-export const ControlTower = ({ projectCount = 0, onRefresh }) => {
+export const ControlTower = ({
+  projectCount = 0,
+  onRefresh,
+  title = 'Command Center',
+  subtitle = 'What needs your attention — then share updates with clients.',
+}) => {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +58,7 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
             <div className="h-4 w-56 bg-muted rounded animate-pulse mt-1" />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[1, 2, 3].map((i) => <div key={i} className="h-20 bg-muted rounded-lg animate-pulse" />)}
         </div>
         <div className="grid grid-cols-4 gap-3">
@@ -67,34 +73,35 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
   return (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-outfit font-semibold text-foreground tracking-tight">
-            Control Tower
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-outfit font-semibold text-foreground tracking-tight">
+            {title}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            What needs your attention today.
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            {subtitle}
           </p>
         </div>
         <Button
           variant="ghost"
           size="sm"
           onClick={handleRefresh}
-          className="text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground shrink-0"
           data-testid="refresh-dashboard-btn"
         >
           <RefreshCw className="w-4 h-4" />
         </Button>
       </div>
 
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Needs attention</p>
       {/* Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="action-cards">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" data-testid="action-cards">
         <ActionCard
-          count={stats.change_requests?.length || 0}
+          count={(stats.change_requests?.length || 0) + (stats.open_change_requests || 0)}
           label="Change Requests"
           icon={MessageSquareWarning}
           activeColor="amber"
-          onClick={() => navigate('/agent/quotes')}
+          onClick={() => navigate('/agent/documents')}
           testId="action-card-change-requests"
         />
         <ActionCard
@@ -102,7 +109,7 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
           label="Pending Invoices"
           icon={CreditCard}
           activeColor="red"
-          onClick={() => navigate('/agent/invoices')}
+          onClick={() => navigate('/agent/documents')}
           testId="action-card-pending-invoices"
         />
         <ActionCard
@@ -110,21 +117,50 @@ export const ControlTower = ({ projectCount = 0, onRefresh }) => {
           label="Pending Quotes"
           icon={FileText}
           activeColor="blue"
-          onClick={() => navigate('/agent/quotes')}
+          onClick={() => navigate('/agent/documents')}
           testId="action-card-pending-quotes"
+        />
+        <ActionCard
+          count={(stats.pending_decisions || 0) + (stats.challenged_decisions || 0)}
+          label="Pending Decisions"
+          icon={CheckSquare}
+          activeColor="amber"
+          onClick={() => navigate('/agent/decisions')}
+          testId="action-card-pending-decisions"
         />
       </div>
 
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-2">Overview</p>
       {/* KPI Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="kpi-strip">
-        <KpiItem icon={Users} value={stats.total_clients || 0} label="Total Clients" />
-        <KpiItem icon={Building2} value={projectCount} label="Active Projects" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" data-testid="kpi-strip">
+        <KpiItem
+          icon={Users}
+          value={stats.total_clients || 0}
+          label="Total Clients"
+          onClick={() => navigate('/agent/clients')}
+          testId="kpi-total-clients"
+        />
+        <KpiItem
+          icon={Building2}
+          value={projectCount}
+          label="Active Projects"
+          onClick={() => navigate('/agent/projects')}
+          testId="kpi-active-projects"
+        />
         <KpiItem
           icon={DollarSign}
           value={new Intl.NumberFormat('de-CH', { notation: 'compact', maximumFractionDigits: 1 }).format(stats.total_revenue || 0)}
           label="Revenue (CHF)"
+          onClick={() => navigate('/agent/analytics')}
+          testId="kpi-revenue"
         />
-        <KpiItem icon={BarChart3} value={stats.approved_quotes?.length || 0} label="Approved Quotes" />
+        <KpiItem
+          icon={BarChart3}
+          value={stats.approved_quotes?.length || 0}
+          label="Approved Quotes"
+          onClick={() => navigate('/agent/documents')}
+          testId="kpi-approved-quotes"
+        />
       </div>
     </>
   );
@@ -146,17 +182,25 @@ const ActionCard = ({ count, label, icon: Icon, activeColor, onClick, testId }) 
         isActive && colors.border
       )}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      role="button"
+      tabIndex={0}
       data-testid={testId}
     >
-      <CardContent className="py-4 px-5">
+      <CardContent className="py-4 px-4 sm:px-5">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center', isActive ? colors.bg : 'bg-muted')}>
-              <Icon className={cn('w-5 h-5', isActive ? colors.text : 'text-muted-foreground')} />
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={cn('w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0', isActive ? colors.bg : 'bg-muted')}>
+              <Icon className={cn('w-4 h-4 sm:w-5 sm:h-5', isActive ? colors.text : 'text-muted-foreground')} />
             </div>
-            <div>
-              <p className="text-2xl font-semibold font-outfit">{count}</p>
-              <p className="text-xs text-muted-foreground">{label}</p>
+            <div className="min-w-0">
+              <p className="text-xl sm:text-2xl font-semibold font-outfit">{count}</p>
+              <p className="text-xs text-muted-foreground truncate">{label}</p>
             </div>
           </div>
           <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -166,12 +210,29 @@ const ActionCard = ({ count, label, icon: Icon, activeColor, onClick, testId }) 
   );
 };
 
-const KpiItem = ({ icon: Icon, value, label }) => (
-  <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
-    <Icon className="w-4 h-4 text-muted-foreground" />
-    <div>
-      <p className="text-lg font-semibold font-outfit">{value}</p>
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-    </div>
-  </div>
+const KpiItem = ({ icon: Icon, value, label, onClick, testId }) => (
+  <Card
+    className="border-border cursor-pointer transition-all hover:shadow-md group"
+    onClick={onClick}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onClick?.();
+      }
+    }}
+    role="button"
+    tabIndex={0}
+    data-testid={testId}
+  >
+    <CardContent className="flex items-center justify-between gap-2 p-3 min-w-0">
+      <div className="flex items-center gap-3 min-w-0">
+        <Icon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        <div className="min-w-0">
+          <p className="text-lg font-semibold font-outfit truncate">{value}</p>
+          <p className="text-[11px] text-muted-foreground truncate">{label}</p>
+        </div>
+      </div>
+      <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+    </CardContent>
+  </Card>
 );

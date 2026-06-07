@@ -1,24 +1,41 @@
 """
 Vault Service — Canonical Implementation.
 
-No is_demo. VaultDocument is separate from Document.
-Vault is storage/shared repository logic.
+Single source of truth for vault document operations.
+File I/O delegated to file_service. No direct disk access here.
 """
-import os
 import uuid
 import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from database import db
-from services.notification_service import emit_notification
+from services.notification_service import emit_notification, emit_realtime
 
 logger = logging.getLogger(__name__)
 
-VAULT_CATEGORIES = ["general", "action_required"]
+VAULT_CATEGORIES = ["architect_plans", "contracts", "plans", "permits", "reports", "other"]
 
 
-# ── Core CRUD ──
+def _collect_string_ids(rows: List[Dict[str, Any]], key: str) -> List[str]:
+    """Collect non-empty string IDs safely from DB rows."""
+    ids: List[str] = []
+    for row in rows:
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            ids.append(value)
+    return ids
+
+
+def _sort_vault_docs(docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Pin architect plans first, then newest documents."""
+    def _key(doc: Dict[str, Any]):
+        is_architect = doc.get("doc_type") == "architect_plan" or doc.get("category") == "architect_plans"
+        created = doc.get("created_at") or ""
+        return (1 if is_architect else 0, created)
+
+    return sorted(docs, key=_key, reverse=True)
+
 
 async def create_vault_document(
     agent_id: str,
@@ -27,20 +44,33 @@ async def create_vault_document(
     title: str,
     category: str,
     description: Optional[str],
-    filename: str,
-    file_path: str,
+    access_level: str,
+    doc_type: str,
+    stored_filename: str,
+    original_filename: str,
     file_size: int,
+    content_type: str,
 ) -> Dict[str, Any]:
-    """Create a vault document shared with one or more clients."""
+    """Create a vault document. Returns canonical document dict."""
     doc_id = f"vault_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
 
-    # Resolve buyer_ids from clients
+    if category not in VAULT_CATEGORIES:
+        category = "other"
+
+    if access_level not in ("private", "shared"):
+        access_level = "private"
+
+    if doc_type not in ("general", "action_required", "architect_plan"):
+        doc_type = "general"
+    if doc_type == "architect_plan":
+        category = "architect_plans"
+
     buyer_ids = []
     for cid in client_ids:
         c = await db.clients.find_one({"client_id": cid}, {"_id": 0, "buyer_id": 1})
-        if c and c.get('buyer_id'):
-            buyer_ids.append(c['buyer_id'])
+        if c and c.get("buyer_id"):
+            buyer_ids.append(c["buyer_id"])
 
     doc = {
         "vault_document_id": doc_id,
@@ -50,47 +80,100 @@ async def create_vault_document(
         "buyer_ids": buyer_ids,
         "title": title,
         "category": category,
-        "description": description or '',
-        "filename": filename,
-        "file_path": file_path,
+        "doc_type": doc_type,
+        "description": description or "",
+        "access_level": access_level,
+        "stored_filename": stored_filename,
+        "original_filename": original_filename,
         "file_size": file_size,
+        "content_type": content_type,
         "created_at": now,
         "updated_at": now,
     }
     await db.vault_documents.insert_one(doc)
-    doc.pop('_id', None)
+    doc.pop("_id", None)
 
-    # Notify buyers
+    from core.trace import trace_service, trace_db_mutation, trace_side_effect
+    trace_service("services.vault_service.create_vault_document")
+    trace_db_mutation("vault_documents", "insert_one", doc_id)
+
+    from core.notification_routing import buyer_query
+
     for bid in buyer_ids:
         await emit_notification(
             user_id=bid,
             title="New Document Shared",
             message=f"Your agent shared '{title}' with you",
             notification_type="vault_document",
-            link="/buyer/vault",
-            metadata={"vault_document_id": doc_id},
+            link=buyer_query("vault", vault_document_id=doc_id, project_id=project_id),
+            metadata={"vault_document_id": doc_id, "project_id": project_id},
+        )
+        trace_side_effect("notification", target=bid, detail=f"vault_document shared: {title}")
+
+    # Real-time push so buyer UI refreshes without page reload
+    if access_level == "shared" and buyer_ids:
+        await emit_realtime(
+            buyer_ids,
+            "vault_updated",
+            {"vault_document_id": doc_id, "title": title},
         )
 
     return doc
 
 
-async def list_vault_documents(agent_id: str, project_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """List vault documents for an agent."""
+async def list_vault_documents(
+    agent_id: str,
+    project_id: Optional[str] = None,
+    project_ids: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
     query = {"agent_id": agent_id}
     if project_id:
         query["project_id"] = project_id
-    return await db.vault_documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    elif project_ids is not None:
+        if not project_ids:
+            return []
+        query["project_id"] = {"$in": project_ids}
+    docs = await db.vault_documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return _enrich_urls(_sort_vault_docs(docs))
 
 
 async def list_buyer_vault(buyer_id: str) -> List[Dict[str, Any]]:
-    """List vault documents shared with a buyer."""
-    return await db.vault_documents.find(
-        {"buyer_ids": buyer_id}, {"_id": 0}
+    # Find all client_ids linked to this buyer
+    buyer_clients = await db.clients.find(
+        {"buyer_id": buyer_id}, {"_id": 0, "client_id": 1}
+    ).to_list(100)
+    buyer_client_ids = _collect_string_ids(buyer_clients, "client_id")
+
+    # Match by buyer_ids OR by client_ids (handles race condition where buyer registered after doc was shared)
+    query = {"access_level": "shared"}
+    if buyer_client_ids:
+        query["$or"] = [
+            {"buyer_ids": buyer_id},
+            {"client_ids": {"$in": buyer_client_ids}},
+        ]
+    else:
+        query["buyer_ids"] = buyer_id
+
+    docs = await db.vault_documents.find(
+        query, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
+    return _enrich_urls(_sort_vault_docs(docs))
+
+
+def _enrich_urls(docs):
+    from services.file_service import get_file_url, USE_SPACES
+
+    for doc in docs:
+        if doc.get("stored_filename"):
+            # Private Spaces buckets: raw CDN URLs fail (AccessDenied) in browsers / iframes.
+            if USE_SPACES:
+                doc["url"] = None
+            else:
+                doc["url"] = get_file_url(doc["stored_filename"])
+    return docs
 
 
 async def get_vault_document(vault_document_id: str) -> Optional[Dict[str, Any]]:
-    """Get a single vault document."""
     return await db.vault_documents.find_one(
         {"vault_document_id": vault_document_id}, {"_id": 0}
     )
@@ -99,40 +182,93 @@ async def get_vault_document(vault_document_id: str) -> Optional[Dict[str, Any]]
 async def update_vault_document(
     vault_document_id: str, agent_id: str, updates: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
-    """Update title, description, category of a vault document."""
+    """Update vault document metadata. Supports title, description, category, access_level, client_ids, project_id."""
     query = {"vault_document_id": vault_document_id, "agent_id": agent_id}
     doc = await db.vault_documents.find_one(query, {"_id": 0})
     if not doc:
         return None
 
-    allowed = {"title", "description", "category"}
-    filtered = {k: v for k, v in updates.items() if k in allowed and v is not None}
+    allowed = {"title", "description", "category", "access_level", "client_ids", "project_id", "doc_type"}
+    filtered = {}
+    for k in allowed:
+        if k in updates:
+            filtered[k] = updates[k]
+
+    # Validate category
+    if "category" in filtered and filtered["category"] not in VAULT_CATEGORIES:
+        filtered["category"] = "other"
+
+    # Validate access_level
+    if "access_level" in filtered and filtered["access_level"] not in ("private", "shared"):
+        filtered["access_level"] = "private"
+
+    # Validate doc_type and keep architect plans pinned in dedicated category
+    if "doc_type" in filtered and filtered["doc_type"] not in ("general", "action_required", "architect_plan"):
+        filtered["doc_type"] = "general"
+    if filtered.get("doc_type") == "architect_plan":
+        filtered["category"] = "architect_plans"
+
+    # Re-resolve buyer_ids when client_ids change
+    if "client_ids" in filtered:
+        buyer_ids = []
+        for cid in filtered["client_ids"]:
+            c = await db.clients.find_one({"client_id": cid}, {"_id": 0, "buyer_id": 1})
+            if c and c.get("buyer_id"):
+                buyer_ids.append(c["buyer_id"])
+        filtered["buyer_ids"] = buyer_ids
+
     filtered["updated_at"] = datetime.now(timezone.utc).isoformat()
 
+    was_shared = doc.get("access_level") == "shared"
+    prev_buyer_ids = list(dict.fromkeys(doc.get("buyer_ids") or []))
+
     await db.vault_documents.update_one(query, {"$set": filtered})
-    return await db.vault_documents.find_one(query, {"_id": 0})
+    updated = await db.vault_documents.find_one(query, {"_id": 0})
+    if not updated:
+        return None
+
+    if was_shared and updated.get("access_level") != "shared" and prev_buyer_ids:
+        await emit_realtime(
+            prev_buyer_ids,
+            "vault_updated",
+            {"vault_document_id": vault_document_id, "removed": True},
+        )
+    elif updated.get("access_level") == "shared":
+        notify_ids = list(dict.fromkeys(updated.get("buyer_ids") or []))
+        if notify_ids:
+            await emit_realtime(
+                notify_ids,
+                "vault_updated",
+                {
+                    "vault_document_id": vault_document_id,
+                    "title": updated.get("title", ""),
+                },
+            )
+    return updated
 
 
-async def delete_vault_document(vault_document_id: str, agent_id: str) -> bool:
-    """Delete a vault document and its file."""
+async def delete_vault_document(vault_document_id: str, agent_id: str) -> Optional[str]:
+    """Delete vault document from DB. Returns stored_filename for file cleanup, or None."""
     query = {"vault_document_id": vault_document_id, "agent_id": agent_id}
     doc = await db.vault_documents.find_one(query, {"_id": 0})
     if not doc:
-        return False
+        return None
 
-    if doc.get('file_path') and os.path.exists(doc['file_path']):
-        try:
-            os.remove(doc['file_path'])
-        except Exception:
-            pass
+    notify_ids = list(dict.fromkeys(doc.get("buyer_ids") or []))
+    vid = doc.get("vault_document_id")
+    if doc.get("access_level") == "shared" and notify_ids and vid:
+        await emit_realtime(
+            notify_ids,
+            "vault_updated",
+            {"vault_document_id": vid, "removed": True},
+        )
 
     await db.vault_documents.delete_one(query)
-    return True
+    return doc.get("stored_filename")
 
 
 async def get_categories() -> List[Dict[str, str]]:
-    """Return vault document category options."""
     return [
-        {"value": "general", "label": "General Documents"},
-        {"value": "action_required", "label": "Action Required"},
+        {"value": c, "label": c.replace("_", " ").title()}
+        for c in VAULT_CATEGORIES
     ]

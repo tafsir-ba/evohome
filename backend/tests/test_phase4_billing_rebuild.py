@@ -34,7 +34,7 @@ class TestBillingPlans:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200, f"Demo agent login failed: {res.text}"
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}"}
@@ -107,7 +107,7 @@ class TestBillingStatus:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}"}
@@ -145,7 +145,7 @@ class TestBillingStatus:
         requests.post(f"{BASE_URL}/api/demo/seed")
         
         # Get fresh token after reseed
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         token = res.json()['token']
         headers = {"Authorization": f"Bearer {token}"}
         
@@ -163,7 +163,7 @@ class TestCheckoutSession:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
@@ -230,7 +230,7 @@ class TestWebhookEvents:
     def test_checkout_session_completed_updates_subscription(self):
         """checkout.session.completed updates subscription_plan, stripe_customer_id, stripe_subscription_id"""
         # First get a test agent (response is flat, not nested under 'user')
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         data = res.json()
         token = data['token']
@@ -273,7 +273,7 @@ class TestWebhookEvents:
     def test_subscription_updated_changes_status(self):
         """customer.subscription.updated changes subscription_status"""
         # Get demo agent with stripe_customer_id set from previous test
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         token = res.json()['token']
         headers = {"Authorization": f"Bearer {token}"}
         
@@ -308,7 +308,7 @@ class TestWebhookEvents:
     def test_subscription_deleted_downgrades_to_free(self):
         """customer.subscription.deleted downgrades to free, sets stripe_subscription_id to null"""
         # Get demo agent
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         token = res.json()['token']
         headers = {"Authorization": f"Bearer {token}"}
         
@@ -346,7 +346,7 @@ class TestWebhookEvents:
     def test_payment_failed_sets_past_due(self):
         """invoice.payment_failed sets status to past_due"""
         # First set up a customer_id via checkout webhook (response is flat)
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         data = res.json()
         token = data['token']
         agent_id = data['user_id']
@@ -395,7 +395,7 @@ class TestCancelSubscription:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}"}
@@ -426,7 +426,7 @@ class TestSyncSubscription:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}"}
@@ -447,7 +447,7 @@ class TestVerifySession:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Get demo agent token"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         self.token = res.json()['token']
         self.headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
@@ -640,7 +640,7 @@ class TestCanonicalUpdatePath:
         # This is verified by code inspection - both call apply_subscription_update
         # We test that the DB state is consistent after webhook
         
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         data = res.json()
         token = data['token']
         agent_id = data['user_id']
@@ -683,8 +683,8 @@ class TestDemoSeedAndLogin:
         assert 'demo_credentials' in data
     
     def test_demo_agent_login_works(self):
-        """POST /api/auth/demo/agent still works"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        """POST /api/demo/enter (agent) still works"""
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         assert res.status_code == 200
         
         data = res.json()
@@ -696,7 +696,7 @@ class TestDemoSeedAndLogin:
     
     def test_demo_agent_dashboard_access(self):
         """Demo agent can access basic dashboard endpoints"""
-        res = requests.post(f"{BASE_URL}/api/auth/demo/agent")
+        res = requests.post(f"{BASE_URL}/api/demo/enter", json={"persona": "agent", "fresh": False})
         token = res.json()['token']
         headers = {"Authorization": f"Bearer {token}"}
         
