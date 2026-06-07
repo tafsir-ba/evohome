@@ -224,14 +224,20 @@ async def export_xlsx(project_id: str, user=Depends(get_gantt_actor)):
 
 
 @router.get("/gantt/projects/{project_id}/export.pdf")
-async def export_pdf(project_id: str, user=Depends(get_gantt_actor)):
+async def export_pdf(
+    project_id: str,
+    mode: str = "presentation",
+    user=Depends(get_gantt_actor),
+):
+    if mode not in ("presentation", "detailed"):
+        mode = "presentation"
     project, tasks = await _export_project_tasks(project_id, user["user_id"])
-    content, content_type, disposition = build_pdf_response(project, tasks)
+    content, content_type, disposition = build_pdf_response(project, tasks, mode=mode)
     await log_gantt_event(
         owner_user_id=user["user_id"],
         action="gantt.project.export_pdf",
         gantt_project_id=project_id,
-        metadata={"task_count": len(tasks), "filename": disposition},
+        metadata={"task_count": len(tasks), "filename": disposition, "mode": mode},
     )
     return Response(
         content=content,

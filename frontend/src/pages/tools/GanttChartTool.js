@@ -22,6 +22,7 @@ import {
   Layers,
   Table2,
   Maximize2,
+  ChevronDown,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getGanttHeaders, parseApiError } from '../../components/gantt/ganttApiUtils';
@@ -33,6 +34,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
@@ -165,11 +172,19 @@ export const GanttChartTool = () => {
     }
   };
 
-  const handleExport = async (format) => {
+  const handleExport = async (format, pdfMode = 'presentation') => {
     if (!selectedId) return;
-    const defaults = { csv: 'gantt_export.csv', xlsx: 'gantt_export.xlsx', pdf: 'gantt_export.pdf' };
+    const defaults = {
+      csv: 'gantt_export.csv',
+      xlsx: 'gantt_export.xlsx',
+      pdf: pdfMode === 'detailed' ? 'gantt_export_detailed.pdf' : 'gantt_export.pdf',
+    };
     try {
-      const res = await apiFetch(`/gantt/projects/${selectedId}/export.${format}`);
+      const path =
+        format === 'pdf'
+          ? `/gantt/projects/${selectedId}/export.pdf?mode=${pdfMode}`
+          : `/gantt/projects/${selectedId}/export.${format}`;
+      const res = await apiFetch(path);
       if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
       const disposition = res.headers.get('Content-Disposition') || '';
@@ -181,7 +196,13 @@ export const GanttChartTool = () => {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success(`${format.toUpperCase()} downloaded`);
+      const label =
+        format === 'pdf'
+          ? pdfMode === 'detailed'
+            ? 'Detailed PDF'
+            : 'Presentation PDF'
+          : format.toUpperCase();
+      toast.success(`${label} downloaded`);
     } catch (error) {
       toast.error(error.message);
     }
@@ -359,9 +380,34 @@ export const GanttChartTool = () => {
                 <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleExport('xlsx')}>
                   Excel
                 </Button>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleExport('pdf')}>
-                  PDF
-                </Button>
+                <div className="flex items-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs rounded-r-none"
+                    onClick={() => handleExport('pdf', 'presentation')}
+                  >
+                    <Download className="h-3 w-3 mr-1" />
+                    PDF
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-1 text-xs rounded-l-none border-l border-border/60"
+                        title="More PDF export options"
+                      >
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="text-xs">
+                      <DropdownMenuItem onClick={() => handleExport('pdf', 'detailed')}>
+                        Detailed PDF
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
 
                 <div className="ml-auto">
                   <Button

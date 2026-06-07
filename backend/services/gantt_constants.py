@@ -13,3 +13,23 @@ GANTT_REVIEW_MESSAGE = (
 LOW_CONFIDENCE_THRESHOLD = 0.6
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 GANTT_EXTRACTION_MODEL = "gpt-5.4"
+
+# Phase bar colors (index order matches cockpit UI palette)
+PHASE_CHART_COLORS_HEX = [
+    "#3b82f6",
+    "#10b981",
+    "#f59e0b",
+    "#8b5cf6",
+    "#f43f5e",
+    "#06b6d4",
+    "#f97316",
+]
+PHASE_CHART_STROKES_HEX = [
+    "#1d4ed8",
+    "#047857",
+    "#b45309",
+    "#6d28d9",
+    "#be123c",
+    "#0e7490",
+    "#c2410c",
+]

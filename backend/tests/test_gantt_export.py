@@ -130,6 +130,22 @@ class TestGanttExport:
         data = build_pdf_bytes(SAMPLE_PROJECT, SAMPLE_TASKS)
         assert data[:4] == b"%PDF"
 
+    def test_presentation_pdf_fits_one_page_for_small_project(self):
+        pytest.importorskip("reportlab")
+        import re
+
+        data = build_pdf_bytes(SAMPLE_PROJECT, SAMPLE_TASKS, mode="presentation")
+        assert data[:4] == b"%PDF"
+        assert len(re.findall(rb"/Type /Page\n", data)) == 1
+        assert b"/MediaBox [ 0 0 1190.551 841.8898 ]" in data  # A3 landscape
+
+    def test_detailed_pdf_mode(self):
+        pytest.importorskip("reportlab")
+        from services.gantt_export_service import build_pdf_response
+
+        _, _, disposition = build_pdf_response(SAMPLE_PROJECT, SAMPLE_TASKS, mode="detailed")
+        assert "_detailed.pdf" in disposition
+
     def test_excel_import_round_trip(self):
         pytest.importorskip("openpyxl")
         from openpyxl import Workbook

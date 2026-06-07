@@ -4,7 +4,7 @@ Gantt Chart — export services (CSV, Excel, PDF).
 import csv
 import io
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 EXPORT_COLUMNS = [
@@ -144,166 +144,73 @@ def _timeline_bounds(tasks: List[Dict[str, Any]]) -> Tuple[Optional[date], Optio
     return min(dates), max(dates)
 
 
+def _group_tasks_by_phase(tasks: List[Dict[str, Any]]) -> List[Tuple[str, List[Dict[str, Any]]]]:
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    order: List[str] = []
+    for task in sorted(tasks, key=lambda t: t.get("order", 0)):
+        phase = (task.get("phase") or "").strip() or "Unassigned"
+        if phase not in groups:
+            groups[phase] = []
+            order.append(phase)
+        groups[phase].append(task)
+    return [(phase, groups[phase]) for phase in order]
+
+
+def _format_month_range(min_d: Optional[date], max_d: Optional[date]) -> str:
+    if not min_d or not max_d:
+        return "Dates not set"
+    if min_d.year == max_d.year and min_d.month == max_d.month:
+        return min_d.strftime("%B %Y")
+    return f"{min_d.strftime('%B %Y')} - {max_d.strftime('%B %Y')}"
+
+
+def _month_tick_dates(min_d: date, max_d: date) -> List[date]:
+    ticks: List[date] = []
+    cursor = min_d.replace(day=1)
+    while cursor <= max_d:
+        if cursor >= min_d:
+            ticks.append(cursor)
+        if cursor.month == 12:
+            cursor = cursor.replace(year=cursor.year + 1, month=1)
+        else:
+            cursor = cursor.replace(month=cursor.month + 1)
+    return ticks
+
+
+def _week_tick_dates(min_d: date, max_d: date) -> List[date]:
+    ticks: List[date] = []
+    cursor = min_d
+    while cursor.weekday() != 0:
+        cursor += timedelta(days=1)
+    while cursor <= max_d:
+        if cursor >= min_d:
+            ticks.append(cursor)
+        cursor += timedelta(days=7)
+    return ticks
+
+
 def build_pdf_bytes(
     project: Dict[str, Any],
     tasks: List[Dict[str, Any]],
+    mode: str = "presentation",
 ) -> bytes:
-    """Render paginated PDF with task table and simple Gantt bars."""
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.units import mm
-    from reportlab.pdfgen import canvas
+    """Render PDF export. Default mode is one-page executive presentation."""
+    from services.gantt_pdf_export import build_pdf_bytes as render_pdf
 
-    page_size = landscape(A4)
-    width, height = page_size
-    margin = 15 * mm
-    buffer = io.BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=page_size)
-
-    def draw_header(page_num: int) -> float:
-        y = height - margin
-        pdf.setFont("Helvetica-Bold", 14)
-        pdf.drawString(margin, y, project.get("title", "Gantt Export"))
-        y -= 14
-        pdf.setFont("Helvetica", 9)
-        pdf.drawString(
-            margin,
-            y,
-            f"Exported {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} · {len(tasks)} tasks",
-        )
-        y -= 10
-        pdf.setFont("Helvetica", 8)
-        pdf.drawRightString(width - margin, height - margin, f"Page {page_num}")
-        return y - 8
-
-    def new_page(page_num: int) -> float:
-        if page_num > 1:
-            pdf.showPage()
-        return draw_header(page_num)
-
-    # ── Task table pages ──
-    table_headers = ["#", "Phase", "Title", "Start", "End", "Days", "Status"]
-    col_widths = [8 * mm, 28 * mm, 70 * mm, 22 * mm, 22 * mm, 14 * mm, 22 * mm]
-    row_height = 5.5 * mm
-
-    page_num = 1
-    y = new_page(page_num)
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(margin, y, "Task schedule")
-    y -= 10
-    pdf.setFont("Helvetica-Bold", 8)
-    x = margin
-    for header, col_w in zip(table_headers, col_widths):
-        pdf.drawString(x + 1 * mm, y, header)
-        x += col_w
-    y -= row_height
-    pdf.setFont("Helvetica", 8)
-
-    for task in tasks:
-        if y < margin + row_height:
-            page_num += 1
-            y = new_page(page_num)
-            pdf.setFont("Helvetica-Bold", 8)
-            x = margin
-            for header, col_w in zip(table_headers, col_widths):
-                pdf.drawString(x + 1 * mm, y, header)
-                x += col_w
-            y -= row_height
-            pdf.setFont("Helvetica", 8)
-
-        duration = task.get("duration_days")
-        if duration is None:
-            duration_str = ""
-        else:
-            duration_str = str(duration)
-
-        cells = [
-            str(task.get("order", 0) + 1),
-            (task.get("phase") or "")[:18],
-            (task.get("title") or "")[:42],
-            task.get("start_date") or "",
-            task.get("end_date") or "",
-            duration_str,
-            (task.get("status") or "").replace("_", " "),
-        ]
-        x = margin
-        for value, col_w in zip(cells, col_widths):
-            pdf.drawString(x + 1 * mm, y, value)
-            x += col_w
-        y -= row_height
-
-    # ── Gantt bar chart page(s) ──
-    dated_tasks = [t for t in tasks if t.get("start_date")]
-    min_date, max_date = _timeline_bounds(dated_tasks)
-    if min_date and max_date and dated_tasks:
-        page_num += 1
-        y = new_page(page_num)
-        pdf.setFont("Helvetica-Bold", 10)
-        pdf.drawString(margin, y, "Timeline")
-        y -= 12
-
-        chart_left = margin + 55 * mm
-        chart_right = width - margin
-        chart_width = chart_right - chart_left
-        total_days = max((max_date - min_date).days, 1)
-
-        label_y = y
-        pdf.setFont("Helvetica", 7)
-        pdf.drawString(margin, label_y, min_date.isoformat())
-        pdf.drawRightString(chart_right, label_y, max_date.isoformat())
-        y -= 6
-        pdf.line(chart_left, y, chart_right, y)
-        y -= 4
-
-        bar_height = 4 * mm
-        bar_gap = 2 * mm
-        pdf.setFont("Helvetica", 7)
-
-        for task in dated_tasks:
-            if y < margin + bar_height + bar_gap:
-                page_num += 1
-                y = new_page(page_num)
-                pdf.setFont("Helvetica-Bold", 10)
-                pdf.drawString(margin, y, "Timeline (continued)")
-                y -= 12
-                pdf.setFont("Helvetica", 7)
-
-            start = _parse_iso_date(task.get("start_date"))
-            end = _parse_iso_date(task.get("end_date")) or start
-            if not start:
-                continue
-
-            title_label = (task.get("title") or "")[:28]
-            pdf.drawString(margin, y, title_label)
-
-            start_offset = (start - min_date).days
-            end_offset = (end - min_date).days if end else start_offset
-            bar_start_x = chart_left + (start_offset / total_days) * chart_width
-            bar_end_x = chart_left + (max(end_offset, start_offset) / total_days) * chart_width
-            bar_width = max(bar_end_x - bar_start_x, 2)
-
-            if task.get("type") == "milestone":
-                pdf.setFillColor(colors.HexColor("#2563eb"))
-                pdf.circle(bar_start_x, y + 1.5, 2, fill=1, stroke=0)
-            else:
-                pdf.setFillColor(colors.HexColor("#3b82f6"))
-                pdf.setStrokeColor(colors.HexColor("#1d4ed8"))
-                pdf.rect(bar_start_x, y - 1, bar_width, bar_height, fill=1, stroke=1)
-
-            pdf.setFillColor(colors.black)
-            y -= bar_height + bar_gap
-
-    pdf.save()
-    return buffer.getvalue()
+    return render_pdf(project, tasks, mode=mode)
 
 
 def build_pdf_response(
     project: Dict[str, Any],
     tasks: List[Dict[str, Any]],
+    mode: str = "presentation",
 ) -> Tuple[bytes, str, str]:
-    """Returns (pdf_bytes, content_type, content_disposition)."""
-    content = build_pdf_bytes(project, tasks)
-    filename = f"{_sanitize_filename(project.get('title', 'gantt'))}.pdf"
+    """returns (pdf_bytes, content_type, content_disposition)."""
+    content = build_pdf_bytes(project, tasks, mode=mode)
+    base = _sanitize_filename(project.get("title", "gantt"))
+    suffix = "" if mode == "presentation" else "_detailed"
+    filename = f"{base}{suffix}.pdf"
     content_type = "application/pdf"
     disposition = f'attachment; filename="{filename}"'
     return content, content_type, disposition
+
