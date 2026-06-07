@@ -99,6 +99,12 @@ async def delete_project(
     delete_result = await db.gantt_tasks.delete_many(
         {"gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id}
     )
+
+    from services import gantt_extraction_service
+    await gantt_extraction_service.cleanup_project_imports(
+        gantt_project_id, owner_user_id
+    )
+
     await db.gantt_projects.delete_one(
         {"gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id}
     )
@@ -315,6 +321,94 @@ async def delete_task(
         {"$set": {"updated_at": now}},
     )
     return "deleted"
+
+
+async def create_tasks_from_draft(
+    gantt_project_id: str,
+    owner_user_id: str,
+    draft_tasks: List[Dict[str, Any]],
+    source: str = "ai_generated",
+) -> List[Dict[str, Any]]:
+    """
+    Persist draft tasks atomically after confirm.
+    Remaps temp_id → task_id and temp_task_id → task_id in dependencies.
+    """
+    project = await _get_project_for_owner(gantt_project_id, owner_user_id)
+    if not project:
+        raise PermissionError("Project not found or access denied")
+
+    existing_tasks = await _list_tasks_raw(gantt_project_id, owner_user_id)
+    base_order = await _next_task_order(gantt_project_id, owner_user_id)
+
+    temp_to_task: Dict[str, str] = {
+        t["temp_id"]: _make_task_id() for t in draft_tasks
+    }
+    all_task_ids = {t["task_id"] for t in existing_tasks} | set(temp_to_task.values())
+
+    now = _now()
+    now_iso = now.isoformat()
+    docs: List[Dict[str, Any]] = []
+
+    # Build synthetic existing list for cycle detection including new tasks
+    synthetic_existing = list(existing_tasks)
+    for draft_task in draft_tasks:
+        task_id = temp_to_task[draft_task["temp_id"]]
+        remapped_deps = [
+            {
+                "task_id": temp_to_task[d["temp_task_id"]],
+                "type": d.get("type", "finish_to_start"),
+            }
+            for d in draft_task.get("dependencies", [])
+        ]
+        payload = {
+            "type": draft_task.get("type", "task"),
+            "phase": draft_task.get("phase"),
+            "title": draft_task["title"],
+            "description": draft_task.get("description"),
+            "start_date": draft_task.get("start_date"),
+            "end_date": draft_task.get("end_date"),
+            "duration_days": draft_task.get("duration_days"),
+            "status": draft_task.get("status"),
+            "responsible_party": draft_task.get("responsible_party"),
+            "dependencies": remapped_deps,
+        }
+        validated = validate_task_payload(
+            payload,
+            task_id=task_id,
+            task_type=payload["type"],
+            project_task_ids=all_task_ids,
+            existing_tasks=synthetic_existing + docs,
+            is_create=True,
+        )
+        doc = {
+            "task_id": task_id,
+            "gantt_project_id": gantt_project_id,
+            "owner_user_id": owner_user_id,
+            "order": base_order + len(docs),
+            "phase": validated.get("phase"),
+            "title": validated["title"],
+            "description": validated.get("description"),
+            "type": validated["type"],
+            "start_date": validated["start_date"],
+            "end_date": validated["end_date"],
+            "duration_days": validated["duration_days"],
+            "status": validated["status"],
+            "responsible_party": validated.get("responsible_party"),
+            "dependencies": validated["dependencies"],
+            "source": source,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        docs.append(doc)
+
+    if docs:
+        await db.gantt_tasks.insert_many(docs)
+        await db.gantt_projects.update_one(
+            {"gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id},
+            {"$set": {"updated_at": now_iso}},
+        )
+
+    return docs
 
 
 async def reorder_tasks(

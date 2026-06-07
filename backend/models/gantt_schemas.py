@@ -37,9 +37,60 @@ class GanttTask(BaseModel):
     status: str = "not_started"
     responsible_party: Optional[str] = None
     dependencies: List[GanttDependency] = Field(default_factory=list)
-    source: Literal["manual"] = "manual"
+    source: Literal["manual", "ai_generated", "imported"] = "manual"
     created_at: str
     updated_at: str
+
+
+# ── Draft / import models (Phase 3) ──
+
+class GanttDraftDependency(BaseModel):
+    temp_task_id: str
+    type: Literal["finish_to_start"] = "finish_to_start"
+
+
+class GanttDraftTask(BaseModel):
+    temp_id: str
+    type: Literal["task", "milestone"] = "task"
+    phase: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    duration_days: Optional[int] = None
+    status: str = "not_started"
+    responsible_party: Optional[str] = None
+    dependencies: List[GanttDraftDependency] = Field(default_factory=list)
+    field_confidence: dict = Field(default_factory=dict)
+    warnings: List[str] = Field(default_factory=list)
+
+
+class GanttExtractionDraft(BaseModel):
+    draft_id: str
+    owner_user_id: str
+    gantt_project_id: str
+    file_id: str
+    status: Literal["pending", "confirmed", "discarded", "expired"]
+    source_type: Literal["pdf", "image", "csv"]
+    tasks: List[GanttDraftTask]
+    warnings: List[str] = Field(default_factory=list)
+    review_message: str
+    created_at: str
+    updated_at: str
+    expires_at: str
+
+
+class GanttUploadedFile(BaseModel):
+    file_id: str
+    owner_user_id: str
+    gantt_project_id: str
+    original_filename: str
+    stored_filename: str
+    content_type: Optional[str] = None
+    file_size_bytes: int
+    extension: str
+    created_at: str
+    expires_at: str
 
 
 # ── Request DTOs ──
@@ -90,3 +141,19 @@ class DeleteGanttProjectResponse(BaseModel):
     message: str
     gantt_project_id: str
     deleted_task_count: int
+
+
+class ExtractGanttRequest(BaseModel):
+    file_id: str
+    gantt_project_id: str
+
+
+class UpdateGanttDraftRequest(BaseModel):
+    tasks: List[GanttDraftTask] = Field(..., min_length=1)
+
+
+class ConfirmGanttDraftResponse(BaseModel):
+    message: str
+    draft_id: str
+    created_task_count: int
+    tasks: List[GanttTask]

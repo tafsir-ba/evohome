@@ -2,11 +2,30 @@
 Gantt validation — unit tests (no DB, no API).
 """
 import importlib.util
+import sys
+import types
 from pathlib import Path
 
 import pytest
 
-_validation_path = Path(__file__).resolve().parents[1] / "services" / "gantt_validation.py"
+_services_dir = Path(__file__).resolve().parents[1] / "services"
+
+# Stub services package so gantt_validation can import gantt_constants
+# without loading the full services/__init__.py dependency chain.
+if "services" not in sys.modules:
+    _services_pkg = types.ModuleType("services")
+    _services_pkg.__path__ = [str(_services_dir)]
+    sys.modules["services"] = _services_pkg
+
+_constants_path = _services_dir / "gantt_constants.py"
+_constants_spec = importlib.util.spec_from_file_location(
+    "services.gantt_constants", _constants_path
+)
+_gantt_constants = importlib.util.module_from_spec(_constants_spec)
+sys.modules["services.gantt_constants"] = _gantt_constants
+_constants_spec.loader.exec_module(_gantt_constants)
+
+_validation_path = _services_dir / "gantt_validation.py"
 _spec = importlib.util.spec_from_file_location("gantt_validation", _validation_path)
 _gantt_validation = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_gantt_validation)
@@ -17,6 +36,7 @@ get_gantt_config = _gantt_validation.get_gantt_config
 normalize_task_dates = _gantt_validation.normalize_task_dates
 validate_dependencies = _gantt_validation.validate_dependencies
 validate_task_payload = _gantt_validation.validate_task_payload
+validate_draft_tasks = _gantt_validation.validate_draft_tasks
 
 
 class TestDateValidation:
@@ -114,6 +134,9 @@ class TestGanttConfig:
         assert config["task_statuses"] == sorted(_gantt_validation.VALID_STATUSES)
         assert config["task_types"] == list(_gantt_validation.VALID_TASK_TYPES)
         assert config["dependency_types"] == ["finish_to_start"]
+        assert ".csv" in config["import"]["allowed_extensions"]
+        assert config["import"]["max_size_mb"] == 15
+        assert "review all dates" in config["import"]["review_message"].lower()
 
 
 class TestTaskPayloadValidation:
@@ -149,3 +172,31 @@ class TestTaskPayloadValidation:
                 existing_tasks=[],
                 is_create=True,
             )
+
+
+class TestDraftValidation:
+    def test_draft_cycle_rejected(self):
+        draft_tasks = [
+            {
+                "temp_id": "t1",
+                "title": "A",
+                "dependencies": [{"temp_task_id": "t2", "type": "finish_to_start"}],
+            },
+            {
+                "temp_id": "t2",
+                "title": "B",
+                "dependencies": [{"temp_task_id": "t1", "type": "finish_to_start"}],
+            },
+        ]
+        with pytest.raises(GanttValidationError, match="Circular dependency"):
+            validate_draft_tasks(draft_tasks)
+
+    def test_draft_missing_dependency_rejected(self):
+        with pytest.raises(GanttValidationError, match="not found in draft"):
+            validate_draft_tasks([
+                {
+                    "temp_id": "t1",
+                    "title": "A",
+                    "dependencies": [{"temp_task_id": "t99", "type": "finish_to_start"}],
+                },
+            ])

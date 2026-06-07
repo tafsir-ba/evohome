@@ -4,6 +4,13 @@ Gantt Chart — validation rules (standalone, testable without DB).
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from services.gantt_constants import (
+    ALLOWED_UPLOAD_EXTENSIONS,
+    GANTT_REVIEW_MESSAGE,
+    LOW_CONFIDENCE_THRESHOLD,
+    MAX_UPLOAD_SIZE_BYTES,
+)
+
 
 class GanttValidationError(Exception):
     """Raised when gantt task/project data fails validation."""
@@ -25,6 +32,13 @@ def get_gantt_config() -> Dict[str, Any]:
         "task_statuses": sorted(VALID_STATUSES),
         "task_types": list(VALID_TASK_TYPES),
         "dependency_types": sorted(VALID_DEPENDENCY_TYPES),
+        "import": {
+            "allowed_extensions": sorted(ALLOWED_UPLOAD_EXTENSIONS),
+            "max_size_bytes": MAX_UPLOAD_SIZE_BYTES,
+            "max_size_mb": MAX_UPLOAD_SIZE_BYTES // (1024 * 1024),
+            "review_message": GANTT_REVIEW_MESSAGE,
+            "low_confidence_threshold": LOW_CONFIDENCE_THRESHOLD,
+        },
     }
 
 
@@ -233,3 +247,97 @@ def validate_task_payload(
         result["responsible_party"] = payload["responsible_party"]
 
     return result
+
+
+def validate_draft_tasks(
+    draft_tasks: List[Dict[str, Any]],
+    existing_tasks: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Validate draft tasks before confirm.
+    Uses temp_id for dependency references within the draft batch.
+    Returns normalized draft task dicts ready for remapping.
+    """
+    if not draft_tasks:
+        raise GanttValidationError("Draft must contain at least one task")
+
+    temp_ids: Set[str] = set()
+    for task in draft_tasks:
+        temp_id = task.get("temp_id")
+        if not temp_id:
+            raise GanttValidationError("Each draft task requires temp_id")
+        if temp_id in temp_ids:
+            raise GanttValidationError(f"Duplicate temp_id: {temp_id}")
+        temp_ids.add(temp_id)
+
+        if not (task.get("title") or "").strip():
+            raise GanttValidationError(f"Task {temp_id} requires a title")
+
+    normalized_batch: List[Dict[str, Any]] = []
+    for task in draft_tasks:
+        task_type = task.get("type", "task")
+        normalized_start, normalized_end, duration = normalize_task_dates(
+            task_type,
+            task.get("start_date"),
+            task.get("end_date"),
+        )
+        status = validate_status(task.get("status"))
+
+        raw_deps = task.get("dependencies") or []
+        normalized_deps: List[Dict[str, str]] = []
+        seen_deps: Set[str] = set()
+        for dep in raw_deps:
+            temp_task_id = dep.get("temp_task_id")
+            if not temp_task_id:
+                raise GanttValidationError("Draft dependency temp_task_id is required")
+            if temp_task_id == task["temp_id"]:
+                raise GanttValidationError("A task cannot depend on itself")
+            if temp_task_id not in temp_ids:
+                raise GanttValidationError(
+                    f"Dependency temp_task_id {temp_task_id} not found in draft"
+                )
+            dep_type = dep.get("type", DEPENDENCY_TYPE_FINISH_TO_START)
+            if dep_type not in VALID_DEPENDENCY_TYPES:
+                raise GanttValidationError(f"Unsupported dependency type: {dep_type}")
+            if temp_task_id in seen_deps:
+                continue
+            seen_deps.add(temp_task_id)
+            normalized_deps.append(
+                {"temp_task_id": temp_task_id, "type": DEPENDENCY_TYPE_FINISH_TO_START}
+            )
+
+        normalized_batch.append({
+            **task,
+            "type": task_type,
+            "start_date": normalized_start,
+            "end_date": normalized_end,
+            "duration_days": duration,
+            "status": status,
+            "dependencies": normalized_deps,
+        })
+
+    # Cycle detection using temp_ids as graph nodes
+    graph: Dict[str, List[str]] = {
+        t["temp_id"]: [d["temp_task_id"] for d in t["dependencies"]]
+        for t in normalized_batch
+    }
+    visited: Set[str] = set()
+    stack: Set[str] = set()
+
+    def dfs(node: str) -> bool:
+        visited.add(node)
+        stack.add(node)
+        for neighbor in graph.get(node, []):
+            if neighbor not in visited:
+                if dfs(neighbor):
+                    return True
+            elif neighbor in stack:
+                return True
+        stack.remove(node)
+        return False
+
+    for node in graph:
+        if node not in visited and dfs(node):
+            raise GanttValidationError("Circular dependency detected in draft")
+
+    return normalized_batch

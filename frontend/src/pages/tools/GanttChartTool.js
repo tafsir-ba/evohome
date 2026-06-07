@@ -6,9 +6,10 @@ import { Input } from '../../components/ui/input';
 import { GanttProjectList } from '../../components/gantt/GanttProjectList';
 import { GanttTaskTable } from '../../components/gantt/GanttTaskTable';
 import { GanttTimelinePreview } from '../../components/gantt/GanttTimelinePreview';
+import { GanttImportReview } from '../../components/gantt/GanttImportReview';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { toast } from 'sonner';
-import { Download, LogOut, BarChart3, Loader2 } from 'lucide-react';
+import { Download, LogOut, BarChart3, Loader2, Upload } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
@@ -32,7 +33,14 @@ export const GanttChartTool = () => {
     task_statuses: ['not_started', 'in_progress', 'completed', 'blocked'],
     task_types: ['task', 'milestone'],
     dependency_types: ['finish_to_start'],
+    import: {
+      allowed_extensions: ['.csv', '.jpeg', '.jpg', '.pdf', '.png', '.webp'],
+      max_size_mb: 15,
+      low_confidence_threshold: 0.6,
+      review_message: '',
+    },
   });
+  const [showImport, setShowImport] = useState(false);
 
   const apiFetch = useCallback((path, options = {}) => {
     return fetch(`${API}${path}`, {
@@ -90,6 +98,7 @@ export const GanttChartTool = () => {
 
   useEffect(() => {
     fetchTasks(selectedId);
+    setShowImport(false);
   }, [selectedId, fetchTasks]);
 
   const selectedProject = projects.find((p) => p.gantt_project_id === selectedId);
@@ -214,11 +223,35 @@ export const GanttChartTool = () => {
                       {selectedProject.title}
                     </h2>
                   )}
-                  <Button variant="outline" size="sm" onClick={handleExportCsv}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Export CSV
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowImport((v) => !v)}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleExportCsv}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Export CSV
+                    </Button>
+                  </div>
                 </div>
+
+                {showImport && (
+                  <GanttImportReview
+                    projectId={selectedId}
+                    apiFetch={apiFetch}
+                    importConfig={ganttConfig.import}
+                    taskTypes={ganttConfig.task_types}
+                    onConfirmed={() => {
+                      setShowImport(false);
+                      fetchTasks(selectedId);
+                    }}
+                    onClose={() => setShowImport(false)}
+                  />
+                )}
 
                 <GanttTaskTable
                   projectId={selectedId}
