@@ -5,6 +5,7 @@ import { Input } from '../../components/ui/input';
 import { GanttProjectList } from '../../components/gantt/GanttProjectList';
 import { GanttTaskTable } from '../../components/gantt/GanttTaskTable';
 import { GanttPlanningCockpit } from '../../components/gantt/GanttPlanningCockpit';
+import { GanttAddPhaseDialog } from '../../components/gantt/GanttAddPhaseDialog';
 import { GanttImportReview } from '../../components/gantt/GanttImportReview';
 import { GanttSaveIndicator } from '../../components/gantt/GanttSaveIndicator';
 import { ThemeToggle } from '../../components/ThemeToggle';
@@ -62,6 +63,7 @@ export const GanttChartTool = () => {
   const [viewMode, setViewMode] = useState('cockpit');
   const [zoom, setZoom] = useState('Week');
   const [fitToScreen, setFitToScreen] = useState(false);
+  const [showAddPhase, setShowAddPhase] = useState(false);
 
   const apiFetch = useCallback((path, options = {}) => {
     const { headers: optionHeaders, ...rest } = options;
@@ -207,9 +209,7 @@ export const GanttChartTool = () => {
 
   const handleAddTask = () => createTask({ title: 'New task', type: 'task' });
   const handleAddMilestone = () => createTask({ title: 'New milestone', type: 'milestone' });
-  const handleAddPhase = () => {
-    const name = window.prompt('Phase name');
-    if (!name?.trim()) return;
+  const handleAddPhase = (name) => {
     createTask({ title: 'New task', type: 'task', phase: name.trim() });
   };
 
@@ -308,7 +308,12 @@ export const GanttChartTool = () => {
                 <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleAddTask}>
                   <Plus className="h-3 w-3 mr-1" />Task
                 </Button>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleAddPhase}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setShowAddPhase(true)}
+                >
                   <Layers className="h-3 w-3 mr-1" />Phase
                 </Button>
                 <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleAddMilestone}>
@@ -403,6 +408,7 @@ export const GanttChartTool = () => {
                     fitToScreen={fitToScreen}
                     onTasksChange={setTasks}
                     onSaving={setChartSaving}
+                    onSaveStatusChange={setSaveStatus}
                     onRevert={() => fetchTasks(selectedId)}
                     onRefresh={() => fetchTasks(selectedId)}
                   />
@@ -424,6 +430,13 @@ export const GanttChartTool = () => {
           )}
         </section>
       </main>
+
+      <GanttAddPhaseDialog
+        open={showAddPhase}
+        onOpenChange={setShowAddPhase}
+        onConfirm={handleAddPhase}
+        saving={chartSaving}
+      />
     </div>
   );
 };

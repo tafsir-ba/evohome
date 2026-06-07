@@ -21,11 +21,62 @@ export const ZOOM_PX_PER_DAY = {
   Quarter: 1,
 };
 
-export const STATUS_DOT = {
-  not_started: 'bg-muted-foreground/40',
-  in_progress: 'bg-blue-500',
-  completed: 'bg-emerald-500',
-  blocked: 'bg-rose-500',
+const STATUS_DOT_PALETTE = [
+  'bg-muted-foreground/40',
+  'bg-blue-500',
+  'bg-emerald-500',
+  'bg-rose-500',
+  'bg-amber-500',
+  'bg-violet-500',
+  'bg-cyan-500',
+  'bg-orange-500',
+];
+
+const STATUS_SEMANTIC_INDEX = {
+  not_started: 0,
+  in_progress: 1,
+  completed: 2,
+  blocked: 3,
+};
+
+/** Map backend task_statuses to dot color classes (SSOT from config API). */
+export const buildStatusDotMap = (statuses = []) => {
+  if (!statuses.length) {
+    return {
+      not_started: STATUS_DOT_PALETTE[0],
+      in_progress: STATUS_DOT_PALETTE[1],
+      completed: STATUS_DOT_PALETTE[2],
+      blocked: STATUS_DOT_PALETTE[3],
+    };
+  }
+  return Object.fromEntries(
+    statuses.map((status, index) => {
+      const paletteIndex =
+        STATUS_SEMANTIC_INDEX[status] ??
+        (4 + index) % STATUS_DOT_PALETTE.length;
+      return [status, STATUS_DOT_PALETTE[paletteIndex]];
+    })
+  );
+};
+
+export const mergeTaskPreviews = (tasks, previews = {}) =>
+  tasks.map((task) =>
+    previews[task.task_id] ? { ...task, ...previews[task.task_id] } : task
+  );
+
+/** Row layout for dependency lines (always fully expanded so connectors stay accurate). */
+export const buildRowLayout = (rows) => {
+  const rowIndexByTaskId = {};
+  const rowOffsets = [];
+  let y = 0;
+  rows.forEach((row, idx) => {
+    if (row.kind === 'task') {
+      rowIndexByTaskId[row.task.task_id] = idx;
+    }
+    rowOffsets.push(y);
+    y += rowHeightFor(row);
+  });
+  return { rowIndexByTaskId, rowOffsets, rows, totalHeight: y };
 };
 
 export const initialsFor = (name) => {
@@ -156,12 +207,10 @@ export const buildZoomTicks = (minDate, maxDate, zoom) => {
   return ticks;
 };
 
-/** SVG dependency connector paths (finish → start). */
+/** SVG dependency connector paths (finish → start). Uses full expanded row layout. */
 export const buildDependencyPaths = (
   tasks,
-  rowIndexByTaskId,
-  rowOffsets,
-  rows,
+  { rowIndexByTaskId, rowOffsets, rows },
   minDate,
   pxPerDay,
   totalDays
@@ -189,10 +238,31 @@ export const buildDependencyPaths = (
       paths.push({
         id: `${dep.task_id}->${task.task_id}`,
         d: `M ${x1} ${y1} H ${midX} V ${y2} H ${x2}`,
+        x1,
+        y1,
+        x2,
+        y2,
       });
     });
   });
   return paths;
+};
+
+export const connectorPointForTask = (
+  task,
+  layout,
+  minDate,
+  pxPerDay,
+  totalDays,
+  side = 'end'
+) => {
+  const idx = layout.rowIndexByTaskId[task.task_id];
+  if (idx == null || !task.start_date || !minDate) return null;
+  const bar = barPixels(task, minDate, pxPerDay, totalDays);
+  if (!bar) return null;
+  const y = layout.rowOffsets[idx] + rowHeightFor(layout.rows[idx]) / 2;
+  const x = side === 'end' ? bar.left + bar.width : bar.left;
+  return { x, y };
 };
 
 export const rowHeightFor = (row) =>

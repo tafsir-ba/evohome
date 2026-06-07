@@ -17,14 +17,17 @@ import {
   PHASE_ROW_HEIGHT,
   HANDLE_WIDTH,
   buildCockpitRows,
+  buildRowLayout,
+  mergeTaskPreviews,
   computePhaseSpan,
   getTimelineLayout,
   buildZoomTicks,
   buildDependencyPaths,
+  connectorPointForTask,
   rowHeightFor,
   barPixels,
   initialsFor,
-  STATUS_DOT,
+  buildStatusDotMap,
 } from './ganttCockpitUtils';
 import { toast } from 'sonner';
 import {
@@ -135,6 +138,7 @@ export const GanttPlanningCockpit = ({
   fitToScreen = false,
   onTasksChange,
   onSaving,
+  onSaveStatusChange,
   onRevert,
   onRefresh,
 }) => {
@@ -153,6 +157,12 @@ export const GanttPlanningCockpit = ({
   const [editingTitleId, setEditingTitleId] = useState(null);
   const [titleDraft, setTitleDraft] = useState('');
   const [fitWidth, setFitWidth] = useState(null);
+  const [depDrag, setDepDrag] = useState(null);
+
+  const statusDotMap = useMemo(
+    () => buildStatusDotMap(taskStatuses),
+    [taskStatuses]
+  );
 
   const rows = useMemo(
     () => buildCockpitRows(tasks, collapsedPhases),
@@ -177,18 +187,6 @@ export const GanttPlanningCockpit = ({
     [minDate, layout.maxDate, zoom]
   );
 
-  const rowIndexByTaskId = useMemo(() => {
-    const map = {};
-    let idx = 0;
-    rows.forEach((row) => {
-      if (row.kind === 'task') {
-        map[row.task.task_id] = idx;
-      }
-      idx += 1;
-    });
-    return map;
-  }, [rows]);
-
   const rowOffsets = useMemo(() => {
     let y = 0;
     return rows.map((row) => {
@@ -200,18 +198,32 @@ export const GanttPlanningCockpit = ({
 
   const totalBodyHeight = rows.reduce((sum, row) => sum + rowHeightFor(row), 0);
 
+  const dependencyLayout = useMemo(
+    () => buildRowLayout(buildCockpitRows(tasks, new Set())),
+    [tasks]
+  );
+
+  const effectiveTasks = useMemo(
+    () => mergeTaskPreviews(tasks, previews),
+    [tasks, previews]
+  );
+
+  const timelineContentHeight = Math.max(totalBodyHeight, dependencyLayout.totalHeight);
+
   const dependencyPaths = useMemo(() => {
     if (!minDate) return [];
     return buildDependencyPaths(
-      tasks,
-      rowIndexByTaskId,
-      rowOffsets,
-      rows,
+      effectiveTasks,
+      dependencyLayout,
       minDate,
       pxPerDay,
       totalDays
     );
-  }, [tasks, rowIndexByTaskId, rowOffsets, rows, minDate, pxPerDay, totalDays]);
+  }, [effectiveTasks, dependencyLayout, minDate, pxPerDay, totalDays]);
+
+  useEffect(() => {
+    onSaveStatusChange?.({ saving: Boolean(dragging), dirty: Boolean(editingTitleId) });
+  }, [dragging, editingTitleId, onSaveStatusChange]);
 
   const selectedTask = tasks.find((t) => t.task_id === selectedId);
 
@@ -386,19 +398,60 @@ export const GanttPlanningCockpit = ({
     [minDate, layout.maxDate, pxPerDay, commitDates, onRevert]
   );
 
-  const handleDepDragStart = (event, fromTask) => {
-    event.preventDefault();
-    const onUp = (e) => {
-      document.removeEventListener('mouseup', onUp);
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      const row = el?.closest('[data-task-id]');
-      const toId = row?.getAttribute('data-task-id');
-      if (toId && toId !== fromTask.task_id) {
-        addDependency(fromTask.task_id, toId);
-      }
-    };
-    document.addEventListener('mouseup', onUp);
-  };
+  const handleDepDragStart = useCallback(
+    (event, fromTask) => {
+      event.preventDefault();
+      if (!minDate) return;
+
+      const origin = connectorPointForTask(
+        fromTask,
+        dependencyLayout,
+        minDate,
+        pxPerDay,
+        totalDays,
+        'end'
+      );
+      if (!origin) return;
+
+      const timelineEl = timelineBodyRef.current;
+      const clientToTimeline = (clientX, clientY) => {
+        const rect = timelineEl.getBoundingClientRect();
+        return {
+          x: clientX - rect.left + (timelineEl.scrollLeft || 0),
+          y: clientY - rect.top,
+        };
+      };
+
+      setDepDrag({
+        x1: origin.x,
+        y1: origin.y,
+        x2: origin.x,
+        y2: origin.y,
+        fromTaskId: fromTask.task_id,
+      });
+
+      const onMove = (e) => {
+        const { x, y } = clientToTimeline(e.clientX, e.clientY);
+        setDepDrag((prev) => (prev ? { ...prev, x2: x, y2: y } : null));
+      };
+
+      const onUp = (e) => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        setDepDrag(null);
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const row = el?.closest('[data-task-id]');
+        const toId = row?.getAttribute('data-task-id');
+        if (toId && toId !== fromTask.task_id) {
+          addDependency(fromTask.task_id, toId);
+        }
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [minDate, dependencyLayout, pxPerDay, totalDays, addDependency]
+  );
 
   const togglePhase = (phase) => {
     setCollapsedPhases((prev) => {
@@ -552,7 +605,7 @@ export const GanttPlanningCockpit = ({
                     <span
                       className={cn(
                         'h-1.5 w-1.5 rounded-full shrink-0',
-                        STATUS_DOT[task.status] || STATUS_DOT.not_started
+                        statusDotMap[task.status] || statusDotMap.not_started
                       )}
                       title={task.status}
                     />
@@ -612,7 +665,7 @@ export const GanttPlanningCockpit = ({
               className="flex-1 overflow-x-auto overflow-y-hidden relative"
               onScroll={syncHeaderScroll}
             >
-              <div className="relative" style={{ width: timelineWidth, height: totalBodyHeight }}>
+              <div className="relative" style={{ width: timelineWidth, height: timelineContentHeight }}>
                 {!minDate && (
                   <div className="absolute inset-0 flex items-center justify-center text-[11px] text-muted-foreground pointer-events-none z-20">
                     Add start dates to tasks to display the timeline.
@@ -635,7 +688,7 @@ export const GanttPlanningCockpit = ({
                 <svg
                   className="absolute inset-0 pointer-events-none z-10"
                   width={timelineWidth}
-                  height={totalBodyHeight}
+                  height={timelineContentHeight}
                 >
                   {dependencyPaths.map((path) => (
                     <path
@@ -648,6 +701,18 @@ export const GanttPlanningCockpit = ({
                       markerEnd="url(#arrowhead)"
                     />
                   ))}
+                  {depDrag && (
+                    <line
+                      x1={depDrag.x1}
+                      y1={depDrag.y1}
+                      x2={depDrag.x2}
+                      y2={depDrag.y2}
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeDasharray="4 2"
+                      className="text-primary"
+                    />
+                  )}
                   <defs>
                     <marker
                       id="arrowhead"

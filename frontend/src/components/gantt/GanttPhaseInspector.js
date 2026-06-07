@@ -28,15 +28,18 @@ export const GanttPhaseInspector = ({
     if (!trimmed || trimmed === phase) return;
     setSaving(true);
     try {
-      for (const task of phaseTasks) {
-        const res = await apiFetch(`/gantt/projects/${projectId}/tasks/${task.task_id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ phase: trimmed }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(parseApiError(err, 'Failed to rename phase'));
-        }
+      const results = await Promise.all(
+        phaseTasks.map((task) =>
+          apiFetch(`/gantt/projects/${projectId}/tasks/${task.task_id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ phase: trimmed }),
+          })
+        )
+      );
+      const failed = results.find((res) => !res.ok);
+      if (failed) {
+        const err = await failed.json().catch(() => ({}));
+        throw new Error(parseApiError(err, 'Failed to rename phase'));
       }
       await onRefresh?.();
       toast.success('Phase renamed');
