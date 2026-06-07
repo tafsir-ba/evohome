@@ -13,7 +13,6 @@ import { toast } from 'sonner';
 import {
   Download,
   LogOut,
-  BarChart3,
   Loader2,
   Upload,
   LogIn,
@@ -29,6 +28,7 @@ import { getApiBaseUrl } from '../../lib/api';
 import { getGanttHeaders, parseApiError } from '../../components/gantt/ganttApiUtils';
 import { GANTT_APP_NAME } from '../../components/gantt/ganttHostUtils';
 import { useGanttBranding } from '../../components/gantt/ganttBrandingUtils';
+import { GanttLogo } from '../../components/gantt/GanttLogo';
 import { ZOOM_LEVELS } from '../../components/gantt/ganttCockpitUtils';
 import {
   Select,
@@ -265,12 +265,9 @@ export const GanttChartTool = () => {
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       <header className="border-b bg-card shrink-0">
         <div className="px-2 sm:px-3 py-1.5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-primary" />
-            <span className="text-sm font-semibold truncate max-w-[10rem] sm:max-w-none">
-              {appName}
-            </span>
-          </div>
+          <Link to="/gantt" className="flex items-center shrink-0" aria-label={appName}>
+            <GanttLogo size="header" alt={appName} />
+          </Link>
           <div className="flex items-center gap-2">
             {user && (
               <span className="text-xs text-muted-foreground hidden sm:inline">

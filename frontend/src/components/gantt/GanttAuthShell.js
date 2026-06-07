@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
-import { BarChart3 } from 'lucide-react';
 import { ThemeToggle } from '../ThemeToggle';
 import { useGanttPublicConfig } from './ganttAuthUtils';
 import { useGanttBranding } from './ganttBrandingUtils';
+import { GanttLogo } from './GanttLogo';
 
 export const GanttAuthShell = ({ title, subtitle, children }) => {
   const { app_name: appName } = useGanttPublicConfig();
@@ -12,9 +12,12 @@ export const GanttAuthShell = ({ title, subtitle, children }) => {
     <div className="absolute top-3 right-3">
       <ThemeToggle />
     </div>
-    <Link to="/gantt" className="flex items-center gap-2 mb-6 text-foreground hover:text-primary transition-colors">
-      <BarChart3 className="h-6 w-6 text-primary" />
-      <span className="text-base font-semibold">{appName}</span>
+    <Link
+      to="/gantt"
+      className="flex flex-col items-center mb-6 text-foreground hover:opacity-90 transition-opacity"
+      aria-label={appName}
+    >
+      <GanttLogo size="auth" alt={appName} />
     </Link>
     <div className="w-full max-w-md border rounded-xl bg-card p-6 sm:p-8 shadow-sm">
       {title ? (
