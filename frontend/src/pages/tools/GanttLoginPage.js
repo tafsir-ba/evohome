@@ -8,11 +8,11 @@ import { toast } from 'sonner';
 import { getApiBaseUrl, parseApiError } from '../../lib/api';
 import { Loader2, Mail, Lock } from 'lucide-react';
 import { GanttAuthShell } from '../../components/gantt/GanttAuthShell';
-import { GANTT_AUTH_ROLE, getPostAuthPath, useGanttAppName } from '../../components/gantt/ganttAuthUtils';
+import { getPostAuthPath, useGanttPublicConfig } from '../../components/gantt/ganttAuthUtils';
 import { useGanttBranding } from '../../components/gantt/ganttBrandingUtils';
 
 export const GanttLoginPage = () => {
-  const appName = useGanttAppName();
+  const { app_name: appName, default_auth_role: authRole } = useGanttPublicConfig();
   useGanttBranding(appName);
   const { user, loginWithGoogle, setAuthUser } = useAuth();
   const navigate = useNavigate();
@@ -29,7 +29,7 @@ export const GanttLoginPage = () => {
 
   const handleGoogleLogin = () => {
     setGoogleLoading(true);
-    loginWithGoogle(GANTT_AUTH_ROLE);
+    loginWithGoogle(authRole);
   };
 
   const handleEmailLogin = async (e) => {

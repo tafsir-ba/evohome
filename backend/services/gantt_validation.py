@@ -33,6 +33,7 @@ def get_gantt_config() -> Dict[str, Any]:
     return {
         "app_name": GANTT_APP_NAME,
         "requires_auth": True,
+        "default_auth_role": "agent",
         "task_statuses": sorted(VALID_STATUSES),
         "task_types": list(VALID_TASK_TYPES),
         "dependency_types": sorted(VALID_DEPENDENCY_TYPES),

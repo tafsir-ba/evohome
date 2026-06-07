@@ -74,26 +74,27 @@ export const GanttChartTool = () => {
   const [fitToScreen, setFitToScreen] = useState(false);
   const [showAddPhase, setShowAddPhase] = useState(false);
 
-  const apiFetch = useCallback((path, options = {}) => {
+  const apiFetch = useCallback(async (path, options = {}) => {
     const { headers: optionHeaders, ...rest } = options;
     const mergedHeaders = getGanttHeaders(optionHeaders || {});
     if (rest.body instanceof FormData) {
       delete mergedHeaders['Content-Type'];
     }
-    return fetch(`${getApiBaseUrl()}${path}`, {
+    const res = await fetch(`${getApiBaseUrl()}${path}`, {
       credentials: 'include',
       headers: mergedHeaders,
       ...rest,
     });
-  }, []);
+    if (res.status === 401) {
+      toast.error('Session expired. Please sign in again.');
+      logout();
+    }
+    return res;
+  }, [logout]);
 
   const fetchProjects = useCallback(async () => {
     try {
       const res = await apiFetch('/gantt/projects');
-      if (res.status === 401) {
-        setProjects([]);
-        return;
-      }
       if (!res.ok) throw new Error('Failed to load projects');
       setProjects(await res.json());
     } catch (error) {

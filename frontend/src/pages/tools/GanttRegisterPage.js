@@ -7,11 +7,11 @@ import { Label } from '../../components/ui/label';
 import { toast } from 'sonner';
 import { Loader2, Mail, Lock, User } from 'lucide-react';
 import { GanttAuthShell } from '../../components/gantt/GanttAuthShell';
-import { GANTT_AUTH_ROLE, getPostAuthPath, useGanttAppName } from '../../components/gantt/ganttAuthUtils';
+import { getPostAuthPath, useGanttPublicConfig } from '../../components/gantt/ganttAuthUtils';
 import { useGanttBranding } from '../../components/gantt/ganttBrandingUtils';
 
 export const GanttRegisterPage = () => {
-  const appName = useGanttAppName();
+  const { app_name: appName, default_auth_role: authRole } = useGanttPublicConfig();
   useGanttBranding(appName);
   const { user, register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
@@ -30,7 +30,7 @@ export const GanttRegisterPage = () => {
 
   const handleGoogleSignup = () => {
     setGoogleLoading(true);
-    loginWithGoogle(GANTT_AUTH_ROLE);
+    loginWithGoogle(authRole);
   };
 
   const handleSubmit = async (e) => {

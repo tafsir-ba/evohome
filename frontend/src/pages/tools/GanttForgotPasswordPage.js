@@ -7,9 +7,10 @@ import { toast } from 'sonner';
 import { Loader2, Mail, CheckCircle } from 'lucide-react';
 import { GanttAuthShell } from '../../components/gantt/GanttAuthShell';
 import { getApiBaseUrl } from '../../lib/api';
-import { GANTT_AUTH_ROLE } from '../../components/gantt/ganttAuthUtils';
+import { useGanttPublicConfig } from '../../components/gantt/ganttAuthUtils';
 
 export const GanttForgotPasswordPage = () => {
+  const { default_auth_role: authRole } = useGanttPublicConfig();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -26,7 +27,7 @@ export const GanttForgotPasswordPage = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email, role: GANTT_AUTH_ROLE }),
+        body: JSON.stringify({ email, role: authRole }),
       });
       if (res.ok) {
         setSent(true);

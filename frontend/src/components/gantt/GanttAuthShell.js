@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
 import { ThemeToggle } from '../ThemeToggle';
-import { useGanttAppName } from './ganttAuthUtils';
+import { useGanttPublicConfig } from './ganttAuthUtils';
 import { useGanttBranding } from './ganttBrandingUtils';
 
 export const GanttAuthShell = ({ title, subtitle, children }) => {
-  const appName = useGanttAppName();
+  const { app_name: appName } = useGanttPublicConfig();
   useGanttBranding(appName);
   return (
   <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative">
