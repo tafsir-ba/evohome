@@ -6,7 +6,6 @@ import { DataProvider } from "./context/DataContext";
 import { ThemeProvider } from "./components/ThemeProvider";
 
 // Pages
-import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
@@ -34,7 +33,8 @@ import { AgentVault } from "./pages/agent/AgentVault";
 import { AgentHomePage } from "./pages/agent/AgentHomePage";
 import { AgentUnitDetail } from "./pages/agent/AgentUnitDetail";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
-import { GanttChartTool } from "./pages/tools/GanttChartTool";
+import { GanttDomainRoute } from "./pages/tools/GanttDomainRoute";
+import { AppRootRoute } from "./pages/tools/AppRootRoute";
 
 import "./App.css";
 
@@ -107,9 +107,9 @@ const AppRouter = () => {
       <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
       <Route path="/team/accept" element={<AcceptInvitePage />} />
 
-      {/* Standalone Gantt tool — public, no login required */}
-      <Route path="/tools/gantt-chart" element={<GanttChartTool />} />
-      <Route path="/gantt" element={<Navigate to="/tools/gantt-chart" replace />} />
+      {/* Gantt: carib-recon.org serves app; evohome redirects to carib-recon */}
+      <Route path="/gantt" element={<GanttDomainRoute />} />
+      <Route path="/tools/gantt-chart" element={<GanttDomainRoute />} />
       
       {/* Buyer routes - Single timeline page */}
       <Route path="/buyer/dashboard" element={
@@ -245,8 +245,8 @@ const AppRouter = () => {
         } />
       </Route>
       
-      {/* Default redirect */}
-      <Route path="/" element={<LandingPage />} />
+      {/* Default: evohome landing; carib-recon → /gantt */}
+      <Route path="/" element={<AppRootRoute />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
