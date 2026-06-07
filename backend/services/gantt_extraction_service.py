@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from database import db
+from services import file_service
 from services.gantt_constants import (
     ALLOWED_UPLOAD_EXTENSIONS,
     GANTT_REVIEW_MESSAGE,
@@ -28,10 +29,65 @@ from services.gantt_validation import GanttValidationError, validate_draft_tasks
 logger = logging.getLogger(__name__)
 
 
-def _upload_root() -> Path:
+def _legacy_upload_root() -> Path:
+    """Legacy local-only path (pre-Spaces fix). Kept for read/delete fallback."""
     root = Path(__file__).resolve().parent.parent / "uploads" / GANTT_TEMP_SUBDIR
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _stored_filename(file_id: str, ext: str) -> str:
+    return f"gantt_{file_id}{ext}"
+
+
+def _persist_upload_bytes(
+    stored_filename: str,
+    content: bytes,
+    content_type: Optional[str],
+) -> None:
+    """Persist via canonical file_service (Spaces when configured, else shared uploads/)."""
+    file_service.write_vault_bytes(
+        stored_filename,
+        content,
+        content_type or "application/octet-stream",
+    )
+
+
+def _resolve_upload_path(stored_filename: str) -> str:
+    """
+    Resolve an uploaded gantt file to a local path for parsers.
+    Downloads from Spaces when needed; falls back to legacy gantt_temp/ path.
+    """
+    local_path = file_service.get_local_path(stored_filename)
+    if local_path.is_file():
+        return str(local_path)
+
+    legacy_path = _legacy_upload_root() / stored_filename
+    if legacy_path.is_file():
+        return str(legacy_path)
+
+    bare_name = stored_filename.removeprefix("gantt_")
+    legacy_bare = _legacy_upload_root() / bare_name
+    if legacy_bare.is_file():
+        return str(legacy_bare)
+
+    raise GanttValidationError(
+        f"Uploaded file not found in storage ({stored_filename}). "
+        "Please upload the document again."
+    )
+
+
+def _delete_stored_file(stored_filename: str) -> None:
+    file_service.delete_file(stored_filename)
+    for candidate in (
+        _legacy_upload_root() / stored_filename,
+        _legacy_upload_root() / stored_filename.removeprefix("gantt_"),
+    ):
+        try:
+            if candidate.exists():
+                candidate.unlink()
+        except OSError as exc:
+            logger.warning("Failed to delete legacy gantt upload %s: %s", candidate, exc)
 
 
 def _now() -> datetime:
@@ -129,12 +185,7 @@ async def _get_draft(
 
 
 def _delete_file_from_disk(stored_filename: str) -> None:
-    path = _upload_root() / stored_filename
-    try:
-        if path.exists():
-            path.unlink()
-    except OSError as exc:
-        logger.warning("Failed to delete upload file %s: %s", path, exc)
+    _delete_stored_file(stored_filename)
 
 
 async def _delete_upload_record(file_id: str, owner_user_id: str) -> None:
@@ -188,9 +239,8 @@ async def upload_file(
         )
 
     file_id = _make_file_id()
-    stored_filename = f"{file_id}{ext}"
-    file_path = _upload_root() / stored_filename
-    file_path.write_bytes(content)
+    stored_filename = _stored_filename(file_id, ext)
+    _persist_upload_bytes(stored_filename, content, content_type)
 
     now = _now()
     doc = {
@@ -228,7 +278,7 @@ async def extract_draft(
     if _is_expired(upload["expires_at"]):
         raise GanttValidationError("Upload has expired; please upload again")
 
-    file_path = str(_upload_root() / upload["stored_filename"])
+    file_path = _resolve_upload_path(upload["stored_filename"])
     ext = upload["extension"]
     source_type = _source_type_for_extension(ext)
 
