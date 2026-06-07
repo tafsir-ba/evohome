@@ -2,6 +2,8 @@
 Gantt Chart — shared constants (Single Source of Truth for backend + config API).
 """
 
+GANTT_APP_NAME = "CRC Gantt Chart"
+
 ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".csv", ".xlsx"}
 MAX_UPLOAD_SIZE_BYTES = 15 * 1024 * 1024
 UPLOAD_RETENTION_HOURS = 24

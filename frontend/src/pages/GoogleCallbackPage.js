@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { getPostAuthPath } from '../components/gantt/ganttAuthUtils';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
@@ -57,12 +58,7 @@ export const GoogleCallbackPage = () => {
           // Small delay to ensure state is updated before navigation
           await new Promise(resolve => setTimeout(resolve, 100));
           
-          // Redirect based on role
-          if (data.role === 'agent') {
-            navigate('/agent/home', { replace: true });
-          } else {
-            navigate('/buyer/dashboard', { replace: true });
-          }
+          navigate(getPostAuthPath(data.role), { replace: true });
         } else {
           const errorData = await response.json();
           throw new Error(errorData.detail || 'Authentication failed');

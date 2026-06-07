@@ -21,8 +21,23 @@ from core.auth import (
 from core.rate_limit import rate_limit_check
 from core.monitoring import capture_auth_failure
 from services.email_service import send_notification_email, send_email_async
+from core.config import get_config
 
 logger = logging.getLogger("evohome.auth")
+
+
+def _password_reset_frontend_url(req: Request) -> str:
+    """Use request Origin when allowed (e.g. carib-recon.org), else FRONTEND_URL."""
+    config = get_config()
+    origin = (req.headers.get("origin") or "").strip().rstrip("/")
+    allowed = {o.strip().rstrip("/") for o in config.CORS_ORIGINS if o and o != "*"}
+    if config.FRONTEND_URL:
+        allowed.add(config.FRONTEND_URL.strip().rstrip("/"))
+    if origin in allowed:
+        return origin
+    if config.FRONTEND_URL:
+        return config.FRONTEND_URL.strip().rstrip("/")
+    return "https://app.evo-home.ch"
 
 router = APIRouter()
 
@@ -357,7 +372,7 @@ async def forgot_password(request: ForgotPasswordRequest, req: Request):
     reset_token = secrets.token_urlsafe(32)
     reset_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"password_reset_token": reset_token, "password_reset_expires": reset_expiry.isoformat()}})
-    frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://evohome.ch').replace('/api', '')
+    frontend_url = _password_reset_frontend_url(req)
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     subject = "Reset your Evohome password"
     html_content = f'<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><h2 style="color:#2563EB">Reset Your Password</h2><p>Hi {user.get("name","there")},</p><p>Click below to create a new password:</p><p style="text-align:center;margin:30px 0"><a href="{reset_link}" style="background:#2563EB;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block">Reset Password</a></p><p style="color:#666;font-size:14px">This link expires in 1 hour.</p></div>'

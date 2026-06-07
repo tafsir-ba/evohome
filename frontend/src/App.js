@@ -35,6 +35,11 @@ import { AgentUnitDetail } from "./pages/agent/AgentUnitDetail";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { GanttDomainRoute } from "./pages/tools/GanttDomainRoute";
 import { AppRootRoute } from "./pages/tools/AppRootRoute";
+import { GanttHostAuthRoute } from "./pages/tools/GanttHostAuthRoute";
+import { GanttLoginPage } from "./pages/tools/GanttLoginPage";
+import { GanttRegisterPage } from "./pages/tools/GanttRegisterPage";
+import { GanttForgotPasswordPage } from "./pages/tools/GanttForgotPasswordPage";
+import { GanttResetPasswordPage } from "./pages/tools/GanttResetPasswordPage";
 
 import "./App.css";
 
@@ -99,10 +104,22 @@ const AppRouter = () => {
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route
+        path="/login"
+        element={<GanttHostAuthRoute gantt={GanttLoginPage} default={LoginPage} />}
+      />
+      <Route
+        path="/register"
+        element={<GanttHostAuthRoute gantt={GanttRegisterPage} default={RegisterPage} />}
+      />
+      <Route
+        path="/forgot-password"
+        element={<GanttHostAuthRoute gantt={GanttForgotPasswordPage} default={ForgotPasswordPage} />}
+      />
+      <Route
+        path="/reset-password"
+        element={<GanttHostAuthRoute gantt={GanttResetPasswordPage} default={ResetPasswordPage} />}
+      />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
       <Route path="/team/accept" element={<AcceptInvitePage />} />

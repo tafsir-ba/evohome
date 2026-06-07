@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from services.gantt_constants import (
     ALLOWED_UPLOAD_EXTENSIONS,
+    GANTT_APP_NAME,
     GANTT_EXTRACTION_MODEL,
     GANTT_REVIEW_MESSAGE,
     LOW_CONFIDENCE_THRESHOLD,
@@ -30,6 +31,7 @@ VALID_TASK_TYPES = ("task", "milestone")
 def get_gantt_config() -> Dict[str, Any]:
     """Canonical gantt metadata for frontend consumption."""
     return {
+        "app_name": GANTT_APP_NAME,
         "task_statuses": sorted(VALID_STATUSES),
         "task_types": list(VALID_TASK_TYPES),
         "dependency_types": sorted(VALID_DEPENDENCY_TYPES),

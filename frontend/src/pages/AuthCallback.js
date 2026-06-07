@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { Home } from 'lucide-react';
+import { getPostAuthPath } from '../components/gantt/ganttAuthUtils';
 
 export const AuthCallback = () => {
   const { exchangeSession } = useAuth();
@@ -36,12 +37,7 @@ export const AuthCallback = () => {
         // Clear the hash and navigate
         window.history.replaceState(null, '', window.location.pathname);
         
-        // Navigate based on role
-        if (user.role === 'buyer') {
-          navigate('/buyer/dashboard', { replace: true, state: { user } });
-        } else {
-          navigate('/agent/home', { replace: true, state: { user } });
-        }
+        navigate(getPostAuthPath(user.role), { replace: true, state: { user } });
       } catch (error) {
         console.error('Auth callback error:', error);
         toast.error(error.message || 'Authentication failed. Please try again.');

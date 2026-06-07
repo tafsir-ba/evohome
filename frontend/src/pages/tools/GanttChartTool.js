@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getGanttHeaders, parseApiError } from '../../components/gantt/ganttApiUtils';
+import { GANTT_APP_NAME } from '../../components/gantt/ganttHostUtils';
 import { ZOOM_LEVELS } from '../../components/gantt/ganttCockpitUtils';
 import {
   Select,
@@ -53,6 +54,7 @@ export const GanttChartTool = () => {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [ganttConfig, setGanttConfig] = useState({
+    app_name: GANTT_APP_NAME,
     task_statuses: ['not_started', 'in_progress', 'completed', 'blocked'],
     task_types: ['task', 'milestone'],
     dependency_types: ['finish_to_start'],
@@ -127,6 +129,14 @@ export const GanttChartTool = () => {
     fetchProjects();
     fetchConfig();
   }, [fetchProjects, fetchConfig]);
+
+  useEffect(() => {
+    const appName = ganttConfig.app_name || GANTT_APP_NAME;
+    document.title = appName;
+    return () => {
+      document.title = 'Evohome | Real Estate Management';
+    };
+  }, [ganttConfig.app_name]);
 
   useEffect(() => {
     fetchTasks(selectedId);
@@ -240,7 +250,7 @@ export const GanttChartTool = () => {
         <div className="px-2 sm:px-3 py-1.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-primary" />
-            <span className="text-sm font-semibold">Gantt Chart</span>
+            <span className="text-sm font-semibold">{ganttConfig.app_name || GANTT_APP_NAME}</span>
           </div>
           <div className="flex items-center gap-2">
             {user && (
