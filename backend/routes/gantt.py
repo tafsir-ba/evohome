@@ -32,7 +32,8 @@ def _handle_validation_error(exc: GanttValidationError) -> HTTPException:
 
 
 @router.get("/gantt/config")
-async def gantt_config(user=Depends(get_gantt_actor)):
+async def gantt_config():
+    """Public read-only metadata (used by login page before auth)."""
     return get_gantt_config()
 
 

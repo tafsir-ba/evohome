@@ -22,6 +22,8 @@ from core.rate_limit import rate_limit_check
 from core.monitoring import capture_auth_failure
 from services.email_service import send_notification_email, send_email_async
 from core.config import get_config
+from core.gantt_site import gantt_welcome_email_data, is_gantt_request
+from services.gantt_constants import GANTT_APP_NAME
 
 logger = logging.getLogger("evohome.auth")
 
@@ -149,11 +151,15 @@ async def register_agent(data: AgentRegister, response: Response, request: Reque
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
-    await send_notification_email("welcome_onboarding", data.email, {
+    welcome_data = {
         "name": data.name,
         "role": "agent",
         "project_name": "your workspace",
-    })
+    }
+    welcome_data.update(gantt_welcome_email_data(request, data.name))
+    await send_notification_email(
+        "welcome_onboarding", data.email, welcome_data, request=request
+    )
     token = create_access_token(user_id, "agent")
     _set_session_cookie(response, token)
     return {"user_id": user_id, "email": data.email, "name": data.name, "role": "agent", "token": token}
@@ -305,8 +311,22 @@ async def google_oauth_callback(request: Request, response: Response):
     existing_agent = await db.users.find_one({"email": email, "role": "agent"}, {"_id": 0})
     existing_buyer = await db.users.find_one({"email": email, "role": "buyer"}, {"_id": 0})
     client_link = await db.clients.find_one({"email": email}, {"_id": 0})
+    is_new_agent = (
+        intended_role == "agent" and not existing_agent and not existing_buyer
+    )
 
     user_id, role = await _resolve_google_role(intended_role, email, name, picture, existing_agent, existing_buyer, client_link)
+
+    if is_new_agent:
+        welcome_data = {
+            "name": name,
+            "role": "agent",
+            "project_name": "your Gantt projects",
+        }
+        welcome_data.update(gantt_welcome_email_data(request, name))
+        await send_notification_email(
+            "welcome_onboarding", email, welcome_data, request=request
+        )
 
     token = create_access_token(user_id, role)
     _set_session_cookie(response, token)
@@ -374,9 +394,26 @@ async def forgot_password(request: ForgotPasswordRequest, req: Request):
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"password_reset_token": reset_token, "password_reset_expires": reset_expiry.isoformat()}})
     frontend_url = _password_reset_frontend_url(req)
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
-    subject = "Reset your Evohome password"
-    html_content = f'<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><h2 style="color:#2563EB">Reset Your Password</h2><p>Hi {user.get("name","there")},</p><p>Click below to create a new password:</p><p style="text-align:center;margin:30px 0"><a href="{reset_link}" style="background:#2563EB;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block">Reset Password</a></p><p style="color:#666;font-size:14px">This link expires in 1 hour.</p></div>'
-    await send_email_async(email, subject, html_content)
+    if is_gantt_request(req):
+        subject = f"Reset your {GANTT_APP_NAME} password"
+        brand_color = "#0e7490"
+        brand_label = GANTT_APP_NAME
+    else:
+        subject = "Reset your Evohome password"
+        brand_color = "#2563EB"
+        brand_label = "Evohome"
+    html_content = (
+        f'<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">'
+        f'<h2 style="color:{brand_color}">Reset Your Password</h2>'
+        f'<p>Hi {user.get("name", "there")},</p>'
+        f'<p>Click below to create a new password for your {brand_label} account:</p>'
+        f'<p style="text-align:center;margin:30px 0">'
+        f'<a href="{reset_link}" style="background:{brand_color};color:#fff;padding:12px 24px;'
+        f'text-decoration:none;border-radius:6px;display:inline-block">Reset Password</a></p>'
+        f'<p style="color:#666;font-size:14px">This link expires in 1 hour.</p>'
+        f'<p style="color:#999;font-size:12px">{brand_label}</p></div>'
+    )
+    await send_email_async(email, subject, html_content, request=req)
     return {"message": "If an account exists with this email, you will receive a reset link."}
 
 

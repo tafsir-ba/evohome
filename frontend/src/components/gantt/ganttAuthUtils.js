@@ -4,7 +4,7 @@ import { isGanttHost, GANTT_APP_NAME } from './ganttHostUtils';
 
 export const GANTT_POST_AUTH_PATH = '/gantt';
 
-/** Default role for CRC Gantt Chart sign-in (agent accounts). */
+/** Default role for Caribbean Regional Connectivity sign-in (agent accounts). */
 export const GANTT_AUTH_ROLE = 'agent';
 
 export const getPostAuthPath = (role) => {

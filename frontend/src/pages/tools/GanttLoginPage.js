@@ -9,22 +9,17 @@ import { getApiBaseUrl, parseApiError } from '../../lib/api';
 import { Loader2, Mail, Lock } from 'lucide-react';
 import { GanttAuthShell } from '../../components/gantt/GanttAuthShell';
 import { GANTT_AUTH_ROLE, getPostAuthPath, useGanttAppName } from '../../components/gantt/ganttAuthUtils';
+import { useGanttBranding } from '../../components/gantt/ganttBrandingUtils';
 
 export const GanttLoginPage = () => {
   const appName = useGanttAppName();
+  useGanttBranding(appName);
   const { user, loginWithGoogle, setAuthUser } = useAuth();
   const navigate = useNavigate();
   const [googleLoading, setGoogleLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
-  useEffect(() => {
-    document.title = `Sign in | ${appName}`;
-    return () => {
-      document.title = appName;
-    };
-  }, [appName]);
 
   useEffect(() => {
     if (user) {

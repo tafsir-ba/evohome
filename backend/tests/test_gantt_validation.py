@@ -132,7 +132,8 @@ class TestDependencyValidation:
 class TestGanttConfig:
     def test_config_matches_validation_constants(self):
         config = get_gantt_config()
-        assert config["app_name"] == "CRC Gantt Chart"
+        assert config["app_name"] == "Caribbean Regional Connectivity"
+        assert config["requires_auth"] is True
         assert config["task_statuses"] == sorted(_gantt_validation.VALID_STATUSES)
         assert config["task_types"] == list(_gantt_validation.VALID_TASK_TYPES)
         assert config["dependency_types"] == ["finish_to_start"]

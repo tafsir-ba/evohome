@@ -2,9 +2,11 @@ import { Link } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
 import { ThemeToggle } from '../ThemeToggle';
 import { useGanttAppName } from './ganttAuthUtils';
+import { useGanttBranding } from './ganttBrandingUtils';
 
 export const GanttAuthShell = ({ title, subtitle, children }) => {
   const appName = useGanttAppName();
+  useGanttBranding(appName);
   return (
   <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative">
     <div className="absolute top-3 right-3">
@@ -23,9 +25,6 @@ export const GanttAuthShell = ({ title, subtitle, children }) => {
       ) : null}
       {children}
     </div>
-    <Link to="/gantt" className="mt-6 text-xs text-muted-foreground hover:text-foreground transition-colors">
-      Continue without signing in
-    </Link>
   </div>
   );
 };

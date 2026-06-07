@@ -24,10 +24,11 @@ import {
   Maximize2,
   ChevronDown,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { getApiBaseUrl } from '../../lib/api';
 import { getGanttHeaders, parseApiError } from '../../components/gantt/ganttApiUtils';
 import { GANTT_APP_NAME } from '../../components/gantt/ganttHostUtils';
+import { useGanttBranding } from '../../components/gantt/ganttBrandingUtils';
 import { ZOOM_LEVELS } from '../../components/gantt/ganttCockpitUtils';
 import {
   Select,
@@ -44,7 +45,7 @@ import {
 } from '../../components/ui/dropdown-menu';
 
 export const GanttChartTool = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, loading: authLoading } = useAuth();
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -89,6 +90,10 @@ export const GanttChartTool = () => {
   const fetchProjects = useCallback(async () => {
     try {
       const res = await apiFetch('/gantt/projects');
+      if (res.status === 401) {
+        setProjects([]);
+        return;
+      }
       if (!res.ok) throw new Error('Failed to load projects');
       setProjects(await res.json());
     } catch (error) {
@@ -125,26 +130,38 @@ export const GanttChartTool = () => {
   }, [apiFetch]);
 
   useEffect(() => {
+    if (!user) {
+      setLoadingProjects(false);
+      return;
+    }
     fetchProjects();
     fetchConfig();
-  }, [fetchProjects, fetchConfig]);
+  }, [fetchProjects, fetchConfig, user]);
+
+  const appName = ganttConfig.app_name || GANTT_APP_NAME;
+  useGanttBranding(appName);
 
   useEffect(() => {
-    const appName = ganttConfig.app_name || GANTT_APP_NAME;
-    document.title = appName;
-    return () => {
-      document.title = 'Evohome | Real Estate Management';
-    };
-  }, [ganttConfig.app_name]);
-
-  useEffect(() => {
+    if (!user) return;
     fetchTasks(selectedId);
     setShowImport(false);
     setSaveStatus({ saving: false, dirty: false });
     setEditingTitle(false);
     setTitleDraft('');
     setViewMode('cockpit');
-  }, [selectedId, fetchTasks]);
+  }, [selectedId, fetchTasks, user]);
+
+  if (authLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
   const selectedProject = projects.find((p) => p.gantt_project_id === selectedId);
 
@@ -249,7 +266,9 @@ export const GanttChartTool = () => {
         <div className="px-2 sm:px-3 py-1.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-primary" />
-            <span className="text-sm font-semibold">{ganttConfig.app_name || GANTT_APP_NAME}</span>
+            <span className="text-sm font-semibold truncate max-w-[10rem] sm:max-w-none">
+              {appName}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             {user && (

@@ -1,12 +1,11 @@
-"""Unit tests for Gantt anonymous session auth."""
+"""Unit tests for Gantt authenticated-only auth."""
 import asyncio
-import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
-from core.gantt_auth import GANTT_SESSION_HEADER, get_gantt_actor
+from core.gantt_auth import get_gantt_actor
 
 
 def _request(headers=None):
@@ -17,34 +16,37 @@ def _request(headers=None):
 
 
 class TestGanttActor:
-    def test_rejects_unauthenticated_without_session(self):
+    def test_rejects_unauthenticated_requests(self):
         with pytest.raises(HTTPException) as exc:
             asyncio.run(get_gantt_actor(_request()))
         assert exc.value.status_code == 401
+        assert "log in" in exc.value.detail.lower()
 
-    def test_accepts_valid_guest_session(self):
-        session_id = str(uuid.uuid4())
-        actor = asyncio.run(
-            get_gantt_actor(_request({GANTT_SESSION_HEADER: session_id}))
-        )
-        assert actor["user_id"] == f"gantt_guest_{session_id}"
-        assert actor["is_guest"] is True
-
-    def test_rejects_invalid_session_format(self):
+    def test_rejects_guest_session_even_with_header(self):
         with pytest.raises(HTTPException) as exc:
             asyncio.run(
-                get_gantt_actor(_request({GANTT_SESSION_HEADER: "not-a-uuid"}))
+                get_gantt_actor(
+                    _request({"X-Gantt-Session": "11111111-1111-4111-8111-111111111111"})
+                )
             )
         assert exc.value.status_code == 401
 
-    def test_prefers_login_token_over_guest_session(self):
-        session_id = str(uuid.uuid4())
-        user = {"user_id": "u_real", "role": "agent"}
+    def test_accepts_authenticated_user(self):
+        user = {"user_id": "agent_abc123", "role": "agent"}
 
         with patch("core.gantt_auth.extract_token", return_value="token"), patch(
             "core.gantt_auth.get_current_user", AsyncMock(return_value=user)
         ):
-            actor = asyncio.run(
-                get_gantt_actor(_request({GANTT_SESSION_HEADER: session_id}))
-            )
-        assert actor["user_id"] == "u_real"
+            actor = asyncio.run(get_gantt_actor(_request()))
+        assert actor["user_id"] == "agent_abc123"
+        assert actor["role"] == "agent"
+
+    def test_rejects_legacy_guest_user_id(self):
+        user = {"user_id": "gantt_guest_abc", "role": "guest"}
+
+        with patch("core.gantt_auth.extract_token", return_value="token"), patch(
+            "core.gantt_auth.get_current_user", AsyncMock(return_value=user)
+        ):
+            with pytest.raises(HTTPException) as exc:
+                asyncio.run(get_gantt_actor(_request()))
+        assert exc.value.status_code == 401

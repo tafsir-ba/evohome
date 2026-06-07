@@ -8,9 +8,11 @@ import { toast } from 'sonner';
 import { Loader2, Mail, Lock, User } from 'lucide-react';
 import { GanttAuthShell } from '../../components/gantt/GanttAuthShell';
 import { GANTT_AUTH_ROLE, getPostAuthPath, useGanttAppName } from '../../components/gantt/ganttAuthUtils';
+import { useGanttBranding } from '../../components/gantt/ganttBrandingUtils';
 
 export const GanttRegisterPage = () => {
   const appName = useGanttAppName();
+  useGanttBranding(appName);
   const { user, register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -19,13 +21,6 @@ export const GanttRegisterPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
-  useEffect(() => {
-    document.title = `Create account | ${appName}`;
-    return () => {
-      document.title = appName;
-    };
-  }, [appName]);
 
   useEffect(() => {
     if (user) {

@@ -12,7 +12,9 @@ from datetime import datetime, timezone, timedelta
 from fastapi import Request
 
 from database import db
+from core.gantt_site import GANTT_SENDER_EMAIL, is_gantt_request
 from core.monitoring import capture_email_error
+from services.gantt_constants import GANTT_APP_NAME
 
 logger = logging.getLogger("evohome.email")
 
@@ -108,18 +110,26 @@ async def _store_send_lock(lock_key: str, template_type: str, to_email: str, cat
     )
 
 
+def resolve_sender_email(request: Request = None) -> str:
+    """Use GANTT_SENDER_EMAIL when the request originates from the Gantt host."""
+    if is_gantt_request(request) and GANTT_SENDER_EMAIL:
+        return GANTT_SENDER_EMAIL
+    return SENDER_EMAIL
+
+
 async def send_email_async(to_email: str, subject: str, html_content: str, request: Request = None) -> dict:
     """Send email asynchronously using Resend with error monitoring"""
     if not RESEND_API_KEY:
         logger.warning(f"RESEND_API_KEY not configured. Would send email to {to_email}: {subject}")
         return {"status": "skipped", "reason": "No API key configured"}
 
-    if not SENDER_EMAIL:
-        logger.warning(f"SENDER_EMAIL not configured. Cannot send email to {to_email}")
+    sender = resolve_sender_email(request)
+    if not sender:
+        logger.warning(f"No sender email configured. Cannot send email to {to_email}")
         return {"status": "skipped", "reason": "No sender email configured"}
 
     params = {
-        "from": SENDER_EMAIL,
+        "from": sender,
         "to": [to_email],
         "subject": subject,
         "html": html_content
@@ -234,9 +244,16 @@ def get_email_template(template_type: str, data: dict) -> tuple[str, str]:
     elif template_type == "welcome_onboarding":
         role_label = (data.get("role") or "user").capitalize()
         project_hint = data.get("project_name") or "your workspace"
-        subject = f"Welcome to Evohome - Start in 2 minutes"
-        cta_text = "Open Evohome"
-        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0; background-color: #f5f5f5;"><div style="max-width: 600px; margin: 0 auto; padding: 20px;"><div style="background-color: #2563EB; color: #FFFFFF; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;"><h1 style="margin: 0; color: #FFFFFF; font-size: 24px;">Welcome to Evohome</h1></div><div style="background-color: #FFFFFF; padding: 32px; border: 1px solid #e5e7eb; border-top: none;"><p style="margin-top: 0;">Hi {data.get('name', 'there')},</p><p>Your {role_label} account is ready. To get value fast, open the app and check <strong>{project_hint}</strong>.</p><ul style="color:#555;"><li>Review pending actions</li><li>Check latest timeline/doc updates</li><li>Complete your first setup step</li></ul><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 24px auto;"><tr><td style="border-radius: 6px; background-color: #2563EB;"><a href="{frontend_url}/login" target="_blank" style="{cta_button_style}">{cta_text}</a></td></tr></table><p style="font-size: 13px; color: #666;">We keep emails minimal: you will only receive essential action reminders.</p><hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;"><p style="font-size: 14px; color: #666666; margin-bottom: 0;">{agent_signature}</p></div><div style="padding: 16px; text-align: center; color: #9ca3af; font-size: 12px;"><p style="margin: 0;">Powered by Evohome</p></div></div></body></html>"""
+        if data.get("brand") == "gantt":
+            app_name = data.get("app_name") or GANTT_APP_NAME
+            gantt_url = (data.get("frontend_url") or frontend_url).rstrip("/")
+            subject = f"Welcome to {app_name}"
+            cta_text = "Open Gantt Planner"
+            html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0; background-color: #f5f5f5;"><div style="max-width: 600px; margin: 0 auto; padding: 20px;"><div style="background-color: #0e7490; color: #FFFFFF; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;"><h1 style="margin: 0; color: #FFFFFF; font-size: 24px;">Welcome to {app_name}</h1></div><div style="background-color: #FFFFFF; padding: 32px; border: 1px solid #e5e7eb; border-top: none;"><p style="margin-top: 0;">Hi {data.get('name', 'there')},</p><p>Your account is ready. Sign in to create and manage <strong>{project_hint}</strong>.</p><ul style="color:#555;"><li>Create Gantt charts and phases</li><li>Import schedules from Excel or PDF</li><li>Export presentation-ready timelines</li></ul><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 24px auto;"><tr><td style="border-radius: 6px; background-color: #0e7490;"><a href="{gantt_url}/gantt" target="_blank" style="{cta_button_style.replace('#2563EB', '#0e7490')}">Open Gantt Planner</a></td></tr></table><p style="font-size: 13px; color: #666;">You will only receive essential account emails from {app_name}.</p></div><div style="padding: 16px; text-align: center; color: #9ca3af; font-size: 12px;"><p style="margin: 0;">{app_name}</p></div></div></body></html>"""
+        else:
+            subject = f"Welcome to Evohome - Start in 2 minutes"
+            cta_text = "Open Evohome"
+            html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0; background-color: #f5f5f5;"><div style="max-width: 600px; margin: 0 auto; padding: 20px;"><div style="background-color: #2563EB; color: #FFFFFF; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;"><h1 style="margin: 0; color: #FFFFFF; font-size: 24px;">Welcome to Evohome</h1></div><div style="background-color: #FFFFFF; padding: 32px; border: 1px solid #e5e7eb; border-top: none;"><p style="margin-top: 0;">Hi {data.get('name', 'there')},</p><p>Your {role_label} account is ready. To get value fast, open the app and check <strong>{project_hint}</strong>.</p><ul style="color:#555;"><li>Review pending actions</li><li>Check latest timeline/doc updates</li><li>Complete your first setup step</li></ul><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 24px auto;"><tr><td style="border-radius: 6px; background-color: #2563EB;"><a href="{frontend_url}/login" target="_blank" style="{cta_button_style}">{cta_text}</a></td></tr></table><p style="font-size: 13px; color: #666;">We keep emails minimal: you will only receive essential action reminders.</p><hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;"><p style="font-size: 14px; color: #666666; margin-bottom: 0;">{agent_signature}</p></div><div style="padding: 16px; text-align: center; color: #9ca3af; font-size: 12px;"><p style="margin: 0;">Powered by Evohome</p></div></div></body></html>"""
 
     else:
         subject = "Notification from Evohome"
@@ -246,7 +263,9 @@ def get_email_template(template_type: str, data: dict) -> tuple[str, str]:
     return subject, html
 
 
-async def send_notification_email(template_type: str, to_email: str, data: dict) -> dict:
+async def send_notification_email(
+    template_type: str, to_email: str, data: dict, request: Request = None
+) -> dict:
     """Send a notification email using a template"""
     if template_type in NON_CRITICAL_TEMPLATES:
         lock_key = _dedupe_lock_key(template_type, to_email, data or {})
@@ -259,7 +278,7 @@ async def send_notification_email(template_type: str, to_email: str, data: dict)
             return {"status": "skipped", "reason": "noncritical_cooldown_active"}
 
     subject, html = get_email_template(template_type, data)
-    result = await send_email_async(to_email, subject, html)
+    result = await send_email_async(to_email, subject, html, request=request)
     if result and result.get("status") == "success":
         category = "noncritical" if template_type in NON_CRITICAL_TEMPLATES else "critical"
         lock_key = _dedupe_lock_key(template_type, to_email, data or {})
