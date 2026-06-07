@@ -4,15 +4,34 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { GanttProjectList } from '../../components/gantt/GanttProjectList';
 import { GanttTaskTable } from '../../components/gantt/GanttTaskTable';
-import { GanttTimelinePreview } from '../../components/gantt/GanttTimelinePreview';
-import { GanttChartCanvas } from '../../components/gantt/GanttChartCanvas';
+import { GanttPlanningCockpit } from '../../components/gantt/GanttPlanningCockpit';
 import { GanttImportReview } from '../../components/gantt/GanttImportReview';
 import { GanttSaveIndicator } from '../../components/gantt/GanttSaveIndicator';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { toast } from 'sonner';
-import { Download, LogOut, BarChart3, Loader2, Upload, LogIn } from 'lucide-react';
+import {
+  Download,
+  LogOut,
+  BarChart3,
+  Loader2,
+  Upload,
+  LogIn,
+  Plus,
+  Diamond,
+  Layers,
+  Table2,
+  Maximize2,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getGanttHeaders } from '../../components/gantt/ganttApiUtils';
+import { getGanttHeaders, parseApiError } from '../../components/gantt/ganttApiUtils';
+import { ZOOM_LEVELS } from '../../components/gantt/ganttCockpitUtils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
@@ -40,13 +59,13 @@ export const GanttChartTool = () => {
   const [showImport, setShowImport] = useState(false);
   const [saveStatus, setSaveStatus] = useState({ saving: false, dirty: false });
   const [chartSaving, setChartSaving] = useState(false);
-  const [tableCollapsed, setTableCollapsed] = useState(true);
-  const [chartView, setChartView] = useState('library');
+  const [viewMode, setViewMode] = useState('cockpit');
+  const [zoom, setZoom] = useState('Week');
+  const [fitToScreen, setFitToScreen] = useState(false);
 
   const apiFetch = useCallback((path, options = {}) => {
     const { headers: optionHeaders, ...rest } = options;
     const mergedHeaders = getGanttHeaders(optionHeaders || {});
-    // Let browser set multipart boundary for FormData bodies
     if (rest.body instanceof FormData) {
       delete mergedHeaders['Content-Type'];
     }
@@ -61,8 +80,7 @@ export const GanttChartTool = () => {
     try {
       const res = await apiFetch('/gantt/projects');
       if (!res.ok) throw new Error('Failed to load projects');
-      const data = await res.json();
-      setProjects(data);
+      setProjects(await res.json());
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -90,11 +108,9 @@ export const GanttChartTool = () => {
   const fetchConfig = useCallback(async () => {
     try {
       const res = await apiFetch('/gantt/config');
-      if (res.ok) {
-        setGanttConfig(await res.json());
-      }
+      if (res.ok) setGanttConfig(await res.json());
     } catch {
-      // Keep fallback defaults; backend validation remains authoritative.
+      // Backend validation remains authoritative.
     }
   }, [apiFetch]);
 
@@ -109,14 +125,13 @@ export const GanttChartTool = () => {
     setSaveStatus({ saving: false, dirty: false });
     setEditingTitle(false);
     setTitleDraft('');
+    setViewMode('cockpit');
   }, [selectedId, fetchTasks]);
 
   const selectedProject = projects.find((p) => p.gantt_project_id === selectedId);
 
   const titleDirty =
-    editingTitle &&
-    selectedProject &&
-    titleDraft.trim() !== selectedProject.title;
+    editingTitle && selectedProject && titleDraft.trim() !== selectedProject.title;
 
   const combinedSaveStatus = {
     saving: saveStatus.saving || chartSaving,
@@ -170,32 +185,57 @@ export const GanttChartTool = () => {
     }
   };
 
+  const createTask = async (payload) => {
+    if (!selectedId) return;
+    setChartSaving(true);
+    try {
+      const res = await apiFetch(`/gantt/projects/${selectedId}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(parseApiError(err, 'Failed to create task'));
+      }
+      await fetchTasks(selectedId);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setChartSaving(false);
+    }
+  };
+
+  const handleAddTask = () => createTask({ title: 'New task', type: 'task' });
+  const handleAddMilestone = () => createTask({ title: 'New milestone', type: 'milestone' });
+  const handleAddPhase = () => {
+    const name = window.prompt('Phase name');
+    if (!name?.trim()) return;
+    createTask({ title: 'New task', type: 'task', phase: name.trim() });
+  };
+
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="w-full px-2 sm:px-3 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <BarChart3 className="h-6 w-6 text-primary" />
-            <div>
-              <h1 className="text-lg font-semibold">Gantt Chart</h1>
-              <p className="text-xs text-muted-foreground">Standalone planning tool</p>
-            </div>
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
+      <header className="border-b bg-card shrink-0">
+        <div className="px-2 sm:px-3 py-1.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-primary" />
+            <span className="text-sm font-semibold">Gantt Chart</span>
           </div>
           <div className="flex items-center gap-2">
             {user && (
-              <span className="text-sm text-muted-foreground hidden sm:inline">
+              <span className="text-xs text-muted-foreground hidden sm:inline">
                 {user.name || user.email}
               </span>
             )}
             <ThemeToggle />
             {user ? (
-              <Button variant="ghost" size="icon" onClick={logout} title="Logout">
-                <LogOut className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={logout} title="Logout">
+                <LogOut className="h-3.5 w-3.5" />
               </Button>
             ) : (
-              <Button variant="ghost" size="sm" asChild>
+              <Button variant="ghost" size="sm" className="h-8" asChild>
                 <Link to="/login">
-                  <LogIn className="h-4 w-4 mr-2" />
+                  <LogIn className="h-3.5 w-3.5 mr-1" />
                   Login
                 </Link>
               </Button>
@@ -204,91 +244,135 @@ export const GanttChartTool = () => {
         </div>
       </header>
 
-      <main className="w-full px-2 py-2 sm:px-3">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-2">
-          <aside className="lg:col-span-2 xl:col-span-2">
-            {loadingProjects ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <GanttProjectList
-                projects={projects}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-                onRefresh={fetchProjects}
-                apiFetch={apiFetch}
-                taskTypes={ganttConfig.task_types}
-                hasUnsavedChanges={combinedSaveStatus.dirty}
-              />
-            )}
-          </aside>
+      <main className="flex-1 flex min-h-0 px-2 py-2 sm:px-3 gap-2">
+        <aside className="w-44 sm:w-52 shrink-0 overflow-y-auto">
+          {loadingProjects ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <GanttProjectList
+              projects={projects}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onRefresh={fetchProjects}
+              apiFetch={apiFetch}
+              taskTypes={ganttConfig.task_types}
+              hasUnsavedChanges={combinedSaveStatus.dirty}
+            />
+          )}
+        </aside>
 
-          <section className="lg:col-span-10 xl:col-span-10 space-y-2 min-w-0">
-            {!selectedProject ? (
-              <div className="rounded-lg border bg-muted/30 p-12 text-center text-muted-foreground">
-                Select or create a project to manage tasks.
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-2 flex-wrap py-1">
-                  {editingTitle ? (
-                    <div className="flex items-center gap-2 flex-1">
-                      <Input
-                        value={titleDraft}
-                        onChange={(e) => setTitleDraft(e.target.value)}
-                        className="max-w-md"
-                      />
-                      <Button size="sm" onClick={handleTitleSave}>Save</Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setEditingTitle(false)}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  ) : (
-                    <h2
-                      className="text-xl font-semibold cursor-pointer hover:text-primary"
-                      onClick={() => {
-                        setTitleDraft(selectedProject.title);
-                        setEditingTitle(true);
-                      }}
-                      title="Click to edit"
-                    >
-                      {selectedProject.title}
-                    </h2>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <GanttSaveIndicator
-                      saving={combinedSaveStatus.saving}
-                      dirty={combinedSaveStatus.dirty}
+        <section className="flex-1 flex flex-col min-w-0 min-h-0">
+          {!selectedProject ? (
+            <div className="flex-1 rounded border bg-muted/30 flex items-center justify-center text-sm text-muted-foreground">
+              Select or create a project to start planning.
+            </div>
+          ) : (
+            <>
+              {/* Project toolbar */}
+              <div className="shrink-0 flex items-center gap-1.5 flex-wrap py-1 border-b mb-2">
+                {editingTitle ? (
+                  <div className="flex items-center gap-1 mr-2">
+                    <Input
+                      value={titleDraft}
+                      onChange={(e) => setTitleDraft(e.target.value)}
+                      className="h-7 text-sm max-w-[200px]"
                     />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowImport((v) => !v)}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Import
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleExport('csv')}>
-                      <Download className="h-4 w-4 mr-2" />
-                      CSV
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleExport('xlsx')}>
-                      <Download className="h-4 w-4 mr-2" />
-                      Excel
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleExport('pdf')}>
-                      <Download className="h-4 w-4 mr-2" />
-                      PDF
+                    <Button size="sm" className="h-7 px-2" onClick={handleTitleSave}>Save</Button>
+                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingTitle(false)}>
+                      Cancel
                     </Button>
                   </div>
-                </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-sm font-semibold mr-2 hover:text-primary truncate max-w-[180px]"
+                    onClick={() => {
+                      setTitleDraft(selectedProject.title);
+                      setEditingTitle(true);
+                    }}
+                    title="Click to rename"
+                  >
+                    {selectedProject.title}
+                  </button>
+                )}
 
-                {showImport && (
+                <GanttSaveIndicator
+                  saving={combinedSaveStatus.saving}
+                  dirty={combinedSaveStatus.dirty}
+                />
+
+                <div className="h-4 w-px bg-border mx-1" />
+
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleAddTask}>
+                  <Plus className="h-3 w-3 mr-1" />Task
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleAddPhase}>
+                  <Layers className="h-3 w-3 mr-1" />Phase
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleAddMilestone}>
+                  <Diamond className="h-3 w-3 mr-1" />Milestone
+                </Button>
+
+                <div className="h-4 w-px bg-border mx-1" />
+
+                <Select value={zoom} onValueChange={(v) => { setZoom(v); setFitToScreen(false); }}>
+                  <SelectTrigger className="h-7 w-[88px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ZOOM_LEVELS.map((z) => (
+                      <SelectItem key={z} value={z} className="text-xs">{z}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  title="Fit timeline to screen"
+                  onClick={() => setFitToScreen((v) => !v)}
+                >
+                  <Maximize2 className="h-3 w-3" />
+                </Button>
+
+                <div className="h-4 w-px bg-border mx-1" />
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setShowImport((v) => !v)}
+                >
+                  <Upload className="h-3 w-3 mr-1" />Import
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleExport('csv')}>
+                  <Download className="h-3 w-3 mr-1" />CSV
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleExport('xlsx')}>
+                  Excel
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleExport('pdf')}>
+                  PDF
+                </Button>
+
+                <div className="ml-auto">
+                  <Button
+                    variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setViewMode((v) => (v === 'cockpit' ? 'table' : 'cockpit'))}
+                  >
+                    <Table2 className="h-3 w-3 mr-1" />
+                    {viewMode === 'cockpit' ? 'Table view' : 'Gantt view'}
+                  </Button>
+                </div>
+              </div>
+
+              {showImport && (
+                <div className="shrink-0 mb-2">
                   <GanttImportReview
                     projectId={selectedId}
                     apiFetch={apiFetch}
@@ -300,84 +384,45 @@ export const GanttChartTool = () => {
                     }}
                     onClose={() => setShowImport(false)}
                   />
-                )}
+                </div>
+              )}
 
-                <div>
-                  <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
-                    <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      Gantt chart
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <div className="flex rounded border overflow-hidden text-[10px]">
-                        <button
-                          type="button"
-                          className={`px-2 py-0.5 ${chartView === 'library' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
-                          onClick={() => setChartView('library')}
-                        >
-                          Library view
-                        </button>
-                        <button
-                          type="button"
-                          className={`px-2 py-0.5 ${chartView === 'timeline' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
-                          onClick={() => setChartView('timeline')}
-                        >
-                          Timeline view
-                        </button>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground">
-                        {chartView === 'library'
-                          ? 'Dependency arrows · drag bars to reschedule'
-                          : 'Drag bars to move · drag edges to resize'}
-                      </span>
-                    </div>
+              <div className="flex-1 min-h-0 flex flex-col">
+                {loadingTasks ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
-                  {chartView === 'library' ? (
-                    <GanttChartCanvas
-                      tasks={tasks}
-                      projectId={selectedId}
-                      apiFetch={apiFetch}
-                      onTasksChange={setTasks}
-                      onSaving={setChartSaving}
-                      onRevert={() => fetchTasks(selectedId)}
-                    />
-                  ) : (
-                    <GanttTimelinePreview
-                      tasks={tasks}
-                      projectId={selectedId}
-                      apiFetch={apiFetch}
-                      onTasksChange={setTasks}
-                      onSaving={setChartSaving}
-                      onRevert={() => fetchTasks(selectedId)}
-                    />
-                  )}
-                </div>
-
-                <div>
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 hover:text-foreground"
-                    onClick={() => setTableCollapsed((v) => !v)}
-                  >
-                    {tableCollapsed ? '▸' : '▾'} Task table
-                  </button>
-                  {!tableCollapsed && (
-                    <GanttTaskTable
-                      key={selectedId}
-                      projectId={selectedId}
-                      tasks={tasks}
-                      loading={loadingTasks}
-                      taskStatuses={ganttConfig.task_statuses}
-                      taskTypes={ganttConfig.task_types}
-                      onRefresh={() => fetchTasks(selectedId)}
-                      apiFetch={apiFetch}
-                      onSaveStatusChange={setSaveStatus}
-                    />
-                  )}
-                </div>
-              </>
-            )}
-          </section>
-        </div>
+                ) : viewMode === 'cockpit' ? (
+                  <GanttPlanningCockpit
+                    tasks={tasks}
+                    projectId={selectedId}
+                    apiFetch={apiFetch}
+                    taskStatuses={ganttConfig.task_statuses}
+                    taskTypes={ganttConfig.task_types}
+                    zoom={zoom}
+                    fitToScreen={fitToScreen}
+                    onTasksChange={setTasks}
+                    onSaving={setChartSaving}
+                    onRevert={() => fetchTasks(selectedId)}
+                    onRefresh={() => fetchTasks(selectedId)}
+                  />
+                ) : (
+                  <GanttTaskTable
+                    key={selectedId}
+                    projectId={selectedId}
+                    tasks={tasks}
+                    loading={loadingTasks}
+                    taskStatuses={ganttConfig.task_statuses}
+                    taskTypes={ganttConfig.task_types}
+                    onRefresh={() => fetchTasks(selectedId)}
+                    apiFetch={apiFetch}
+                    onSaveStatusChange={setSaveStatus}
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </section>
       </main>
     </div>
   );
