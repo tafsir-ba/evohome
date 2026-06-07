@@ -376,8 +376,8 @@ export const GanttChartTool = () => {
                 </div>
               </div>
 
-              {showImport && (
-                <div className="shrink-0 mb-2">
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                {showImport ? (
                   <GanttImportReview
                     projectId={selectedId}
                     apiFetch={apiFetch}
@@ -389,11 +389,7 @@ export const GanttChartTool = () => {
                     }}
                     onClose={() => setShowImport(false)}
                   />
-                </div>
-              )}
-
-              <div className="flex-1 min-h-0 flex flex-col">
-                {loadingTasks ? (
+                ) : loadingTasks ? (
                   <div className="flex-1 flex items-center justify-center">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>

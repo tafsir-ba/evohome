@@ -4,11 +4,9 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
-  TableHeader,
   TableRow,
 } from '../ui/table';
 import { parseApiError, getGanttHeaders } from './ganttApiUtils';
@@ -24,17 +22,26 @@ import { toast } from 'sonner';
 import { AlertTriangle, Check, Loader2, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
+const FIELD_SHORT = {
+  title: 'title',
+  start_date: 'start',
+  end_date: 'end',
+  phase: 'phase',
+  type: 'type',
+};
+
 const ConfidenceBadge = ({ field, confidence, threshold }) => {
   if (confidence == null) return null;
   const pct = Math.round(confidence * 100);
   const low = confidence < threshold;
+  const label = FIELD_SHORT[field] || field;
   return (
     <Badge
       variant={low ? 'destructive' : 'secondary'}
-      className="text-[10px] px-1 py-0"
+      className="text-[9px] px-0.5 py-0 leading-tight font-normal"
       title={`${field}: ${pct}% confidence`}
     >
-      {field} {pct}%
+      {label} {pct}%
     </Badge>
   );
 };
@@ -329,43 +336,43 @@ export const GanttImportReview = ({
         : 'select';
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
+    <div className="rounded-lg border bg-card p-2 flex flex-col h-full min-h-0 overflow-hidden gap-2">
+      <div className="flex items-center justify-between shrink-0">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
             Import from document
           </h3>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
             Upload a PDF, image, CSV, or Excel file to extract a draft schedule.
           </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-          <X className="h-4 w-4" />
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onClose} title="Close">
+          <X className="h-3.5 w-3.5" />
         </Button>
       </div>
 
       {flowError && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive flex gap-2">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-          <p>{flowError}</p>
+        <div className="rounded border border-destructive/40 bg-destructive/5 px-2 py-1 text-[11px] text-destructive flex gap-1.5 shrink-0">
+          <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+          <p className="leading-tight">{flowError}</p>
         </div>
       )}
 
       {!draft && (
-        <div className="space-y-3">
-          <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
+          <div className="rounded border bg-muted/30 p-2 space-y-2">
             <div>
-              <p className="text-sm font-medium">How import works</p>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-xs font-medium">How import works</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
                 Upload a planning document and let AI build a draft schedule. Nothing is saved
                 to your chart until you review and confirm.
               </p>
               {importConfig?.review_message && (
-                <p className="text-sm text-muted-foreground mt-2">{importConfig.review_message}</p>
+                <p className="text-[11px] text-muted-foreground mt-1 leading-tight">{importConfig.review_message}</p>
               )}
             </div>
-            <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <ol className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
               {IMPORT_FLOW_STEPS.map((step, index) => {
                 const stepOrder = ['select', 'analyze', 'review', 'confirm'];
                 const activeIndex = stepOrder.indexOf(activeFlowStep);
@@ -376,15 +383,15 @@ export const GanttImportReview = ({
                   <li
                     key={step.key}
                     className={cn(
-                      'rounded-md border p-3 text-sm',
+                      'rounded border p-1.5 text-[11px]',
                       isActive && 'border-primary bg-primary/5',
                       isDone && 'border-emerald-500/40 bg-emerald-500/5'
                     )}
                   >
-                    <div className="flex items-center gap-2 font-medium">
+                    <div className="flex items-center gap-1.5 font-medium">
                       <span
                         className={cn(
-                          'flex h-5 w-5 items-center justify-center rounded-full text-[10px]',
+                          'flex h-4 w-4 items-center justify-center rounded-full text-[9px] shrink-0',
                           isDone
                             ? 'bg-emerald-500 text-white'
                             : isActive
@@ -392,11 +399,11 @@ export const GanttImportReview = ({
                               : 'bg-muted text-muted-foreground'
                         )}
                       >
-                        {isDone ? <Check className="h-3 w-3" /> : index + 1}
+                        {isDone ? <Check className="h-2.5 w-2.5" /> : index + 1}
                       </span>
-                      {step.label}
+                      <span className="truncate">{step.label}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2 pl-7">{step.description}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1 pl-5 leading-tight">{step.description}</p>
                   </li>
                 );
               })}
@@ -420,7 +427,7 @@ export const GanttImportReview = ({
           )}
 
           <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+            className={`border-2 border-dashed rounded p-4 text-center cursor-pointer transition-colors ${
               dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
             }`}
             onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
@@ -428,8 +435,8 @@ export const GanttImportReview = ({
             onDrop={handleDrop}
             onClick={() => inputRef.current?.click()}
           >
-            <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
+            <Upload className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+            <p className="text-[11px] text-muted-foreground">
               Drop PDF, image, CSV, or Excel here (max {maxSizeMb} MB)
             </p>
             <input
@@ -441,31 +448,32 @@ export const GanttImportReview = ({
             />
           </div>
           {selectedFile && (
-            <div className="rounded-md bg-muted/40 px-3 py-2 text-sm space-y-1">
-              <p className="text-muted-foreground">
+            <div className="rounded bg-muted/40 px-2 py-1 text-[11px] space-y-0.5">
+              <p className="text-muted-foreground leading-tight">
                 Selected: <span className="text-foreground font-medium">{selectedFile.name}</span>
               </p>
               {analyzeExplanation && (
-                <p className="text-xs text-muted-foreground">{analyzeExplanation}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">{analyzeExplanation}</p>
               )}
               {!analyzing && !draft && (
-                <p className="text-xs text-primary font-medium">
+                <p className="text-[10px] text-primary font-medium leading-tight">
                   Click {sourceType === 'csv' || sourceType === 'xlsx' ? 'Parse spreadsheet' : 'Analyze with AI'} below to build your draft.
                 </p>
               )}
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             <Button
+              size="sm"
+              className="h-7 text-xs"
               onClick={handleAnalyze}
               disabled={(!selectedFile && !uploadedFileId) || analyzing}
-              className="min-w-[180px]"
             >
               {analyzing ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
               ) : (
-                <Sparkles className="h-4 w-4 mr-2" />
+                <Sparkles className="h-3 w-3 mr-1.5" />
               )}
               {analyzeButtonLabel}
             </Button>
@@ -474,96 +482,99 @@ export const GanttImportReview = ({
       )}
 
       {draft && (
-        <div className="space-y-4">
-          <div className="rounded-md bg-muted/50 p-3 text-sm flex gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+        <div className="flex flex-col flex-1 min-h-0 gap-1.5 overflow-hidden">
+          <div className="rounded bg-muted/50 px-2 py-1 text-[11px] flex gap-1.5 shrink-0 leading-tight">
+            <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5 text-amber-500" />
             <p>{draft.review_message}</p>
           </div>
 
           {(draft.warnings || []).length > 0 && (
-            <div className="text-sm text-amber-600 dark:text-amber-400 space-y-1">
+            <div className="text-[10px] text-amber-600 dark:text-amber-400 space-y-0 shrink-0 leading-tight max-h-12 overflow-y-auto">
               {draft.warnings.map((w, i) => (
                 <p key={i}>• {w}</p>
               ))}
             </div>
           )}
 
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Phase</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Start</TableHead>
-                  <TableHead>End</TableHead>
-                  <TableHead>Confidence</TableHead>
-                  <TableHead className="w-10" />
+          <div className="flex-1 min-h-0 overflow-auto rounded border">
+            <table className="w-full caption-bottom text-[11px]">
+              <thead className="sticky top-0 z-10 bg-card [&_tr]:border-b">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="h-6 px-1 text-[10px] font-medium">Type</TableHead>
+                  <TableHead className="h-6 px-1 text-[10px] font-medium">Phase</TableHead>
+                  <TableHead className="h-6 px-1 text-[10px] font-medium min-w-[120px]">Title</TableHead>
+                  <TableHead className="h-6 px-1 text-[10px] font-medium">Start</TableHead>
+                  <TableHead className="h-6 px-1 text-[10px] font-medium">End</TableHead>
+                  <TableHead className="h-6 px-1 text-[10px] font-medium">Conf.</TableHead>
+                  <TableHead className="h-6 w-7 px-0" />
                 </TableRow>
-              </TableHeader>
+              </thead>
               <TableBody>
                 {draftTasks.map((task) => (
                   <TableRow
                     key={task.temp_id}
-                    className={hasLowConfidence(task) ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''}
+                    className={cn(
+                      'hover:bg-muted/30',
+                      hasLowConfidence(task) && 'bg-amber-50/50 dark:bg-amber-950/20'
+                    )}
                   >
-                    <TableCell>
+                    <TableCell className="p-0.5 px-1">
                       <Select
                         value={task.type || 'task'}
                         onValueChange={(v) => updateDraftTask(task.temp_id, 'type', v)}
                       >
-                        <SelectTrigger className="h-8 w-28">
+                        <SelectTrigger className="h-6 w-[4.5rem] text-[10px] px-1">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {taskTypes.map((type) => (
-                            <SelectItem key={type} value={type}>
+                            <SelectItem key={type} value={type} className="text-xs">
                               {type === 'milestone' ? 'Milestone' : 'Task'}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-0.5 px-1">
                       <Input
-                        className="h-8 min-w-[90px]"
+                        className="h-6 min-w-[72px] text-[11px] px-1 py-0"
                         value={task.phase || ''}
                         onChange={(e) =>
                           updateDraftTask(task.temp_id, 'phase', e.target.value || null)
                         }
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-0.5 px-1">
                       <Input
-                        className="h-8 min-w-[140px]"
+                        className="h-6 min-w-[100px] text-[11px] px-1 py-0"
                         value={task.title || ''}
                         onChange={(e) =>
                           updateDraftTask(task.temp_id, 'title', e.target.value)
                         }
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-0.5 px-1">
                       <Input
                         type="date"
-                        className="h-8 w-36"
+                        className="h-6 w-[7.25rem] text-[10px] px-1 py-0"
                         value={task.start_date || ''}
                         onChange={(e) =>
                           updateDraftTask(task.temp_id, 'start_date', e.target.value || null)
                         }
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-0.5 px-1">
                       <Input
                         type="date"
-                        className="h-8 w-36"
+                        className="h-6 w-[7.25rem] text-[10px] px-1 py-0"
                         value={task.end_date || ''}
                         onChange={(e) =>
                           updateDraftTask(task.temp_id, 'end_date', e.target.value || null)
                         }
                       />
                     </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1 max-w-[180px]">
+                    <TableCell className="p-0.5 px-1">
+                      <div className="flex flex-wrap gap-0.5 max-w-[9rem]">
                         {Object.entries(task.field_confidence || {}).map(([field, score]) => (
                           <ConfidenceBadge
                             key={field}
@@ -576,53 +587,57 @@ export const GanttImportReview = ({
                           <Badge
                             key={i}
                             variant="outline"
-                            className="text-[10px] text-amber-600"
+                            className="text-[9px] px-0.5 py-0 text-amber-600"
                             title={w}
                           >
-                            <AlertTriangle className="h-3 w-3 mr-0.5" />
-                            warn
+                            <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+                            !
                           </Badge>
                         ))}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-0 w-7">
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-destructive"
+                        className="h-6 w-6 text-destructive"
                         onClick={() => removeDraftTask(task.temp_id)}
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="h-2.5 w-2.5" />
                       </Button>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </table>
           </div>
 
-          <div className="flex gap-2 justify-end">
+          <div className="flex gap-1.5 justify-end shrink-0 pt-0.5">
             <Button
               variant="outline"
+              size="sm"
+              className="h-7 text-xs px-2"
               onClick={handleDiscard}
               disabled={discarding || confirming}
             >
-              {discarding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {discarding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
               Discard
             </Button>
             <Button
               variant="outline"
+              size="sm"
+              className="h-7 text-xs px-2"
               onClick={handleSaveDraft}
               disabled={saving || confirming}
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
               Save edits
             </Button>
-            <Button onClick={handleConfirm} disabled={confirming || !draftTasks.length}>
+            <Button size="sm" className="h-7 text-xs px-2" onClick={handleConfirm} disabled={confirming || !draftTasks.length}>
               {confirming ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
               ) : (
-                <Check className="h-4 w-4 mr-2" />
+                <Check className="h-3 w-3 mr-1" />
               )}
               Confirm import
             </Button>
