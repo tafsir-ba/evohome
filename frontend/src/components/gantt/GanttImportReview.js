@@ -12,8 +12,16 @@ import {
   TableRow,
 } from '../ui/table';
 import { parseApiError, getGanttHeaders } from './ganttApiUtils';
+import { GanttImportProgress } from './GanttImportProgress';
+import {
+  getFileSourceType,
+  UPLOAD_PROGRESS_STEPS,
+  EXTRACT_PROGRESS_STEPS,
+  IMPORT_FLOW_STEPS,
+} from './ganttImportUtils';
 import { toast } from 'sonner';
 import { AlertTriangle, Check, Loader2, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 const ConfidenceBadge = ({ field, confidence, threshold }) => {
   if (confidence == null) return null;
@@ -51,6 +59,7 @@ export const GanttImportReview = ({
   const [confirming, setConfirming] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [flowError, setFlowError] = useState(null);
   const inputRef = useRef(null);
 
   const validateFile = (file) => {
@@ -77,6 +86,7 @@ export const GanttImportReview = ({
     setUploadedFileId(null);
     setDraft(null);
     setDraftTasks([]);
+    setFlowError(null);
   };
 
   const handleDrop = (e) => {
@@ -85,59 +95,77 @@ export const GanttImportReview = ({
     handleFileSelect(e.dataTransfer.files?.[0]);
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile || !projectId) return;
-    setUploading(true);
+  const uploadSelectedFile = async () => {
+    const form = new FormData();
+    form.append('gantt_project_id', projectId);
+    form.append('file', selectedFile);
+
+    const uploadHeaders = getGanttHeaders();
+    delete uploadHeaders['Content-Type'];
+
+    const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/gantt/upload`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: uploadHeaders,
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(parseApiError(err, 'Upload failed'));
+    }
+    const data = await res.json();
+    setUploadedFileId(data.file_id);
+    return data.file_id;
+  };
+
+  const extractUploadedFile = async (fileId) => {
+    const res = await apiFetch('/gantt/extract', {
+      method: 'POST',
+      body: JSON.stringify({
+        file_id: fileId,
+        gantt_project_id: projectId,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(parseApiError(err, 'Extraction failed'));
+    }
+    const data = await res.json();
+    setDraft(data);
+    setDraftTasks(data.tasks || []);
+    return data;
+  };
+
+  const handleAnalyze = async () => {
+    if (!projectId || (!selectedFile && !uploadedFileId)) return;
+
+    setFlowError(null);
+
     try {
-      const form = new FormData();
-      form.append('gantt_project_id', projectId);
-      form.append('file', selectedFile);
+      let fileId = uploadedFileId;
 
-      const uploadHeaders = getGanttHeaders();
-      delete uploadHeaders['Content-Type'];
-
-      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/gantt/upload`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: uploadHeaders,
-        body: form,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(parseApiError(err, 'Upload failed'));
+      if (selectedFile && !fileId) {
+        setUploading(true);
+        fileId = await uploadSelectedFile();
+        setUploading(false);
       }
-      const data = await res.json();
-      setUploadedFileId(data.file_id);
-      toast.success('File uploaded');
+
+      setExtracting(true);
+      const data = await extractUploadedFile(fileId);
+
+      if (!(data.tasks || []).length) {
+        const warningText = (data.warnings || []).join(' ') || 'No tasks were found in this document.';
+        setFlowError(
+          `Analysis completed but no tasks were extracted. ${warningText} Try a CSV export, a PDF with a text layer, or a clearer chart image.`
+        );
+      } else {
+        toast.success('Draft ready for review');
+      }
     } catch (error) {
+      setFlowError(error.message);
       toast.error(error.message);
     } finally {
       setUploading(false);
-    }
-  };
-
-  const handleExtract = async () => {
-    if (!uploadedFileId || !projectId) return;
-    setExtracting(true);
-    try {
-      const res = await apiFetch('/gantt/extract', {
-        method: 'POST',
-        body: JSON.stringify({
-          file_id: uploadedFileId,
-          gantt_project_id: projectId,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(parseApiError(err, 'Extraction failed'));
-      }
-      const data = await res.json();
-      setDraft(data);
-      setDraftTasks(data.tasks || []);
-      toast.success('Draft ready for review');
-    } catch (error) {
-      toast.error(error.message);
-    } finally {
       setExtracting(false);
     }
   };
@@ -224,6 +252,7 @@ export const GanttImportReview = ({
       setDraftTasks([]);
       setSelectedFile(null);
       setUploadedFileId(null);
+      setFlowError(null);
       onClose?.();
     } catch (error) {
       toast.error(error.message);
@@ -250,6 +279,41 @@ export const GanttImportReview = ({
     [allowedExtensions]
   );
 
+  const sourceType = selectedFile ? getFileSourceType(selectedFile.name) : null;
+
+  const analyzeExplanation = useMemo(() => {
+    if (!sourceType) return null;
+    if (sourceType === 'csv') {
+      return 'CSV files are parsed directly: column headers are matched to phases, task titles, dates, and dependencies. No AI is used.';
+    }
+    if (sourceType === 'pdf') {
+      return 'PDFs are read for text, then GPT-4o extracts phases, tasks, milestones, dates, and dependencies into a reviewable draft.';
+    }
+    return 'Images are analyzed with GPT-4o Vision to detect chart bars, milestones, phases, dates, and dependencies into a reviewable draft.';
+  }, [sourceType]);
+
+  const extractSteps = sourceType
+    ? EXTRACT_PROGRESS_STEPS[sourceType]
+    : EXTRACT_PROGRESS_STEPS.pdf;
+
+  const analyzing = uploading || extracting;
+
+  const analyzeButtonLabel = useMemo(() => {
+    if (uploading) return 'Uploading…';
+    if (extracting) {
+      return sourceType === 'csv' ? 'Parsing spreadsheet…' : 'Analyzing…';
+    }
+    return sourceType === 'csv' ? 'Parse spreadsheet' : 'Analyze with AI';
+  }, [uploading, extracting, sourceType]);
+
+  const activeFlowStep = draft
+    ? 'review'
+    : analyzing
+      ? 'analyze'
+      : selectedFile
+        ? 'analyze'
+        : 'select';
+
   return (
     <div className="rounded-lg border bg-card p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -267,8 +331,80 @@ export const GanttImportReview = ({
         </Button>
       </div>
 
+      {flowError && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive flex gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <p>{flowError}</p>
+        </div>
+      )}
+
       {!draft && (
         <div className="space-y-3">
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+            <div>
+              <p className="text-sm font-medium">How import works</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Upload a planning document and let AI build a draft schedule. Nothing is saved
+                to your chart until you review and confirm.
+              </p>
+              {importConfig?.review_message && (
+                <p className="text-sm text-muted-foreground mt-2">{importConfig.review_message}</p>
+              )}
+            </div>
+            <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {IMPORT_FLOW_STEPS.map((step, index) => {
+                const stepOrder = ['select', 'analyze', 'review', 'confirm'];
+                const activeIndex = stepOrder.indexOf(activeFlowStep);
+                const stepIndex = stepOrder.indexOf(step.key);
+                const isActive = step.key === activeFlowStep;
+                const isDone = stepIndex >= 0 && activeIndex > stepIndex;
+                return (
+                  <li
+                    key={step.key}
+                    className={cn(
+                      'rounded-md border p-3 text-sm',
+                      isActive && 'border-primary bg-primary/5',
+                      isDone && 'border-emerald-500/40 bg-emerald-500/5'
+                    )}
+                  >
+                    <div className="flex items-center gap-2 font-medium">
+                      <span
+                        className={cn(
+                          'flex h-5 w-5 items-center justify-center rounded-full text-[10px]',
+                          isDone
+                            ? 'bg-emerald-500 text-white'
+                            : isActive
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted text-muted-foreground'
+                        )}
+                      >
+                        {isDone ? <Check className="h-3 w-3" /> : index + 1}
+                      </span>
+                      {step.label}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2 pl-7">{step.description}</p>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+
+          {uploading && (
+            <GanttImportProgress
+              active={uploading}
+              steps={UPLOAD_PROGRESS_STEPS}
+              label="Uploading your document"
+            />
+          )}
+
+          {extracting && (
+            <GanttImportProgress
+              active={extracting}
+              steps={extractSteps}
+              label={sourceType === 'csv' ? 'Parsing your spreadsheet' : 'AI is analyzing your document'}
+            />
+          )}
+
           <div
             className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
               dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
@@ -291,29 +427,33 @@ export const GanttImportReview = ({
             />
           </div>
           {selectedFile && (
-            <p className="text-sm text-muted-foreground">
-              Selected: {selectedFile.name}
-            </p>
+            <div className="rounded-md bg-muted/40 px-3 py-2 text-sm space-y-1">
+              <p className="text-muted-foreground">
+                Selected: <span className="text-foreground font-medium">{selectedFile.name}</span>
+              </p>
+              {analyzeExplanation && (
+                <p className="text-xs text-muted-foreground">{analyzeExplanation}</p>
+              )}
+              {!analyzing && !draft && (
+                <p className="text-xs text-primary font-medium">
+                  Click {sourceType === 'csv' ? 'Parse spreadsheet' : 'Analyze with AI'} below to build your draft.
+                </p>
+              )}
+            </div>
           )}
+
           <div className="flex gap-2">
             <Button
-              onClick={handleUpload}
-              disabled={!selectedFile || uploading}
-              variant="outline"
+              onClick={handleAnalyze}
+              disabled={(!selectedFile && !uploadedFileId) || analyzing}
+              className="min-w-[180px]"
             >
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Upload
-            </Button>
-            <Button
-              onClick={handleExtract}
-              disabled={!uploadedFileId || extracting}
-            >
-              {extracting ? (
+              {analyzing ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
                 <Sparkles className="h-4 w-4 mr-2" />
               )}
-              Analyze with AI
+              {analyzeButtonLabel}
             </Button>
           </div>
         </div>
