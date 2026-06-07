@@ -31,7 +31,7 @@ export const GanttChartTool = () => {
   const [ganttConfig, setGanttConfig] = useState({
     task_statuses: ['not_started', 'in_progress', 'completed', 'blocked'],
     task_types: ['task', 'milestone'],
-    dependency_types: ['FS'],
+    dependency_types: ['finish_to_start'],
   });
 
   const apiFetch = useCallback((path, options = {}) => {

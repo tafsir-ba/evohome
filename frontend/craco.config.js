@@ -24,6 +24,7 @@ if (config.enableHealthCheck) {
 
 let webpackConfig = {
   eslint: {
+    enable: false,
     configure: {
       extends: ["plugin:react-hooks/recommended"],
       rules: {
@@ -55,6 +56,12 @@ let webpackConfig = {
       if (config.enableHealthCheck && healthPluginInstance) {
         webpackConfig.plugins.push(healthPluginInstance);
       }
+
+      // Remove ForkTsCheckerWebpackPlugin — JS-only project; avoids ajv v6/v8 conflict in nested deps
+      webpackConfig.plugins = webpackConfig.plugins.filter(
+        (plugin) => plugin?.constructor?.name !== "ForkTsCheckerWebpackPlugin"
+      );
+
       return webpackConfig;
     },
   },

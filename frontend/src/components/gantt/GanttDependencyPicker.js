@@ -36,7 +36,7 @@ export const GanttDependencyPicker = ({
   };
 
   const handleSave = () => {
-    onChange(selected.map((id) => ({ task_id: id, type: 'FS' })));
+    onChange(selected.map((id) => ({ task_id: id, type: 'finish_to_start' })));
     setOpen(false);
   };
 
@@ -75,7 +75,7 @@ export const GanttDependencyPicker = ({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Select dependencies (FS)</DialogTitle>
+            <DialogTitle>Select dependencies (finish-to-start)</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 max-h-60 overflow-y-auto">
             {candidates.map((task) => (

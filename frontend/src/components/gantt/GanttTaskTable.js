@@ -108,7 +108,10 @@ export const GanttTaskTable = ({
         { method: 'DELETE' }
       );
       if (res.status === 409) {
-        toast.error('Cannot delete: other tasks depend on this one');
+        const err = await res.json().catch(() => ({}));
+        const ids = err.dependent_task_ids || [];
+        const base = err.detail || 'Cannot delete: other tasks depend on this one';
+        toast.error(ids.length ? `${base} Blocked by: ${ids.join(', ')}` : base);
         return;
       }
       if (!res.ok) {

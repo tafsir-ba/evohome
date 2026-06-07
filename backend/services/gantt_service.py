@@ -249,25 +249,31 @@ async def update_task(
     )
 
 
-async def count_task_dependents(
+async def list_task_dependent_ids(
     gantt_project_id: str,
     owner_user_id: str,
     task_id: str,
-) -> int:
-    return await db.gantt_tasks.count_documents({
-        "gantt_project_id": gantt_project_id,
-        "owner_user_id": owner_user_id,
-        "dependencies.task_id": task_id,
-    })
+) -> List[str]:
+    docs = await db.gantt_tasks.find(
+        {
+            "gantt_project_id": gantt_project_id,
+            "owner_user_id": owner_user_id,
+            "dependencies.task_id": task_id,
+        },
+        {"_id": 0, "task_id": 1},
+    ).to_list(500)
+    return [doc["task_id"] for doc in docs]
 
 
 async def delete_task(
     gantt_project_id: str,
     owner_user_id: str,
     task_id: str,
-) -> str:
+) -> Any:
     """
-    Delete a task. Returns 'deleted', 'not_found', or 'has_dependents'.
+    Delete a task.
+    Returns 'deleted', 'not_found', or
+    {'status': 'has_dependents', 'dependent_task_ids': [...]}.
     """
     project = await _get_project_for_owner(gantt_project_id, owner_user_id)
     if not project:
@@ -284,9 +290,12 @@ async def delete_task(
     if not existing:
         return "not_found"
 
-    dependents = await count_task_dependents(gantt_project_id, owner_user_id, task_id)
-    if dependents > 0:
-        return "has_dependents"
+    dependent_ids = await list_task_dependent_ids(gantt_project_id, owner_user_id, task_id)
+    if dependent_ids:
+        return {
+            "status": "has_dependents",
+            "dependent_task_ids": dependent_ids,
+        }
 
     await db.gantt_tasks.delete_one(
         {"task_id": task_id, "gantt_project_id": gantt_project_id, "owner_user_id": owner_user_id}

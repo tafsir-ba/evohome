@@ -44,9 +44,13 @@ class TestDateValidation:
         with pytest.raises(GanttValidationError, match="valid calendar date"):
             normalize_task_dates("task", "2026-02-30", None)
 
-    def test_duration_computed_inclusive(self):
+    def test_duration_computed_exclusive(self):
         _, _, duration = normalize_task_dates("task", "2026-01-01", "2026-01-03")
-        assert duration == 3
+        assert duration == 2
+
+    def test_duration_spec_example_march(self):
+        _, _, duration = normalize_task_dates("task", "2025-03-01", "2025-03-15")
+        assert duration == 14
 
 
 class TestMilestoneValidation:
@@ -69,7 +73,7 @@ class TestDependencyValidation:
     def test_reject_self_dependency(self):
         with pytest.raises(GanttValidationError, match="cannot depend on itself"):
             validate_dependencies(
-                [{"task_id": "gt_abc", "type": "FS"}],
+                [{"task_id": "gt_abc", "type": "finish_to_start"}],
                 "gt_abc",
                 {"gt_abc"},
             )
@@ -77,12 +81,12 @@ class TestDependencyValidation:
     def test_reject_missing_dependency(self):
         with pytest.raises(GanttValidationError, match="not found in project"):
             validate_dependencies(
-                [{"task_id": "gt_missing", "type": "FS"}],
+                [{"task_id": "gt_missing", "type": "finish_to_start"}],
                 "gt_abc",
                 {"gt_abc"},
             )
 
-    def test_reject_non_fs_type(self):
+    def test_reject_unsupported_dependency_type(self):
         with pytest.raises(GanttValidationError, match="Unsupported dependency type"):
             validate_dependencies(
                 [{"task_id": "gt_b", "type": "SS"}],
@@ -92,15 +96,15 @@ class TestDependencyValidation:
 
     def test_detect_cycle(self):
         tasks = [
-            {"task_id": "gt_a", "dependencies": [{"task_id": "gt_b", "type": "FS"}]},
-            {"task_id": "gt_b", "dependencies": [{"task_id": "gt_c", "type": "FS"}]},
+            {"task_id": "gt_a", "dependencies": [{"task_id": "gt_b", "type": "finish_to_start"}]},
+            {"task_id": "gt_b", "dependencies": [{"task_id": "gt_c", "type": "finish_to_start"}]},
             {"task_id": "gt_c", "dependencies": []},
         ]
         with pytest.raises(GanttValidationError, match="Circular dependency"):
             detect_dependency_cycle(
                 tasks,
                 "gt_c",
-                [{"task_id": "gt_a", "type": "FS"}],
+                [{"task_id": "gt_a", "type": "finish_to_start"}],
             )
 
 
@@ -109,7 +113,7 @@ class TestGanttConfig:
         config = get_gantt_config()
         assert config["task_statuses"] == sorted(_gantt_validation.VALID_STATUSES)
         assert config["task_types"] == list(_gantt_validation.VALID_TASK_TYPES)
-        assert config["dependency_types"] == ["FS"]
+        assert config["dependency_types"] == ["finish_to_start"]
 
 
 class TestTaskPayloadValidation:

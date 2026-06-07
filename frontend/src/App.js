@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
@@ -78,6 +78,13 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
+/** CMP data shell — only mounts for /agent/* routes (not standalone tools). */
+const CmpDataLayout = () => (
+  <DataProvider>
+    <Outlet />
+  </DataProvider>
+);
+
 const AppRouter = () => {
   const location = useLocation();
   
@@ -116,125 +123,124 @@ const AppRouter = () => {
         </ProtectedRoute>
       } />
       
-      {/* Agent routes */}
-      {/* New Agent Homepage (Command Center) */}
-      <Route path="/agent/home" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentHomePage />
-        </ProtectedRoute>
-      } />
-      {/* Legacy dashboard - kept for fallback */}
-      <Route path="/agent/dashboard-legacy" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentDashboard />
-        </ProtectedRoute>
-      } />
-      {/* Original /agent/dashboard redirects based on feature flag */}
-      <Route path="/agent/dashboard" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          {USE_NEW_AGENT_HOME ? <Navigate to="/agent/home" replace /> : <AgentDashboard />}
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/clients" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentClients />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/clients/:clientId" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentClientDetail />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/projects" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentProjects />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/quotes" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentQuotes />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/quotes/new" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentQuoteUpload />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/quotes/:quoteId" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentQuoteDetail />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/quotes/edit/:quoteId" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentQuoteUpload />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/invoices" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentInvoices />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/invoices/new" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentInvoiceUpload />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/invoices/:invoiceId" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentInvoiceDetail />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/invoices/edit/:invoiceId" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentInvoiceUpload />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/timeline" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentTimeline />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/feed" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentFeed />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/team" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentTeam />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/clients/:clientId/preview" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <ClientPreview />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/workflow" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentWorkflow />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/billing" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentBilling />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/settings" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentSettings />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/analytics" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentAnalytics />
-        </ProtectedRoute>
-      } />
-      <Route path="/agent/vault" element={
-        <ProtectedRoute allowedRoles={['agent']}>
-          <AgentVault />
-        </ProtectedRoute>
-      } />
+      {/* Agent routes — CMP DataProvider scoped to /agent/* only */}
+      <Route element={<CmpDataLayout />}>
+        <Route path="/agent/home" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentHomePage />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/dashboard-legacy" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/dashboard" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            {USE_NEW_AGENT_HOME ? <Navigate to="/agent/home" replace /> : <AgentDashboard />}
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/clients" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentClients />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/clients/:clientId" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentClientDetail />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/projects" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentProjects />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/quotes" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentQuotes />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/quotes/new" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentQuoteUpload />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/quotes/:quoteId" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentQuoteDetail />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/quotes/edit/:quoteId" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentQuoteUpload />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/invoices" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentInvoices />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/invoices/new" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentInvoiceUpload />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/invoices/:invoiceId" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentInvoiceDetail />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/invoices/edit/:invoiceId" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentInvoiceUpload />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/timeline" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentTimeline />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/feed" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentFeed />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/team" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentTeam />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/clients/:clientId/preview" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <ClientPreview />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/workflow" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentWorkflow />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/billing" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentBilling />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/settings" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentSettings />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/analytics" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentAnalytics />
+          </ProtectedRoute>
+        } />
+        <Route path="/agent/vault" element={
+          <ProtectedRoute allowedRoles={['agent']}>
+            <AgentVault />
+          </ProtectedRoute>
+        } />
+      </Route>
       
       {/* Default redirect */}
       <Route path="/" element={<LandingPage />} />
@@ -249,10 +255,8 @@ function App() {
       <ThemeProvider>
         <AuthProvider>
           <SettingsProvider>
-            <DataProvider>
-              <AppRouter />
-              <Toaster position="top-right" richColors />
-            </DataProvider>
+            <AppRouter />
+            <Toaster position="top-right" richColors />
           </SettingsProvider>
         </AuthProvider>
       </ThemeProvider>

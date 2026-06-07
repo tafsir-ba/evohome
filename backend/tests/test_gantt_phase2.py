@@ -1,10 +1,14 @@
 """
-Gantt Chart Phase 2 — integration tests.
+Gantt Chart Phase 2 — E2E integration tests (require live backend + MongoDB).
+
+Run explicitly: pytest -m e2e backend/tests/test_gantt_phase2.py
 """
 import os
 
 import pytest
 import requests
+
+pytestmark = pytest.mark.e2e
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://localhost:8001").rstrip("/")
 
@@ -119,7 +123,7 @@ class TestGanttPhase2:
         )
         assert response.status_code == 200, response.text
         task = response.json()
-        assert task["duration_days"] == 5
+        assert task["duration_days"] == 4
         assert task["source"] == "manual"
 
     def test_05_reject_end_before_start(self, auth_headers, gantt_project):
@@ -181,7 +185,7 @@ class TestGanttPhase2:
             headers=auth_headers,
             json={
                 "title": "Depends on ghost",
-                "dependencies": [{"task_id": "gt_nonexistent", "type": "FS"}],
+                "dependencies": [{"task_id": "gt_nonexistent", "type": "finish_to_start"}],
             },
         )
         assert response.status_code == 400
@@ -199,7 +203,7 @@ class TestGanttPhase2:
         response = requests.patch(
             f"{BASE_URL}/api/gantt/projects/{project_id}/tasks/{task_id}",
             headers=auth_headers,
-            json={"dependencies": [{"task_id": task_id, "type": "FS"}]},
+            json={"dependencies": [{"task_id": task_id, "type": "finish_to_start"}]},
         )
         assert response.status_code == 400
 
@@ -216,14 +220,14 @@ class TestGanttPhase2:
             headers=auth_headers,
             json={
                 "title": "Task 2",
-                "dependencies": [{"task_id": t1["task_id"], "type": "FS"}],
+                "dependencies": [{"task_id": t1["task_id"], "type": "finish_to_start"}],
             },
         ).json()
 
         response = requests.patch(
             f"{BASE_URL}/api/gantt/projects/{project_id}/tasks/{t1['task_id']}",
             headers=auth_headers,
-            json={"dependencies": [{"task_id": t2["task_id"], "type": "FS"}]},
+            json={"dependencies": [{"task_id": t2["task_id"], "type": "finish_to_start"}]},
         )
         assert response.status_code == 400
 
@@ -270,20 +274,24 @@ class TestGanttPhase2:
             headers=auth_headers,
             json={"title": "Parent"},
         ).json()
-        requests.post(
+        child = requests.post(
             f"{BASE_URL}/api/gantt/projects/{project_id}/tasks",
             headers=auth_headers,
             json={
                 "title": "Child",
-                "dependencies": [{"task_id": parent["task_id"], "type": "FS"}],
+                "dependencies": [{"task_id": parent["task_id"], "type": "finish_to_start"}],
             },
-        )
+        ).json()
 
         response = requests.delete(
             f"{BASE_URL}/api/gantt/projects/{project_id}/tasks/{parent['task_id']}",
             headers=auth_headers,
         )
         assert response.status_code == 409
+        data = response.json()
+        assert "dependent_task_ids" in data
+        assert child["task_id"] in data["dependent_task_ids"]
+        assert "depend on it" in data["detail"]
 
     def test_15_delete_without_dependents_200(self, auth_headers, gantt_project):
         project_id = gantt_project["gantt_project_id"]
@@ -358,7 +366,7 @@ class TestGanttPhase2:
         assert "Phase 1" in body
         assert t1["task_id"] not in body or "dependencies" in body
 
-    def test_18_reject_non_fs_dependency_types(self, auth_headers, gantt_project):
+    def test_18_reject_unsupported_dependency_types(self, auth_headers, gantt_project):
         project_id = gantt_project["gantt_project_id"]
         dep = requests.post(
             f"{BASE_URL}/api/gantt/projects/{project_id}/tasks",

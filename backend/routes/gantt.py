@@ -4,7 +4,7 @@ Gantt Chart Routes — standalone tool (no CMP coupling).
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from core.auth import get_current_user
 from models.gantt_schemas import (
@@ -138,10 +138,16 @@ async def delete_task(project_id: str, task_id: str, user=Depends(get_current_us
 
     if result == "not_found":
         raise HTTPException(status_code=404, detail="Task not found")
-    if result == "has_dependents":
-        raise HTTPException(
+    if isinstance(result, dict) and result.get("status") == "has_dependents":
+        dependent_ids = result.get("dependent_task_ids", [])
+        count = len(dependent_ids)
+        noun = "task" if count == 1 else "tasks"
+        return JSONResponse(
             status_code=409,
-            detail="Cannot delete task: other tasks depend on it",
+            content={
+                "detail": f"Cannot delete task: {count} other {noun} depend on it.",
+                "dependent_task_ids": dependent_ids,
+            },
         )
     return {"message": "Task deleted", "task_id": task_id}
 

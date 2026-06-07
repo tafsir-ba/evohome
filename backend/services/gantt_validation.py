@@ -14,7 +14,8 @@ class GanttValidationError(Exception):
 
 
 VALID_STATUSES = {"not_started", "in_progress", "completed", "blocked"}
-VALID_DEPENDENCY_TYPES = {"FS"}
+VALID_DEPENDENCY_TYPES = {"finish_to_start"}
+DEPENDENCY_TYPE_FINISH_TO_START = "finish_to_start"
 VALID_TASK_TYPES = ("task", "milestone")
 
 
@@ -58,7 +59,7 @@ def compute_duration_days(
         return 0
 
     assert start is not None and end is not None
-    return (end - start).days + 1
+    return (end - start).days
 
 
 def normalize_task_dates(
@@ -108,7 +109,7 @@ def validate_dependencies(
     task_id: str,
     project_task_ids: Set[str],
 ) -> List[Dict[str, str]]:
-    """Validate dependency list: same project, no self-ref, FS only."""
+    """Validate dependency list: same project, no self-ref, finish_to_start only."""
     if not dependencies:
         return []
 
@@ -117,7 +118,7 @@ def validate_dependencies(
 
     for dep in dependencies:
         dep_task_id = dep.get("task_id")
-        dep_type = dep.get("type", "FS")
+        dep_type = dep.get("type", DEPENDENCY_TYPE_FINISH_TO_START)
 
         if not dep_task_id:
             raise GanttValidationError("Dependency task_id is required")
@@ -135,7 +136,7 @@ def validate_dependencies(
             continue
 
         seen.add(dep_task_id)
-        normalized.append({"task_id": dep_task_id, "type": "FS"})
+        normalized.append({"task_id": dep_task_id, "type": DEPENDENCY_TYPE_FINISH_TO_START})
 
     return normalized
 
