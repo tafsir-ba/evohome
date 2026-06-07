@@ -581,9 +581,9 @@ export const GanttTaskTable = ({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[10px] text-muted-foreground">
           {phaseGroups.length} phase{phaseGroups.length === 1 ? '' : 's'} · {tasks.length} task{tasks.length === 1 ? '' : 's'}
         </p>
         <div className="flex gap-2">
@@ -623,7 +623,7 @@ export const GanttTaskTable = ({
               return (
                 <Fragment key={phase}>
                   <TableRow className="bg-muted/40 hover:bg-muted/50">
-                    <TableCell colSpan={10} className="py-2">
+                    <TableCell colSpan={10} className="py-1">
                       <button
                         type="button"
                         className="flex items-center gap-2 w-full text-left font-medium text-sm"

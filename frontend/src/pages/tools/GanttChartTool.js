@@ -38,6 +38,8 @@ export const GanttChartTool = () => {
   });
   const [showImport, setShowImport] = useState(false);
   const [saveStatus, setSaveStatus] = useState({ saving: false, dirty: false });
+  const [chartSaving, setChartSaving] = useState(false);
+  const [tableCollapsed, setTableCollapsed] = useState(true);
 
   const apiFetch = useCallback((path, options = {}) => {
     const { headers: optionHeaders, ...rest } = options;
@@ -115,7 +117,7 @@ export const GanttChartTool = () => {
     titleDraft.trim() !== selectedProject.title;
 
   const combinedSaveStatus = {
-    saving: saveStatus.saving,
+    saving: saveStatus.saving || chartSaving,
     dirty: saveStatus.dirty || titleDirty,
   };
 
@@ -168,7 +170,7 @@ export const GanttChartTool = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="w-full px-2 sm:px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <BarChart3 className="h-6 w-6 text-primary" />
             <div>
@@ -199,9 +201,9 @@ export const GanttChartTool = () => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <aside className="lg:col-span-1">
+      <main className="w-full px-2 py-2 sm:px-3">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-2">
+          <aside className="lg:col-span-2 xl:col-span-2">
             {loadingProjects ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -219,14 +221,14 @@ export const GanttChartTool = () => {
             )}
           </aside>
 
-          <section className="lg:col-span-3 space-y-6">
+          <section className="lg:col-span-10 xl:col-span-10 space-y-2 min-w-0">
             {!selectedProject ? (
               <div className="rounded-lg border bg-muted/30 p-12 text-center text-muted-foreground">
                 Select or create a project to manage tasks.
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center justify-between gap-2 flex-wrap py-1">
                   {editingTitle ? (
                     <div className="flex items-center gap-2 flex-1">
                       <Input
@@ -289,23 +291,46 @@ export const GanttChartTool = () => {
                   />
                 )}
 
-                <GanttTaskTable
-                  key={selectedId}
-                  projectId={selectedId}
-                  tasks={tasks}
-                  loading={loadingTasks}
-                  taskStatuses={ganttConfig.task_statuses}
-                  taskTypes={ganttConfig.task_types}
-                  onRefresh={() => fetchTasks(selectedId)}
-                  apiFetch={apiFetch}
-                  onSaveStatusChange={setSaveStatus}
-                />
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      Gantt chart
+                    </h3>
+                    <span className="text-[10px] text-muted-foreground">
+                      Drag bars to move · drag edges to resize
+                    </span>
+                  </div>
+                  <GanttTimelinePreview
+                    tasks={tasks}
+                    projectId={selectedId}
+                    apiFetch={apiFetch}
+                    onTasksChange={setTasks}
+                    onSaving={setChartSaving}
+                    onRevert={() => fetchTasks(selectedId)}
+                  />
+                </div>
 
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide">
-                    Timeline Preview
-                  </h3>
-                  <GanttTimelinePreview tasks={tasks} />
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 hover:text-foreground"
+                    onClick={() => setTableCollapsed((v) => !v)}
+                  >
+                    {tableCollapsed ? '▸' : '▾'} Task table
+                  </button>
+                  {!tableCollapsed && (
+                    <GanttTaskTable
+                      key={selectedId}
+                      projectId={selectedId}
+                      tasks={tasks}
+                      loading={loadingTasks}
+                      taskStatuses={ganttConfig.task_statuses}
+                      taskTypes={ganttConfig.task_types}
+                      onRefresh={() => fetchTasks(selectedId)}
+                      apiFetch={apiFetch}
+                      onSaveStatusChange={setSaveStatus}
+                    />
+                  )}
                 </div>
               </>
             )}
