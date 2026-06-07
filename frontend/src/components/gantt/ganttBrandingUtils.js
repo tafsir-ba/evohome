@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { GANTT_LOGO_PATH } from './GanttLogo';
+import { GANTT_LOGO_MARK_PATH } from './GanttLogo';
 import { isGanttHost } from './ganttHostUtils';
 
 const EVOME_TITLE = 'Evohome | Real Estate Management';
@@ -28,9 +28,9 @@ export const applyGanttBranding = (appName) => {
   if (!isGanttHost()) return;
   document.title = appName;
   ganttFaviconLink = ensureBrandedLink('icon', ganttFaviconLink);
-  ganttFaviconLink.href = GANTT_LOGO_PATH;
+  ganttFaviconLink.href = GANTT_LOGO_MARK_PATH;
   ganttAppleTouchLink = ensureBrandedLink('apple-touch-icon', ganttAppleTouchLink);
-  ganttAppleTouchLink.href = GANTT_LOGO_PATH;
+  ganttAppleTouchLink.href = GANTT_LOGO_MARK_PATH;
   const meta = document.querySelector('meta[name="description"]');
   if (meta) meta.setAttribute('content', GANTT_DESCRIPTION);
 };
