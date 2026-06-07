@@ -1,6 +1,7 @@
 """
 Gantt Chart — shared constants (Single Source of Truth for backend + config API).
 """
+from core.gantt_access import GANTT_LOGIN_DENIED_MESSAGE
 
 GANTT_APP_NAME = "Caribbean Regional Connectivity"
 

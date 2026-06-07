@@ -134,6 +134,8 @@ class TestGanttConfig:
         config = get_gantt_config()
         assert config["app_name"] == "Caribbean Regional Connectivity"
         assert config["requires_auth"] is True
+        assert config["registration_enabled"] is False
+        assert "invitation only" in config["login_denied_message"].lower()
         assert config["default_auth_role"] == "agent"
         assert config["task_statuses"] == sorted(_gantt_validation.VALID_STATUSES)
         assert config["task_types"] == list(_gantt_validation.VALID_TASK_TYPES)

@@ -10,6 +10,9 @@ export const GANTT_AUTH_ROLE = 'agent';
 const DEFAULT_PUBLIC_CONFIG = {
   app_name: GANTT_APP_NAME,
   requires_auth: true,
+  registration_enabled: false,
+  login_denied_message:
+    'Login is not available for this account. Access to this application is by invitation only.',
   default_auth_role: GANTT_AUTH_ROLE,
 };
 
@@ -30,6 +33,9 @@ export const useGanttPublicConfig = () => {
           setConfig({
             app_name: data.app_name || GANTT_APP_NAME,
             requires_auth: data.requires_auth !== false,
+            registration_enabled: data.registration_enabled === true,
+            login_denied_message:
+              data.login_denied_message || DEFAULT_PUBLIC_CONFIG.login_denied_message,
             default_auth_role: data.default_auth_role || GANTT_AUTH_ROLE,
           });
         }

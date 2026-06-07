@@ -12,7 +12,11 @@ import { getPostAuthPath, useGanttPublicConfig } from '../../components/gantt/ga
 import { useGanttBranding } from '../../components/gantt/ganttBrandingUtils';
 
 export const GanttLoginPage = () => {
-  const { app_name: appName, default_auth_role: authRole } = useGanttPublicConfig();
+  const {
+    app_name: appName,
+    default_auth_role: authRole,
+    registration_enabled: registrationEnabled,
+  } = useGanttPublicConfig();
   useGanttBranding(appName);
   const { user, loginWithGoogle, setAuthUser } = useAuth();
   const navigate = useNavigate();
@@ -149,12 +153,14 @@ export const GanttLoginPage = () => {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
-          No account?{' '}
-          <Link to="/register" className="text-primary hover:underline font-medium">
-            Create one
-          </Link>
-        </p>
+        {registrationEnabled ? (
+          <p className="text-center text-sm text-muted-foreground">
+            No account?{' '}
+            <Link to="/register" className="text-primary hover:underline font-medium">
+              Create one
+            </Link>
+          </p>
+        ) : null}
       </div>
     </GanttAuthShell>
   );

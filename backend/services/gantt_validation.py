@@ -8,6 +8,7 @@ from services.gantt_constants import (
     ALLOWED_UPLOAD_EXTENSIONS,
     GANTT_APP_NAME,
     GANTT_EXTRACTION_MODEL,
+    GANTT_LOGIN_DENIED_MESSAGE,
     GANTT_REVIEW_MESSAGE,
     LOW_CONFIDENCE_THRESHOLD,
     MAX_UPLOAD_SIZE_BYTES,
@@ -33,6 +34,8 @@ def get_gantt_config() -> Dict[str, Any]:
     return {
         "app_name": GANTT_APP_NAME,
         "requires_auth": True,
+        "registration_enabled": False,
+        "login_denied_message": GANTT_LOGIN_DENIED_MESSAGE,
         "default_auth_role": "agent",
         "task_statuses": sorted(VALID_STATUSES),
         "task_types": list(VALID_TASK_TYPES),

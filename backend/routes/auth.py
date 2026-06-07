@@ -22,6 +22,12 @@ from core.rate_limit import rate_limit_check
 from core.monitoring import capture_auth_failure
 from services.email_service import send_notification_email, send_email_async
 from core.config import get_config
+from core.gantt_access import (
+    GANTT_LOGIN_DENIED_MESSAGE,
+    enforce_gantt_login_allowed,
+    enforce_gantt_registration_closed,
+    is_gantt_auth_request,
+)
 from core.gantt_site import GANTT_ORIGINS, gantt_welcome_email_data, is_gantt_request
 from services.gantt_constants import GANTT_APP_NAME
 
@@ -118,6 +124,7 @@ class AuthLogoutResponse(BaseModel):
 @router.post("/auth/register")
 async def register_agent(data: AgentRegister, response: Response, request: Request):
     await rate_limit_check(request, "auth_register")
+    enforce_gantt_registration_closed(request)
     existing = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
 
     if existing:
@@ -169,6 +176,7 @@ async def register_agent(data: AgentRegister, response: Response, request: Reque
 @router.post("/auth/login")
 async def login_agent(data: AgentLogin, response: Response, request: Request):
     await rate_limit_check(request, "auth_login")
+    enforce_gantt_login_allowed(request, data.email)
     user = await db.users.find_one({"email": data.email, "role": "agent"}, {"_id": 0})
     if not user:
         capture_auth_failure("invalid_credentials", email=data.email, request=request)
@@ -309,6 +317,12 @@ async def google_oauth_callback(request: Request, response: Response):
     if not email:
         raise HTTPException(status_code=400, detail="Email not provided by Google")
 
+    if is_gantt_auth_request(request, redirect_uri):
+        enforce_gantt_login_allowed(request, email, redirect_uri=redirect_uri)
+        existing_for_gate = await db.users.find_one({"email": email, "role": "agent"}, {"_id": 0})
+        if not existing_for_gate:
+            raise HTTPException(status_code=403, detail=GANTT_LOGIN_DENIED_MESSAGE)
+
     existing_agent = await db.users.find_one({"email": email, "role": "agent"}, {"_id": 0})
     existing_buyer = await db.users.find_one({"email": email, "role": "buyer"}, {"_id": 0})
     client_link = await db.clients.find_one({"email": email}, {"_id": 0})
@@ -387,6 +401,7 @@ async def forgot_password(request: ForgotPasswordRequest, req: Request):
     role = request.role
     if role not in ['agent', 'buyer']:
         raise HTTPException(status_code=400, detail="Invalid role")
+    enforce_gantt_login_allowed(req, email)
     user = await db.users.find_one({"email": email, "role": role, "password_hash": {"$exists": True}})
     if not user:
         return {"message": "If an account exists with this email, you will receive a reset link."}
