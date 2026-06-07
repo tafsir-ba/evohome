@@ -142,11 +142,12 @@ export const GanttPlanningCockpit = ({
   onRevert,
   onRefresh,
 }) => {
-  const scrollRef = useRef(null);
+  const verticalScrollRef = useRef(null);
   const timelineHeaderRef = useRef(null);
   const timelineBodyRef = useRef(null);
   const dragPreviewRef = useRef(null);
   const skipBlurSaveRef = useRef(false);
+  const syncingHorizontalScrollRef = useRef(false);
 
   const [collapsedPhases, setCollapsedPhases] = useState(new Set());
   const [selectedId, setSelectedId] = useState(null);
@@ -198,28 +199,23 @@ export const GanttPlanningCockpit = ({
 
   const totalBodyHeight = rows.reduce((sum, row) => sum + rowHeightFor(row), 0);
 
-  const dependencyLayout = useMemo(
-    () => buildRowLayout(buildCockpitRows(tasks, new Set())),
-    [tasks]
-  );
+  const rowLayout = useMemo(() => buildRowLayout(rows), [rows]);
 
   const effectiveTasks = useMemo(
     () => mergeTaskPreviews(tasks, previews),
     [tasks, previews]
   );
 
-  const timelineContentHeight = Math.max(totalBodyHeight, dependencyLayout.totalHeight);
-
   const dependencyPaths = useMemo(() => {
     if (!minDate) return [];
     return buildDependencyPaths(
       effectiveTasks,
-      dependencyLayout,
+      rowLayout,
       minDate,
       pxPerDay,
       totalDays
     );
-  }, [effectiveTasks, dependencyLayout, minDate, pxPerDay, totalDays]);
+  }, [effectiveTasks, rowLayout, minDate, pxPerDay, totalDays]);
 
   useEffect(() => {
     onSaveStatusChange?.({ saving: Boolean(dragging), dirty: Boolean(editingTitleId) });
@@ -235,11 +231,23 @@ export const GanttPlanningCockpit = ({
     return () => window.removeEventListener('resize', measure);
   }, [fitToScreen]);
 
-  const syncHeaderScroll = useCallback(() => {
-    if (timelineHeaderRef.current && timelineBodyRef.current) {
-      timelineHeaderRef.current.scrollLeft = timelineBodyRef.current.scrollLeft;
-    }
+  const syncHorizontalScroll = useCallback((source, target) => {
+    if (!source || !target || syncingHorizontalScrollRef.current) return;
+    if (source.scrollLeft === target.scrollLeft) return;
+    syncingHorizontalScrollRef.current = true;
+    target.scrollLeft = source.scrollLeft;
+    requestAnimationFrame(() => {
+      syncingHorizontalScrollRef.current = false;
+    });
   }, []);
+
+  const handleTimelineBodyScroll = useCallback(() => {
+    syncHorizontalScroll(timelineBodyRef.current, timelineHeaderRef.current);
+  }, [syncHorizontalScroll]);
+
+  const handleTimelineHeaderScroll = useCallback(() => {
+    syncHorizontalScroll(timelineHeaderRef.current, timelineBodyRef.current);
+  }, [syncHorizontalScroll]);
 
   const selectTask = useCallback((taskId) => {
     setSelectedId(taskId);
@@ -405,7 +413,7 @@ export const GanttPlanningCockpit = ({
 
       const origin = connectorPointForTask(
         fromTask,
-        dependencyLayout,
+        rowLayout,
         minDate,
         pxPerDay,
         totalDays,
@@ -416,9 +424,10 @@ export const GanttPlanningCockpit = ({
       const timelineEl = timelineBodyRef.current;
       const clientToTimeline = (clientX, clientY) => {
         const rect = timelineEl.getBoundingClientRect();
+        const verticalScrollTop = verticalScrollRef.current?.scrollTop || 0;
         return {
           x: clientX - rect.left + (timelineEl.scrollLeft || 0),
-          y: clientY - rect.top,
+          y: clientY - rect.top + verticalScrollTop,
         };
       };
 
@@ -450,7 +459,7 @@ export const GanttPlanningCockpit = ({
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     },
-    [minDate, dependencyLayout, pxPerDay, totalDays, addDependency]
+    [minDate, rowLayout, pxPerDay, totalDays, addDependency]
   );
 
   const togglePhase = (phase) => {
@@ -515,12 +524,8 @@ export const GanttPlanningCockpit = ({
           </div>
           <div
             ref={timelineHeaderRef}
-            className="flex-1 overflow-x-auto overflow-y-hidden relative h-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            onScroll={() => {
-              if (timelineHeaderRef.current && timelineBodyRef.current) {
-                timelineBodyRef.current.scrollLeft = timelineHeaderRef.current.scrollLeft;
-              }
-            }}
+            className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden relative h-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            onScroll={handleTimelineHeaderScroll}
           >
             <div className="relative h-full" style={{ width: timelineWidth }}>
               {minDate &&
@@ -540,15 +545,17 @@ export const GanttPlanningCockpit = ({
           </div>
         </div>
 
-        {/* Shared vertical scroll */}
+        {/* Single vertical scroll: left task list + timeline body stay row-aligned */}
         <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto overflow-x-hidden min-h-0"
-          style={{ maxHeight: 'calc(100vh - 220px)' }}
+          ref={verticalScrollRef}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
         >
-          <div className="flex min-h-full">
+          <div className="flex" style={{ minHeight: totalBodyHeight }}>
             {/* Left task panel */}
-            <div className="shrink-0 border-r bg-card" style={{ width: LEFT_PANEL_WIDTH }}>
+            <div
+              className="shrink-0 border-r bg-card"
+              style={{ width: LEFT_PANEL_WIDTH, minHeight: totalBodyHeight }}
+            >
               {rows.map((row, i) => {
                 if (row.kind === 'phase') {
                   const color = phaseColorMap[row.phase] || PHASE_BAR_COLORS[0];
@@ -659,13 +666,14 @@ export const GanttPlanningCockpit = ({
               })}
             </div>
 
-            {/* Timeline body */}
+            {/* Timeline body: horizontal scroll only; vertical scroll handled by parent */}
             <div
               ref={timelineBodyRef}
-              className="flex-1 overflow-x-auto overflow-y-hidden relative"
-              onScroll={syncHeaderScroll}
+              className="flex-1 min-w-0 overflow-x-auto overflow-y-visible relative"
+              style={{ minHeight: totalBodyHeight }}
+              onScroll={handleTimelineBodyScroll}
             >
-              <div className="relative" style={{ width: timelineWidth, height: timelineContentHeight }}>
+              <div className="relative" style={{ width: timelineWidth, height: totalBodyHeight }}>
                 {!minDate && (
                   <div className="absolute inset-0 flex items-center justify-center text-[11px] text-muted-foreground pointer-events-none z-20">
                     Add start dates to tasks to display the timeline.
@@ -688,7 +696,7 @@ export const GanttPlanningCockpit = ({
                 <svg
                   className="absolute inset-0 pointer-events-none z-10"
                   width={timelineWidth}
-                  height={timelineContentHeight}
+                  height={totalBodyHeight}
                 >
                   {dependencyPaths.map((path) => (
                     <path

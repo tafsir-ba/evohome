@@ -55,13 +55,12 @@ describe('ganttCockpitUtils', () => {
     expect(rows[0].collapsed).toBe(true);
   });
 
-  test('buildDependencyPaths uses full expanded layout when phases collapsed', () => {
-    const collapsedRows = buildCockpitRows(sampleTasks, new Set(['Phase 1']));
-    const fullRows = buildCockpitRows(sampleTasks, new Set());
-    const fullLayout = buildRowLayout(fullRows);
+  test('buildDependencyPaths aligns with visible row layout', () => {
+    const visibleRows = buildCockpitRows(sampleTasks, new Set());
+    const layout = buildRowLayout(visibleRows);
     const { minDate, totalDays, pxPerDay } = getTimelineLayout(sampleTasks, 'Week');
-    const paths = buildDependencyPaths(sampleTasks, fullLayout, minDate, pxPerDay, totalDays);
+    const paths = buildDependencyPaths(sampleTasks, layout, minDate, pxPerDay, totalDays);
     expect(paths).toHaveLength(1);
-    expect(collapsedRows).toHaveLength(1);
+    expect(layout.totalHeight).toBeGreaterThan(0);
   });
 });
