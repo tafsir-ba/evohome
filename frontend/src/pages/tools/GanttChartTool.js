@@ -16,6 +16,7 @@ import {
   Loader2,
   Upload,
   LogIn,
+  Map,
   Plus,
   Diamond,
   Layers,
@@ -278,6 +279,12 @@ export const GanttChartTool = () => {
             <GanttLogo size="header" alt={appName} />
           </Link>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-8" asChild>
+              <Link to="/map">
+                <Map className="h-3.5 w-3.5 mr-1" />
+                <span className="hidden sm:inline">Vessel map</span>
+              </Link>
+            </Button>
             {user && (
               <span className="text-xs text-muted-foreground hidden sm:inline">
                 {user.name || user.email}

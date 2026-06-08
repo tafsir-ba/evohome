@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LogIn } from 'lucide-react';
+import { LogIn, Map } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { ThemeToggle } from '../../components/ThemeToggle';
@@ -39,12 +39,20 @@ export const GanttLandingPage = () => {
       </div>
       <div className="flex flex-col items-center gap-8 max-w-md w-full text-center">
         <GanttLogo size="landing" alt={appName} />
-        <Button asChild size="lg" className="h-11 px-8">
-          <Link to="/login">
-            <LogIn className="h-4 w-4 mr-2" />
-            Sign in
-          </Link>
-        </Button>
+        <div className="flex flex-col gap-3 w-full sm:flex-row sm:justify-center">
+          <Button asChild size="lg" className="h-11 px-8">
+            <Link to="/login">
+              <LogIn className="h-4 w-4 mr-2" />
+              Sign in
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="lg" className="h-11 px-8">
+            <Link to="/map">
+              <Map className="h-4 w-4 mr-2" />
+              Live vessel map
+            </Link>
+          </Button>
+        </div>
       </div>
     </div>
   );

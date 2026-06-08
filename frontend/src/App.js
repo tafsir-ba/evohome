@@ -40,6 +40,7 @@ import { GanttLoginPage } from "./pages/tools/GanttLoginPage";
 import { GanttRegisterPage } from "./pages/tools/GanttRegisterPage";
 import { GanttForgotPasswordPage } from "./pages/tools/GanttForgotPasswordPage";
 import { GanttResetPasswordPage } from "./pages/tools/GanttResetPasswordPage";
+import { CaribbeanMapPage } from "./pages/tools/CaribbeanMapPage";
 
 import "./App.css";
 
@@ -127,6 +128,9 @@ const AppRouter = () => {
       {/* Gantt: app.carib-recon.org serves tool; evohome redirects to app.carib-recon.org */}
       <Route path="/gantt" element={<GanttDomainRoute />} />
       <Route path="/tools/gantt-chart" element={<GanttDomainRoute />} />
+
+      {/* MarineTraffic embed test — Caribbean live AIS map (public) */}
+      <Route path="/map" element={<CaribbeanMapPage />} />
       
       {/* Buyer routes - Single timeline page */}
       <Route path="/buyer/dashboard" element={
