@@ -1,14 +1,15 @@
 # DigitalOcean App Platform — single CRC site (carib-recon.org)
-# Repo: tafsir-ba/Carib — one domain, path-based routes (/login, /gantt, /map).
+# Repo: tafsir-ba/Carib
 #
-# squid-app: import this spec or confirm repo/branch match in DO dashboard.
+# squid-app: both components use Docker. Frontend dockerfile_path is Dockerfile
+# (relative to source_dir frontend), NOT frontend/Dockerfile.
 
 name: caribbean-reconnect
 region: fra
 
 services:
   - name: carib-backend
-    dockerfile_path: backend/Dockerfile
+    dockerfile_path: Dockerfile
     source_dir: backend
     github:
       repo: tafsir-ba/Carib
@@ -48,15 +49,16 @@ services:
         scope: RUN_TIME
         value: "8001"
 
-static_sites:
   - name: carib-frontend
+    dockerfile_path: Dockerfile
     source_dir: frontend
     github:
       repo: tafsir-ba/Carib
       branch: main
       deploy_on_push: true
-    build_command: yarn install && yarn build
-    output_dir: build
+    http_port: 80
+    instance_size_slug: basic-xxs
+    instance_count: 1
     routes:
       - path: /
     envs:

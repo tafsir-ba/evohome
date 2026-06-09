@@ -94,10 +94,11 @@ chmod +x scripts/mongo_migrate.sh
 
 Common fixes (already in this repo):
 
+- **Frontend `no such file ... frontend/Dockerfile`**: In DO → carib-frontend → set **Dockerfile path** to `Dockerfile` (not `frontend/Dockerfile`) because **Source directory** is already `frontend/`. The file lives at `frontend/Dockerfile` in git.
 - **Backend build**: Dockerfile installs `gcc` for Python native deps; instance `basic-xs`.
 - **Health check**: `/api/` with 60s initial delay (pip install + cold start).
 - **Database**: use `DB_NAME=evohome`, not `crc` (minimal Emergent stub used `crc`).
-- **Frontend**: `CI=true` + `GENERATE_SOURCEMAP=false` for faster CRA build.
+- **Frontend build**: `CI=true` + `GENERATE_SOURCEMAP=false` for faster CRA build.
 
 Check **Activity → failed deployment → Build logs** in DO for the exact error.
 
