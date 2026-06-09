@@ -13,6 +13,69 @@
 
 API: `https://carib-recon.org/api/...`
 
+## Database migration (Emergent / legacy → DigitalOcean)
+
+squid-app expects **`DB_NAME=evohome`** on the **`MONGO_URL`** secret. The old Carib stub used `crc` (near-empty). Gantt projects, tasks, and login users live in **`evohome`**.
+
+### What to copy (CRC site)
+
+| Collection | Purpose |
+|------------|---------|
+| `users` | Login accounts (invite allowlist users) |
+| `gantt_projects` | Planning charts |
+| `gantt_tasks` | Tasks / phases |
+| `gantt_audit_logs` | Audit trail |
+| `gantt_extraction_drafts` | Import drafts |
+| `gantt_uploaded_files` | Upload metadata |
+
+### Option A — Python script (no mongodump required)
+
+From repo root, with connection strings from **Emergent** (Save to GitHub source env) and **Atlas / DO MongoDB** (squid-app `MONGO_URL`):
+
+```bash
+export SOURCE_MONGO_URL='mongodb+srv://...'   # Emergent or legacy cluster
+export SOURCE_DB_NAME='evohome'
+export TARGET_MONGO_URL='mongodb+srv://...'   # same as squid-app MONGO_URL
+export TARGET_DB_NAME='evohome'
+export CONFIRM_TARGET='yes'
+
+# Preview counts
+python3 backend/scripts/migrate_mongo.py --profile crc --dry-run
+
+# Copy (drops target collections first)
+python3 backend/scripts/migrate_mongo.py --profile crc --drop-target
+```
+
+`--profile full` copies every collection (only if you need full Evohome CMP data on the same cluster).
+
+### Option B — mongodump / mongorestore (full database)
+
+```bash
+export SOURCE_MONGO_URL='...' SOURCE_DB_NAME='evohome'
+export TARGET_MONGO_URL='...' TARGET_DB_NAME='evohome'
+export CONFIRM_TARGET='yes'
+chmod +x scripts/mongo_migrate.sh
+./scripts/mongo_migrate.sh
+```
+
+### After migration
+
+1. In DO → squid-app → **carib-backend** → confirm `DB_NAME=evohome` (not `crc`).
+2. **Redeploy** the backend component.
+3. Test `https://carib-recon.org/login` and open an existing Gantt project.
+
+### Where to find URLs
+
+| Source | Where |
+|--------|--------|
+| Emergent (old) | Emergent project → Environment → `MONGO_URL`, `DB_NAME` |
+| Legacy DO `crc` | Usually empty; skip unless you stored data there |
+| Target (DO) | DO → squid-app → Settings → `MONGO_URL` secret |
+
+**Never commit connection strings to git.**
+
+---
+
 ## DigitalOcean (squid-app)
 
 1. **Settings → App** → GitHub: `tafsir-ba/Carib`, branch `main`, deploy on push.
