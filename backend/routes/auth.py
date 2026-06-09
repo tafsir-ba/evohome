@@ -46,7 +46,7 @@ def _password_reset_frontend_url(req: Request) -> str:
         return origin
     if config.FRONTEND_URL:
         return config.FRONTEND_URL.strip().rstrip("/")
-    return "https://app.evo-home.ch"
+    return origin or "https://carib-recon.org"
 
 router = APIRouter()
 

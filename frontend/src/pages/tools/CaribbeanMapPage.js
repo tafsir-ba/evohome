@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useGanttBranding } from '../../components/gantt/ganttBrandingUtils';
 import { useGanttPublicConfig } from '../../components/gantt/ganttAuthUtils';
 import { GANTT_APP_NAME } from '../../components/gantt/ganttHostUtils';
@@ -37,14 +38,22 @@ export const CaribbeanMapPage = () => {
             MarineTraffic embed test · zoom {CARIBBEAN_CENTER.zoom}
           </p>
         </div>
-        <a
-          href="https://www.marinetraffic.com/en/ais/home/centerx:-72/centery:17.5/zoom:5"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-primary underline-offset-4 hover:underline sm:text-sm"
-        >
-          Open full MarineTraffic
-        </a>
+        <div className="flex items-center gap-3">
+          <Link to="/" className="text-xs text-muted-foreground hover:text-foreground sm:text-sm">
+            Home
+          </Link>
+          <Link to="/gantt" className="text-xs text-muted-foreground hover:text-foreground sm:text-sm">
+            Planning
+          </Link>
+          <a
+            href="https://www.marinetraffic.com/en/ais/home/centerx:-72/centery:17.5/zoom:5"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary underline-offset-4 hover:underline sm:text-sm"
+          >
+            Open full MarineTraffic
+          </a>
+        </div>
       </header>
 
       <div className="relative min-h-0 flex-1">

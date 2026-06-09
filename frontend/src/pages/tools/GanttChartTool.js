@@ -154,6 +154,27 @@ export const GanttChartTool = () => {
     setViewMode('cockpit');
   }, [selectedId, fetchTasks, user]);
 
+  const selectedProject = user
+    ? projects.find((p) => p.gantt_project_id === selectedId)
+    : null;
+  const titleDirty = Boolean(
+    user && editingTitle && selectedProject && titleDraft.trim() !== selectedProject.title
+  );
+  const combinedSaveStatus = {
+    saving: saveStatus.saving || chartSaving,
+    dirty: saveStatus.dirty || titleDirty,
+  };
+
+  useEffect(() => {
+    if (!user || !combinedSaveStatus.dirty) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [user, combinedSaveStatus.dirty]);
+
   if (authLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
@@ -165,26 +186,6 @@ export const GanttChartTool = () => {
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-
-  const selectedProject = projects.find((p) => p.gantt_project_id === selectedId);
-
-  const titleDirty =
-    editingTitle && selectedProject && titleDraft.trim() !== selectedProject.title;
-
-  const combinedSaveStatus = {
-    saving: saveStatus.saving || chartSaving,
-    dirty: saveStatus.dirty || titleDirty,
-  };
-
-  useEffect(() => {
-    if (!combinedSaveStatus.dirty) return;
-    const handler = (e) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [combinedSaveStatus.dirty]);
 
   const handleTitleSave = async () => {
     if (!selectedId || !titleDraft.trim()) return;

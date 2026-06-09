@@ -41,6 +41,7 @@ import { GanttRegisterPage } from "./pages/tools/GanttRegisterPage";
 import { GanttForgotPasswordPage } from "./pages/tools/GanttForgotPasswordPage";
 import { GanttResetPasswordPage } from "./pages/tools/GanttResetPasswordPage";
 import { CaribbeanMapPage } from "./pages/tools/CaribbeanMapPage";
+import { CaribBuyerGuard, CaribCmpGuard } from "./components/carib/caribRouteGuards";
 
 import "./App.css";
 
@@ -132,19 +133,22 @@ const AppRouter = () => {
       {/* MarineTraffic embed test — Caribbean live AIS map (public) */}
       <Route path="/map" element={<CaribbeanMapPage />} />
       
-      {/* Buyer routes - Single timeline page */}
-      <Route path="/buyer/dashboard" element={
-        <ProtectedRoute allowedRoles={['buyer']}>
-          <BuyerTimeline />
-        </ProtectedRoute>
-      } />
-      <Route path="/buyer/*" element={
-        <ProtectedRoute allowedRoles={['buyer']}>
-          <BuyerTimeline />
-        </ProtectedRoute>
-      } />
+      {/* Buyer routes — not served on carib-recon.org */}
+      <Route element={<CaribBuyerGuard />}>
+        <Route path="/buyer/dashboard" element={
+          <ProtectedRoute allowedRoles={['buyer']}>
+            <BuyerTimeline />
+          </ProtectedRoute>
+        } />
+        <Route path="/buyer/*" element={
+          <ProtectedRoute allowedRoles={['buyer']}>
+            <BuyerTimeline />
+          </ProtectedRoute>
+        } />
+      </Route>
       
-      {/* Agent routes — CMP DataProvider scoped to /agent/* only */}
+      {/* Agent routes — CMP not served on carib-recon.org */}
+      <Route element={<CaribCmpGuard />}>
       <Route element={<CmpDataLayout />}>
         <Route path="/agent/home" element={
           <ProtectedRoute allowedRoles={['agent']}>
@@ -264,6 +268,7 @@ const AppRouter = () => {
             <AgentVault />
           </ProtectedRoute>
         } />
+      </Route>
       </Route>
       
       {/* Default: CRC marketing on carib-recon.org; Evohome landing elsewhere */}

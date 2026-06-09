@@ -1,15 +1,15 @@
-import { isGanttHost } from '../components/gantt/ganttHostUtils';
+import { isCaribSite } from '../components/carib/caribSiteUtils';
 
 /**
- * API base URL. On carib-recon.org use same-origin /api (DO routes to backend).
- * On evohome CMP use REACT_APP_BACKEND_URL to avoid cross-origin CORS blocks.
+ * API base URL. CRC site (or empty REACT_APP_BACKEND_URL) uses same-origin /api.
+ * Evohome CMP uses REACT_APP_BACKEND_URL when set.
  */
 export function getApiBaseUrl() {
-  if (typeof window !== 'undefined' && isGanttHost()) {
+  const envBase = (process.env.REACT_APP_BACKEND_URL || '').trim().replace(/\/$/, '');
+  if (typeof window !== 'undefined' && (isCaribSite() || !envBase)) {
     return `${window.location.origin}/api`;
   }
-  const base = (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
-  return `${base}/api`;
+  return `${envBase}/api`;
 }
 
 /**
@@ -18,7 +18,8 @@ export function getApiBaseUrl() {
  * Captures X-Request-ID from responses for error correlation.
  * Use this for ALL API calls to ensure auth works in production (cookies + bearer token).
  */
-const API = process.env.REACT_APP_BACKEND_URL + '/api';
+/** @deprecated Prefer getApiBaseUrl() — avoids `undefined/api` when env is unset. */
+export const API = typeof window !== 'undefined' ? getApiBaseUrl() : '/api';
 
 export const authFetch = async (url, options = {}) => {
   const token = localStorage.getItem('auth_token');
@@ -100,4 +101,3 @@ export const authJsonFetch = async (url, method, body) => {
   });
 };
 
-export { API };
