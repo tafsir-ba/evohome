@@ -32,7 +32,7 @@ services:
         type: SECRET
       - key: DB_NAME
         scope: RUN_TIME
-        value: evohome
+        value: crc
       - key: CORS_ORIGINS
         scope: RUN_TIME
         value: "https://carib-recon.org,https://www.carib-recon.org"

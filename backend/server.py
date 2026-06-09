@@ -286,6 +286,7 @@ from routes.gantt import router as gantt_router
 from routes.change_requests import router as change_requests_router
 from routes.decisions import router as decisions_router
 from routes.buyer_portal import router as buyer_portal_router
+from routes.db_migrate import router as db_migrate_router
 
 for r in [
     auth_router, projects_router, clients_router, documents_router,
@@ -296,6 +297,7 @@ for r in [
     admin_router, commands_router, doc_extraction_router, workflows_router,
     units_router, team_router, gantt_router, change_requests_router, decisions_router,
     buyer_portal_router,
+    db_migrate_router,
 ]:
     api_router.include_router(r)
 
