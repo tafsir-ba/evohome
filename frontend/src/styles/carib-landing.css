@@ -1,0 +1,110 @@
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap");
+
+.carib-landing {
+  font-family: "IBM Plex Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #111827;
+  background: #ffffff;
+}
+
+.carib-landing h1,
+.carib-landing h2,
+.carib-landing h3,
+.carib-landing h4,
+.carib-landing h5,
+.carib-landing h6,
+.carib-landing .font-display {
+  font-family: "Outfit", "IBM Plex Sans", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.carib-landing {
+  --background: 0 0% 100%;
+  --foreground: 222 28% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 28% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 28% 12%;
+  --primary: 211 100% 28%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 67% 95%;
+  --secondary-foreground: 213 100% 18%;
+  --muted: 220 14% 96%;
+  --muted-foreground: 220 9% 46%;
+  --accent: 48 96% 53%;
+  --accent-foreground: 213 100% 18%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 211 100% 28%;
+  --radius: 0.5rem;
+}
+
+.carib-landing ::selection {
+  background: #00478f;
+  color: #ffffff;
+}
+
+.carib-landing .bg-dot-grid {
+  background-image: radial-gradient(rgba(0, 71, 143, 0.08) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+@keyframes crc-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 0 rgba(0, 71, 143, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 10px rgba(0, 71, 143, 0);
+  }
+}
+
+.carib-landing .crc-pulse {
+  animation: crc-pulse 2.6s ease-out infinite;
+}
+
+@keyframes crc-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -1.5%, 0) scale(1.02);
+  }
+}
+
+.carib-landing .crc-drift {
+  animation: crc-drift 14s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carib-landing .crc-pulse,
+  .carib-landing .crc-drift {
+    animation: none;
+  }
+}
+
+.carib-landing .text-balance {
+  text-wrap: balance;
+}
+
+.carib-landing .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #00478f;
+}
+
+.carib-landing .eyebrow::before {
+  content: "";
+  width: 28px;
+  height: 1px;
+  background: #00478f;
+  display: inline-block;
+}

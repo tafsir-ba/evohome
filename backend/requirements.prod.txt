@@ -1,0 +1,4 @@
+# Production dependencies for DigitalOcean / Docker (no Emergent-only packages).
+# Kept in sync with requirements.txt for self-hosted deploys.
+
+-r requirements.txt

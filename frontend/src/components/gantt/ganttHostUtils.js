@@ -3,7 +3,7 @@ export const GANTT_APP_NAME = 'Caribbean Regional Connectivity';
 
 /**
  * Hostnames that serve the Gantt app on DO (not Emergent marketing, not evohome CMP).
- * carib-recon.org / www → Emergent homepage; app.carib-recon.org → this app.
+ * carib-recon.org / www → CRC marketing site; app.carib-recon.org → Gantt app.
  */
 const DEFAULT_GANTT_HOSTS = ['app.carib-recon.org'];
 

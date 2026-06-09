@@ -1,0 +1,42 @@
+# Self-hosting stack for Caribbean RE-Connect (CRC).
+# Use this on a DigitalOcean Droplet (or any Docker host) to run the full app:
+#   docker compose up -d --build
+# Then visit http://<your-server-ip>/
+#
+# For DigitalOcean App Platform (managed, GitHub-connected) use .do/app.yaml instead.
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      MONGO_URL: "mongodb://mongo:27017"
+      DB_NAME: "crc"
+      CORS_ORIGINS: "*"
+      PORT: "8001"
+    depends_on:
+      - mongo
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Empty backend URL => frontend calls same-origin "/api/...",
+        # which nginx proxies to the backend service.
+        REACT_APP_BACKEND_URL: ""
+        REACT_APP_LOGIN_URL: "https://app.carib-recon.org/login"
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:

@@ -1,0 +1,63 @@
+# DigitalOcean App Platform — carib-recon.org (marketing site)
+# Repo: tafsir-ba/Carib — same codebase as app-gantt.yaml (host-based routing).
+#
+# Import: DO Apps → Create → Import from app spec → paste this file.
+# Set MONGO_URL secret. Attach domain carib-recon.org (+ www).
+
+name: caribbean-reconnect
+region: fra
+
+services:
+  - name: carib-backend
+    dockerfile_path: backend/Dockerfile
+    source_dir: backend
+    github:
+      repo: tafsir-ba/Carib
+      branch: main
+      deploy_on_push: true
+    http_port: 8001
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    routes:
+      - path: /api
+        preserve_path_prefix: true
+    health_check:
+      http_path: /api/
+    envs:
+      - key: MONGO_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: DB_NAME
+        scope: RUN_TIME
+        value: crc
+      - key: CORS_ORIGINS
+        scope: RUN_TIME
+        value: "https://carib-recon.org,https://www.carib-recon.org,https://app.carib-recon.org"
+      - key: PORT
+        scope: RUN_TIME
+        value: "8001"
+      - key: FRONTEND_URL
+        scope: RUN_TIME
+        value: "https://carib-recon.org"
+
+static_sites:
+  - name: carib-frontend
+    source_dir: frontend
+    github:
+      repo: tafsir-ba/Carib
+      branch: main
+      deploy_on_push: true
+    build_command: yarn install && yarn build
+    output_dir: build
+    routes:
+      - path: /
+    envs:
+      - key: REACT_APP_BACKEND_URL
+        scope: BUILD_TIME
+        value: ""
+      - key: REACT_APP_LOGIN_URL
+        scope: BUILD_TIME
+        value: "https://app.carib-recon.org/login"
+      - key: REACT_APP_GANTT_APP_URL
+        scope: BUILD_TIME
+        value: "https://app.carib-recon.org/gantt"

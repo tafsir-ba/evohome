@@ -1,0 +1,66 @@
+# DigitalOcean App Platform — app.carib-recon.org (Gantt + /map + auth)
+# Same monorepo as app.yaml; different domain + DB name for the tool.
+
+name: carib-app
+region: fra
+
+services:
+  - name: carib-backend
+    dockerfile_path: backend/Dockerfile
+    source_dir: backend
+    github:
+      repo: tafsir-ba/Carib
+      branch: main
+      deploy_on_push: true
+    http_port: 8001
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    routes:
+      - path: /api
+        preserve_path_prefix: true
+    health_check:
+      http_path: /api/
+    envs:
+      - key: MONGO_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: DB_NAME
+        scope: RUN_TIME
+        value: evohome
+      - key: CORS_ORIGINS
+        scope: RUN_TIME
+        value: "https://app.carib-recon.org,https://carib-recon.org,https://www.carib-recon.org"
+      - key: PORT
+        scope: RUN_TIME
+        value: "8001"
+      - key: FRONTEND_URL
+        scope: RUN_TIME
+        value: "https://app.carib-recon.org"
+      - key: GANTT_REGISTRATION_CLOSED
+        scope: RUN_TIME
+        value: "true"
+
+static_sites:
+  - name: carib-frontend
+    source_dir: frontend
+    github:
+      repo: tafsir-ba/Carib
+      branch: main
+      deploy_on_push: true
+    build_command: yarn install && yarn build
+    output_dir: build
+    routes:
+      - path: /
+    envs:
+      - key: REACT_APP_BACKEND_URL
+        scope: BUILD_TIME
+        value: ""
+      - key: REACT_APP_GANTT_HOSTS
+        scope: BUILD_TIME
+        value: "app.carib-recon.org"
+      - key: REACT_APP_GANTT_APP_URL
+        scope: BUILD_TIME
+        value: "https://app.carib-recon.org/gantt"
+      - key: REACT_APP_LOGIN_URL
+        scope: BUILD_TIME
+        value: "https://app.carib-recon.org/login"
