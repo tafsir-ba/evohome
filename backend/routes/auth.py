@@ -35,7 +35,7 @@ logger = logging.getLogger("evohome.auth")
 
 
 def _password_reset_frontend_url(req: Request) -> str:
-    """Use request Origin when allowed (e.g. app.carib-recon.org), else FRONTEND_URL."""
+    """Use request Origin when allowed (e.g. carib-recon.org), else FRONTEND_URL."""
     config = get_config()
     origin = (req.headers.get("origin") or "").strip().rstrip("/")
     allowed = {o.strip().rstrip("/") for o in config.CORS_ORIGINS if o and o != "*"}

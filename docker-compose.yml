@@ -31,7 +31,8 @@ services:
         # Empty backend URL => frontend calls same-origin "/api/...",
         # which nginx proxies to the backend service.
         REACT_APP_BACKEND_URL: ""
-        REACT_APP_LOGIN_URL: "https://app.carib-recon.org/login"
+        REACT_APP_LOGIN_URL: "https://carib-recon.org/login"
+        REACT_APP_CRC_SITE: "true"
     restart: unless-stopped
     ports:
       - "80:80"

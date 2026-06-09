@@ -1,8 +1,7 @@
-# DigitalOcean App Platform — carib-recon.org (marketing site)
-# Repo: tafsir-ba/Carib — same codebase as app-gantt.yaml (host-based routing).
+# DigitalOcean App Platform — single CRC site (carib-recon.org)
+# Repo: tafsir-ba/Carib — one domain, path-based routes (/login, /gantt, /map).
 #
-# Import: DO Apps → Create → Import from app spec → paste this file.
-# Set MONGO_URL secret. Attach domain carib-recon.org (+ www).
+# squid-app: import this spec or confirm repo/branch match in DO dashboard.
 
 name: caribbean-reconnect
 region: fra
@@ -16,29 +15,38 @@ services:
       branch: main
       deploy_on_push: true
     http_port: 8001
-    instance_size_slug: basic-xxs
+    instance_size_slug: basic-xs
     instance_count: 1
     routes:
       - path: /api
         preserve_path_prefix: true
     health_check:
       http_path: /api/
+      initial_delay_seconds: 60
+      period_seconds: 30
+      timeout_seconds: 10
     envs:
       - key: MONGO_URL
         scope: RUN_TIME
         type: SECRET
       - key: DB_NAME
         scope: RUN_TIME
-        value: crc
+        value: evohome
       - key: CORS_ORIGINS
         scope: RUN_TIME
-        value: "https://carib-recon.org,https://www.carib-recon.org,https://app.carib-recon.org"
-      - key: PORT
+        value: "https://carib-recon.org,https://www.carib-recon.org"
+      - key: GANTT_ORIGINS
         scope: RUN_TIME
-        value: "8001"
+        value: "https://carib-recon.org,https://www.carib-recon.org"
       - key: FRONTEND_URL
         scope: RUN_TIME
         value: "https://carib-recon.org"
+      - key: GANTT_REGISTRATION_CLOSED
+        scope: RUN_TIME
+        value: "true"
+      - key: PORT
+        scope: RUN_TIME
+        value: "8001"
 
 static_sites:
   - name: carib-frontend
@@ -55,9 +63,21 @@ static_sites:
       - key: REACT_APP_BACKEND_URL
         scope: BUILD_TIME
         value: ""
+      - key: REACT_APP_CRC_SITE
+        scope: BUILD_TIME
+        value: "true"
+      - key: REACT_APP_CARIB_SITE_URL
+        scope: BUILD_TIME
+        value: "https://carib-recon.org"
       - key: REACT_APP_LOGIN_URL
         scope: BUILD_TIME
-        value: "https://app.carib-recon.org/login"
+        value: "https://carib-recon.org/login"
       - key: REACT_APP_GANTT_APP_URL
         scope: BUILD_TIME
-        value: "https://app.carib-recon.org/gantt"
+        value: "https://carib-recon.org/gantt"
+      - key: GENERATE_SOURCEMAP
+        scope: BUILD_TIME
+        value: "false"
+      - key: CI
+        scope: BUILD_TIME
+        value: "true"

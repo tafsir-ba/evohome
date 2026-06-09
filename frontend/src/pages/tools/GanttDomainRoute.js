@@ -1,15 +1,11 @@
 import { Navigate } from 'react-router-dom';
 import { GanttChartTool } from './GanttChartTool';
 import { GanttExternalRedirect } from './GanttExternalRedirect';
-import { isGanttHost } from '../../components/gantt/ganttHostUtils';
+import { isCaribSite } from '../../components/carib/caribSiteUtils';
 
-/**
- * Same DO app serves evohome CMP + Gantt subdomain:
- * - app.carib-recon.org → Gantt tool
- * - app.evo-home.ch → redirect legacy Gantt URLs to app.carib-recon.org
- */
+/** `/gantt` on carib-recon.org; other hosts redirect to CRC Gantt URL. */
 export const GanttDomainRoute = ({ canonicalPath = '/gantt' }) => {
-  if (isGanttHost()) {
+  if (isCaribSite()) {
     if (window.location.pathname !== canonicalPath) {
       return <Navigate to={canonicalPath} replace />;
     }

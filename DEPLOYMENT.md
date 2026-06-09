@@ -1,76 +1,56 @@
-# Caribbean RE-Connect — unified deployment (DigitalOcean)
+# Caribbean RE-Connect — single-site deployment
 
-Single GitHub repo **`tafsir-ba/Carib`** hosts:
+**One repo** (`tafsir-ba/Carib`) · **one DO app** (`squid-app`) · **one domain** (`carib-recon.org`)
 
-| Host | Purpose |
-|------|---------|
-| `carib-recon.org` | CRC marketing site |
-| `app.carib-recon.org` | Gantt tool, auth, `/map` (MarineTraffic embed) |
-| `app.evo-home.ch` | Evohome CMP (optional; legacy redirects to Gantt) |
+## Routes (same origin)
 
-The **same React build** uses hostname routing (`caribSiteUtils`, `ganttHostUtils`) to show the right UI.
+| URL | Page |
+|-----|------|
+| `/` | Marketing landing |
+| `/login` | Sign in (invite-only) |
+| `/gantt` | Planning tool |
+| `/map` | Live vessel map (MarineTraffic embed) |
 
-## Architecture
+API: `https://carib-recon.org/api/...`
 
-```
-tafsir-ba/Carib (monorepo)
-├── frontend/     React — marketing + Gantt + Evohome CMP
-├── backend/      FastAPI — shared API (Gantt, auth, CMP, …)
-└── .do/
-    ├── app.yaml        → DO app for carib-recon.org
-    └── app-gantt.yaml  → DO app for app.carib-recon.org
-```
+## DigitalOcean (squid-app)
 
-## Prerequisites
+1. **Settings → App** → GitHub: `tafsir-ba/Carib`, branch `main`, deploy on push.
+2. **Secrets** → set `MONGO_URL` (MongoDB Atlas connection string).
+3. **Build env** (frontend component) — should match [`.do/app.yaml`](.do/app.yaml):
+   - `REACT_APP_CRC_SITE=true`
+   - `REACT_APP_BACKEND_URL=` (empty = same-origin `/api`)
+4. **Runtime env** (backend):
+   - `DB_NAME=evohome` (Gantt data database)
+   - `FRONTEND_URL=https://carib-recon.org`
+   - `GANTT_REGISTRATION_CLOSED=true`
+5. **Domain**: `carib-recon.org` (+ optional `www`)
+6. Redeploy after env changes.
 
-1. **MongoDB Atlas** (or DO Managed MongoDB) — two databases recommended:
-   - `crc` — marketing / light use (optional)
-   - `evohome` — Gantt + CMP data
-2. **GitHub** repo connected to DigitalOcean App Platform.
-3. **Domains** DNS pointed at each DO app (or one app with multiple domains).
+## If deploy failed
 
-## Deploy marketing (`carib-recon.org`)
+Common fixes (already in this repo):
 
-Uses [`.do/app.yaml`](.do/app.yaml) — matches your **squid-app** on DO.
+- **Backend build**: Dockerfile installs `gcc` for Python native deps; instance `basic-xs`.
+- **Health check**: `/api/` with 60s initial delay (pip install + cold start).
+- **Database**: use `DB_NAME=evohome`, not `crc` (minimal Emergent stub used `crc`).
+- **Frontend**: `CI=true` + `GENERATE_SOURCEMAP=false` for faster CRA build.
 
-1. DO → Apps → **squid-app** → Settings → confirm GitHub repo is **`tafsir-ba/Carib`**, branch **`main`**, deploy on push.
-2. Ensure build env vars:
-   - `REACT_APP_BACKEND_URL=""` (same-origin `/api`)
-   - `REACT_APP_LOGIN_URL=https://app.carib-recon.org/login`
-3. Runtime secret: **`MONGO_URL`**
-4. Domain: `carib-recon.org` (+ `www`)
+Check **Activity → failed deployment → Build logs** in DO for the exact error.
 
-## Deploy Gantt app (`app.carib-recon.org`)
-
-Uses [`.do/app-gantt.yaml`](.do/app-gantt.yaml).
-
-1. Create or update the **app.carib-recon.org** DO app to use **`tafsir-ba/Carib`** (was `tafsir-ba/evohome`).
-2. Set `DB_NAME=evohome` and the same `MONGO_URL` (or a dedicated cluster).
-3. Build env: `REACT_APP_GANTT_HOSTS=app.carib-recon.org`
-4. Attach domain `app.carib-recon.org`
-
-## After merging from Emergent / evohome
-
-- [ ] Point **both** DO apps at `tafsir-ba/Carib` (not `evohome`).
-- [ ] Redeploy both apps.
-- [ ] Verify `https://carib-recon.org` → marketing landing.
-- [ ] Verify `https://app.carib-recon.org/gantt` → Gantt tool.
-- [ ] Verify `https://app.carib-recon.org/map` → vessel map embed.
-- [ ] Login on marketing navbar → `app.carib-recon.org/login`.
-
-## Local development
+## Local dev
 
 ```bash
-# Marketing UI
-REACT_APP_CARIB_MARKETING_HOSTS=localhost yarn --cwd frontend start
-# Open http://localhost:3000 (add hosts file entry or use env override)
+# Terminal 1 — backend
+cd backend && uvicorn server:app --reload --port 8001
 
-# Gantt UI
-REACT_APP_GANTT_HOSTS=localhost yarn --cwd frontend start
+# Terminal 2 — frontend as CRC site
+cd frontend
+REACT_APP_CRC_SITE=true REACT_APP_BACKEND_URL=http://localhost:8001 yarn start
 ```
 
-Backend: `uvicorn server:app --reload --port 8001` from `backend/` with `.env` set.
+Open http://localhost:3000 → marketing · http://localhost:3000/login · /gantt · /map
 
-## Docker (optional)
+## Legacy
 
-See [`docker-compose.yml`](docker-compose.yml) for a single-server setup.
+`app.carib-recon.org` is no longer used. Remove that subdomain from DNS or redirect it to `https://carib-recon.org` in Cloudflare.

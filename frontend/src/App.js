@@ -125,7 +125,7 @@ const AppRouter = () => {
       <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
       <Route path="/team/accept" element={<AcceptInvitePage />} />
 
-      {/* Gantt: app.carib-recon.org serves tool; evohome redirects to app.carib-recon.org */}
+      {/* Gantt + map on carib-recon.org/gantt and /map */}
       <Route path="/gantt" element={<GanttDomainRoute />} />
       <Route path="/tools/gantt-chart" element={<GanttDomainRoute />} />
 
@@ -266,7 +266,7 @@ const AppRouter = () => {
         } />
       </Route>
       
-      {/* Default: evohome landing; app.carib-recon.org → Gantt landing */}
+      {/* Default: CRC marketing on carib-recon.org; Evohome landing elsewhere */}
       <Route path="/" element={<AppRootRoute />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

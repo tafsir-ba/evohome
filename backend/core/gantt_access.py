@@ -1,5 +1,5 @@
 """
-Gantt invite-only login — allowlist enforced on app.carib-recon.org auth.
+Gantt invite-only login — allowlist enforced on carib-recon.org auth.
 """
 import os
 from typing import Optional, Set
@@ -41,7 +41,7 @@ def is_gantt_auth_request(
     if is_gantt_request(request):
         return True
     uri = (redirect_uri or "").strip().lower()
-    return "app.carib-recon.org" in uri
+    return "carib-recon.org" in uri
 
 
 def enforce_gantt_login_allowed(

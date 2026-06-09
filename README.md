@@ -1,24 +1,20 @@
 # Caribbean RE-Connect (Carib)
 
-Unified monorepo for **Caribbean Regional Connectivity** and related tools.
+Unified monorepo — **one site** at [carib-recon.org](https://carib-recon.org).
 
-## What's in this repo
+| URL | Purpose |
+|-----|---------|
+| `/` | Marketing site |
+| `/login` | Authentication |
+| `/gantt` | Regional connectivity planning tool |
+| `/map` | Live AIS vessel map |
 
-| Surface | URL | Code |
-|---------|-----|------|
-| CRC marketing site | [carib-recon.org](https://carib-recon.org) | `frontend/src/pages/CaribLanding.jsx` |
-| Gantt planning tool | [app.carib-recon.org/gantt](https://app.carib-recon.org/gantt) | `frontend/src/pages/tools/` |
-| Live vessel map | [app.carib-recon.org/map](https://app.carib-recon.org/map) | `frontend/src/pages/tools/CaribbeanMapPage.js` |
-| Evohome CMP | evohome domains | `frontend/src/pages/agent/`, `buyer/` |
-
-Hostname routing: `caribSiteUtils.js`, `ganttHostUtils.js`.
+Also includes Evohome CMP routes for other domains (not served on carib-recon.org).
 
 ## Deploy
 
-See **[DEPLOYMENT.md](DEPLOYMENT.md)** for DigitalOcean App Platform (`.do/app.yaml` + `.do/app-gantt.yaml`).
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** — DigitalOcean App Platform (`squid-app`).
 
 ## Stack
 
-- **Frontend:** React, Tailwind, shadcn/ui
-- **Backend:** FastAPI, MongoDB
-- **Hosting:** DigitalOcean App Platform (migrated from Emergent)
+React · FastAPI · MongoDB · DigitalOcean App Platform

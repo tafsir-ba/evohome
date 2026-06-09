@@ -1,7 +1,5 @@
-import { isGanttHost } from '../../components/gantt/ganttHostUtils';
+import { isCaribSite } from '../../components/carib/caribSiteUtils';
 
-/**
- * Renders the Gantt-branded auth page on carib-recon.org, else the CMP default.
- */
+/** CRC-branded auth pages on carib-recon.org; Evohome pages on other hosts. */
 export const GanttHostAuthRoute = ({ gantt: GanttPage, default: DefaultPage }) =>
-  isGanttHost() ? <GanttPage /> : <DefaultPage />;
+  isCaribSite() ? <GanttPage /> : <DefaultPage />;

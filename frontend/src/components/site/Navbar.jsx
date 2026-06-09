@@ -1,22 +1,25 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Menu, X, LogIn } from "lucide-react";
 
 const LOGO_URL =
     "https://customer-assets.emergentagent.com/job_f6048c2b-8ed4-470f-aaf5-275d78ad015a/artifacts/civduknz_CRC%20logo.svg";
 
 // External login destination — configured via REACT_APP_LOGIN_URL.
-const LOGIN_URL =
-    process.env.REACT_APP_LOGIN_URL || "https://app.carib-recon.org/login";
+const LOGIN_URL = process.env.REACT_APP_LOGIN_URL || "/login";
 
 const NAV_LINKS = [
-    { href: "#about", label: "About", testid: "nav-about" },
-    { href: "#focus-areas", label: "Focus Areas", testid: "nav-focus-areas" },
+    { href: "#about", label: "About", testid: "nav-about", external: false },
+    { href: "#focus-areas", label: "Focus Areas", testid: "nav-focus-areas", external: false },
     {
         href: "#regional-perspective",
         label: "Regional Perspective",
         testid: "nav-regional",
+        external: false,
     },
-    { href: "#contact", label: "Contact", testid: "nav-contact" },
+    { href: "#contact", label: "Contact", testid: "nav-contact", external: false },
+    { href: "/gantt", label: "Planning", testid: "nav-gantt", external: false, route: true },
+    { href: "/map", label: "Vessel map", testid: "nav-map", external: false, route: true },
 ];
 
 export default function Navbar() {
@@ -61,20 +64,29 @@ export default function Navbar() {
                 </a>
 
                 <nav className="hidden lg:flex items-center gap-10">
-                    {NAV_LINKS.map((link) => (
-                        <a
-                            key={link.href}
-                            href={link.href}
-                            data-testid={link.testid}
-                            className="text-sm font-medium text-foreground/80 hover:text-[#00478F] transition-colors relative after:absolute after:left-0 after:-bottom-1 after:h-[2px] after:w-0 hover:after:w-full after:bg-[#00478F] after:transition-all after:duration-300"
-                        >
-                            {link.label}
-                        </a>
-                    ))}
+                    {NAV_LINKS.map((link) =>
+                        link.route ? (
+                            <Link
+                                key={link.href}
+                                to={link.href}
+                                data-testid={link.testid}
+                                className="text-sm font-medium text-foreground/80 hover:text-[#00478F] transition-colors relative after:absolute after:left-0 after:-bottom-1 after:h-[2px] after:w-0 hover:after:w-full after:bg-[#00478F] after:transition-all after:duration-300"
+                            >
+                                {link.label}
+                            </Link>
+                        ) : (
+                            <a
+                                key={link.href}
+                                href={link.href}
+                                data-testid={link.testid}
+                                className="text-sm font-medium text-foreground/80 hover:text-[#00478F] transition-colors relative after:absolute after:left-0 after:-bottom-1 after:h-[2px] after:w-0 hover:after:w-full after:bg-[#00478F] after:transition-all after:duration-300"
+                            >
+                                {link.label}
+                            </a>
+                        )
+                    )}
                     <a
                         href={LOGIN_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         data-testid="nav-login"
                         className="inline-flex items-center gap-2 h-10 px-5 rounded-md bg-[#00478F] hover:bg-[#003366] text-white text-sm font-semibold tracking-wide transition-colors shadow-[0_4px_14px_-6px_rgba(0,71,143,0.55)]"
                     >
@@ -100,21 +112,31 @@ export default function Navbar() {
                     className="lg:hidden border-t border-border bg-white"
                 >
                     <div className="px-4 py-4 flex flex-col gap-1">
-                        {NAV_LINKS.map((link) => (
-                            <a
-                                key={link.href}
-                                href={link.href}
-                                onClick={() => setOpen(false)}
-                                data-testid={`${link.testid}-mobile`}
-                                className="px-3 py-3 text-sm font-medium text-foreground/80 hover:text-[#00478F] hover:bg-[#E6F0FA] rounded-md"
-                            >
-                                {link.label}
-                            </a>
-                        ))}
+                        {NAV_LINKS.map((link) =>
+                            link.route ? (
+                                <Link
+                                    key={link.href}
+                                    to={link.href}
+                                    onClick={() => setOpen(false)}
+                                    data-testid={`${link.testid}-mobile`}
+                                    className="px-3 py-3 text-sm font-medium text-foreground/80 hover:text-[#00478F] hover:bg-[#E6F0FA] rounded-md"
+                                >
+                                    {link.label}
+                                </Link>
+                            ) : (
+                                <a
+                                    key={link.href}
+                                    href={link.href}
+                                    onClick={() => setOpen(false)}
+                                    data-testid={`${link.testid}-mobile`}
+                                    className="px-3 py-3 text-sm font-medium text-foreground/80 hover:text-[#00478F] hover:bg-[#E6F0FA] rounded-md"
+                                >
+                                    {link.label}
+                                </a>
+                            )
+                        )}
                         <a
                             href={LOGIN_URL}
-                            target="_blank"
-                            rel="noopener noreferrer"
                             onClick={() => setOpen(false)}
                             data-testid="nav-login-mobile"
                             className="mt-2 inline-flex items-center justify-center gap-2 h-11 px-4 rounded-md bg-[#00478F] hover:bg-[#003366] text-white text-sm font-semibold"
