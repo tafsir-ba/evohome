@@ -87,6 +87,15 @@ class TestGanttLoginAllowlist:
             None, redirect_uri="https://carib-recon.org/auth/google/callback"
         )
 
+    def test_removed_origin_is_stripped_from_allow_lists(self):
+        from core.gantt_site import filter_removed_origins
+
+        assert filter_removed_origins([
+            "https://app.carib-recon.org",
+            "https://app.evo-home.ch",
+            "https://carib-recon.org",
+        ]) == ["https://app.evo-home.ch", "https://carib-recon.org"]
+
     def test_evohome_cmp_host_is_not_gantt(self):
         from core.gantt_site import is_gantt_request
 

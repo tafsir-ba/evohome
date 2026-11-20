@@ -404,12 +404,16 @@ debug_api_router = APIRouter(prefix="/api")
 debug_api_router.include_router(debug_router)
 app.include_router(debug_api_router)
 
-# CORS — config-driven, no wildcard fallback
-_cors_origins = list(app_config.CORS_ORIGINS)
+# CORS — config-driven, no wildcard fallback.
+# app.carib-recon.org is not an app host, even if the env list still names it.
+from core.gantt_site import filter_removed_origins
+
+_cors_origins = filter_removed_origins(list(app_config.CORS_ORIGINS))
 
 # Auto-include FRONTEND_URL if set (covers preview/staging deployments)
 if app_config.FRONTEND_URL and app_config.FRONTEND_URL not in _cors_origins:
     _cors_origins.append(app_config.FRONTEND_URL)
+_cors_origins = filter_removed_origins(_cors_origins)
 
 if app_config.is_production:
     logger.info(f"CORS (production): {_cors_origins}")

@@ -28,7 +28,12 @@ from core.gantt_access import (
     enforce_gantt_registration_closed,
     is_gantt_auth_request,
 )
-from core.gantt_site import GANTT_ORIGINS, gantt_welcome_email_data, is_gantt_request
+from core.gantt_site import (
+    GANTT_ORIGINS,
+    filter_removed_origins,
+    gantt_welcome_email_data,
+    is_gantt_request,
+)
 from services.gantt_constants import GANTT_APP_NAME
 
 logger = logging.getLogger("evohome.auth")
@@ -38,15 +43,23 @@ def _password_reset_frontend_url(req: Request) -> str:
     """Use request Origin when allowed (e.g. carib-recon.org), else FRONTEND_URL."""
     config = get_config()
     origin = (req.headers.get("origin") or "").strip().rstrip("/")
-    allowed = {o.strip().rstrip("/") for o in config.CORS_ORIGINS if o and o != "*"}
-    allowed.update(GANTT_ORIGINS)
+    allowed = {
+        o.strip().rstrip("/")
+        for o in filter_removed_origins(config.CORS_ORIGINS)
+        if o and o != "*"
+    }
+    allowed.update(filter_removed_origins(GANTT_ORIGINS))
     if config.FRONTEND_URL:
-        allowed.add(config.FRONTEND_URL.strip().rstrip("/"))
+        allowed.update(filter_removed_origins([config.FRONTEND_URL.strip().rstrip("/")]))
     if origin in allowed:
         return origin
     if config.FRONTEND_URL:
-        return config.FRONTEND_URL.strip().rstrip("/")
-    return origin or "https://carib-recon.org"
+        frontend = config.FRONTEND_URL.strip().rstrip("/")
+        if filter_removed_origins([frontend]):
+            return frontend
+    if origin and filter_removed_origins([origin]):
+        return origin
+    return "https://carib-recon.org"
 
 router = APIRouter()
 

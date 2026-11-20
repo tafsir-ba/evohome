@@ -50,6 +50,16 @@ def is_carib_host(hostname: str) -> bool:
     return host in CARIB_HOSTS
 
 
+def filter_removed_origins(origins):
+    """Drop app.carib-recon.org even when CORS_ORIGINS or FRONTEND_URL still lists it."""
+    kept = []
+    for origin in origins:
+        if url_host(origin) in REMOVED_CARIB_HOSTS:
+            continue
+        kept.append(origin)
+    return kept
+
+
 def request_origin(request: Optional[Request]) -> str:
     if not request:
         return ""
