@@ -36,12 +36,11 @@ def is_gantt_allowed_login_email(email: str) -> bool:
 def is_gantt_auth_request(
     request: Optional[object], redirect_uri: Optional[str] = None
 ) -> bool:
-    from core.gantt_site import is_gantt_request
+    from core.gantt_site import is_carib_host, is_gantt_request, url_host
 
     if is_gantt_request(request):
         return True
-    uri = (redirect_uri or "").strip().lower()
-    return "carib-recon.org" in uri
+    return is_carib_host(url_host(redirect_uri or ""))
 
 
 def enforce_gantt_login_allowed(

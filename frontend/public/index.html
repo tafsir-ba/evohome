@@ -9,6 +9,41 @@
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <title>Caribbean RE-Connect</title>
+        <script>
+            /* Host branding before the bundle loads.
+               Keep hosts and the CMP title in sync with caribSiteUtils.js. */
+            (function () {
+                var host = (location.hostname || "").toLowerCase();
+                if (host === "app.carib-recon.org") {
+                    location.replace(
+                        "https://carib-recon.org" +
+                            location.pathname +
+                            location.search +
+                            location.hash
+                    );
+                    return;
+                }
+                if (host === "app.evo-home.ch") {
+                    document.title = "Customer Management Platform";
+                    var meta = document.querySelector('meta[name="description"]');
+                    if (meta) {
+                        meta.setAttribute(
+                            "content",
+                            "Evohome - Real Estate Upgrade Management Platform"
+                        );
+                    }
+                    var icon = document.querySelector("link[rel='icon'][data-cmp-branding='true']");
+                    if (!icon) {
+                        icon = document.createElement("link");
+                        icon.rel = "icon";
+                        icon.setAttribute("data-cmp-branding", "true");
+                        document.head.appendChild(icon);
+                    }
+                    icon.type = "image/png";
+                    icon.href = "/evohome-logo.png";
+                }
+            })();
+        </script>
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>

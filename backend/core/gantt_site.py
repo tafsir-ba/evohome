@@ -3,18 +3,35 @@ Gantt / CRC site detection — shared by auth emails and site-specific configura
 """
 import os
 from typing import Optional, Set
+from urllib.parse import urlparse
 
 from fastapi import Request
 
 GANTT_SENDER_EMAIL = os.environ.get("GANTT_SENDER_EMAIL", "").strip()
 
-CARIB_HOSTS: Set[str] = {
+# Deleted from the app. Not a CRC host even if present in CARIB_HOSTS / GANTT_ORIGINS.
+REMOVED_CARIB_HOSTS: Set[str] = {"app.carib-recon.org"}
+
+
+def url_host(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    parsed = urlparse(raw if "://" in raw else f"https://{raw}")
+    return (parsed.hostname or "").lower()
+
+
+def _without_removed_hosts(hosts: Set[str]) -> Set[str]:
+    return {h for h in hosts if h not in REMOVED_CARIB_HOSTS}
+
+
+CARIB_HOSTS: Set[str] = _without_removed_hosts({
     h.strip().lower()
     for h in os.environ.get(
         "CARIB_HOSTS", "carib-recon.org,www.carib-recon.org"
     ).split(",")
     if h.strip()
-}
+})
 
 GANTT_ORIGINS = [
     o.strip().rstrip("/")
@@ -22,8 +39,15 @@ GANTT_ORIGINS = [
         "GANTT_ORIGINS",
         "https://carib-recon.org,https://www.carib-recon.org",
     ).split(",")
-    if o.strip()
+    if o.strip() and url_host(o) not in REMOVED_CARIB_HOSTS
 ]
+
+
+def is_carib_host(hostname: str) -> bool:
+    host = (hostname or "").split(":")[0].strip().lower()
+    if not host or host in REMOVED_CARIB_HOSTS:
+        return False
+    return host in CARIB_HOSTS
 
 
 def request_origin(request: Optional[Request]) -> str:
@@ -43,11 +67,11 @@ def is_gantt_request(request: Optional[Request]) -> bool:
     if origin and origin in GANTT_ORIGINS:
         return True
     host = _request_host(request)
-    if host in CARIB_HOSTS:
+    if is_carib_host(host):
         return True
     if request:
-        referer = (request.headers.get("referer") or "").lower()
-        if "carib-recon.org" in referer:
+        referer = request.headers.get("referer") or ""
+        if is_carib_host(url_host(referer)):
             return True
     return False
 
@@ -57,7 +81,7 @@ def gantt_frontend_url(request: Optional[Request]) -> Optional[str]:
     if origin and origin in GANTT_ORIGINS:
         return origin
     host = _request_host(request)
-    if host in CARIB_HOSTS:
+    if is_carib_host(host):
         return f"https://{host}"
     return None
 

@@ -157,4 +157,6 @@ Open http://localhost:3000 → marketing · http://localhost:3000/login · /gant
 
 ## Legacy
 
-`app.carib-recon.org` is no longer used. Remove that subdomain from DNS or redirect it to `https://carib-recon.org` in Cloudflare.
+`app.carib-recon.org` is not a host of this app. The frontend redirects that hostname to `https://carib-recon.org` (same path) and the API does not treat it as the CRC site. Remove the subdomain from the DigitalOcean app and from DNS.
+
+`app.evo-home.ch` is the Customer Management Platform. On that hostname the tab title is `Customer Management Platform` and the favicon is the Evohome mark, even when the shared build has `REACT_APP_CRC_SITE=true`.

@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { GANTT_LOGO_MARK_PATH } from './GanttLogo';
-import { isCaribSite } from '../carib/caribSiteUtils';
+import { CMP_DOCUMENT_TITLE, isCaribSite } from '../carib/caribSiteUtils';
 
-const EVOME_TITLE = 'Evohome | Real Estate Management';
+const EVOME_TITLE = CMP_DOCUMENT_TITLE;
+const EVOME_FAVICON = '/evohome-logo.png';
 const EVOME_DESCRIPTION = 'Evohome - Real Estate Upgrade Management Platform';
 const CRC_SITE_TITLE = 'Caribbean RE-Connect';
 const CRC_SITE_DESCRIPTION =
@@ -38,23 +39,40 @@ export const applyGanttBranding = (appName) => {
   if (meta) meta.setAttribute('content', GANTT_DESCRIPTION);
 };
 
+const removeGanttBrandedLinks = () => {
+  if (ganttFaviconLink?.isConnected) ganttFaviconLink.remove();
+  ganttFaviconLink = null;
+  if (ganttAppleTouchLink?.isConnected) ganttAppleTouchLink.remove();
+  ganttAppleTouchLink = null;
+};
+
+const ensureCmpLink = (rel) => {
+  const selector = `link[rel='${rel}'][data-cmp-branding='true']`;
+  const link = document.querySelector(selector) || document.createElement('link');
+  link.rel = rel;
+  link.type = 'image/png';
+  link.setAttribute('data-cmp-branding', 'true');
+  if (!link.parentNode) document.head.appendChild(link);
+  return link;
+};
+
+/** Tab title + Evohome mark on app.evo-home.ch (and other non-CRC hosts). */
+export const applyEvohomeCmpBranding = () => {
+  document.title = EVOME_TITLE;
+  removeGanttBrandedLinks();
+  ensureCmpLink('icon').href = EVOME_FAVICON;
+  ensureCmpLink('apple-touch-icon').href = EVOME_FAVICON;
+  const meta = document.querySelector('meta[name="description"]');
+  if (meta) meta.setAttribute('content', EVOME_DESCRIPTION);
+};
+
 /** Restore site defaults when leaving gantt-branded views. */
 export const clearGanttBranding = () => {
   if (isCaribSite()) {
     applyCaribSiteBranding();
     return;
   }
-  document.title = EVOME_TITLE;
-  if (ganttFaviconLink?.isConnected) {
-    ganttFaviconLink.remove();
-  }
-  ganttFaviconLink = null;
-  if (ganttAppleTouchLink?.isConnected) {
-    ganttAppleTouchLink.remove();
-  }
-  ganttAppleTouchLink = null;
-  const meta = document.querySelector('meta[name="description"]');
-  if (meta) meta.setAttribute('content', EVOME_DESCRIPTION);
+  applyEvohomeCmpBranding();
 };
 
 /** Marketing landing title + meta on carib-recon.org. */

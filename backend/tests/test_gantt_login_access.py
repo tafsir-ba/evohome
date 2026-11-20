@@ -62,3 +62,33 @@ class TestGanttLoginAllowlist:
             enforce_gantt_registration_closed(_request(host="carib-recon.org"))
         assert exc.value.status_code == 403
         assert "registration is not available" in exc.value.detail.lower()
+
+    def test_removed_app_host_is_not_gantt(self):
+        from core.gantt_site import is_gantt_request
+
+        assert not is_gantt_request(_request("https://app.carib-recon.org"))
+        assert not is_gantt_request(_request(host="app.carib-recon.org"))
+        referred = _request()
+        referred.headers["referer"] = "https://app.carib-recon.org/gantt"
+        assert not is_gantt_request(referred)
+        assert not is_gantt_auth_request(
+            None, redirect_uri="https://app.carib-recon.org/auth/google/callback"
+        )
+
+    def test_apex_and_www_remain_gantt_hosts(self):
+        from core.gantt_site import is_gantt_request
+
+        assert is_gantt_request(_request(host="carib-recon.org"))
+        assert is_gantt_request(_request("https://www.carib-recon.org"))
+        referred = _request()
+        referred.headers["referer"] = "https://carib-recon.org/login"
+        assert is_gantt_request(referred)
+        assert is_gantt_auth_request(
+            None, redirect_uri="https://carib-recon.org/auth/google/callback"
+        )
+
+    def test_evohome_cmp_host_is_not_gantt(self):
+        from core.gantt_site import is_gantt_request
+
+        assert not is_gantt_request(_request("https://app.evo-home.ch"))
+        assert not is_gantt_request(_request(host="app.evo-home.ch"))
