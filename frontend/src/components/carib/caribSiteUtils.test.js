@@ -32,7 +32,7 @@ describe('carib site hosts', () => {
     expect(document.title).toBe('Customer Management Platform');
     const icon = document.querySelector("link[rel='icon'][data-cmp-branding='true']");
     expect(icon).not.toBeNull();
-    expect(icon.getAttribute('href')).toBe('/evohome-logo.png');
+    expect(icon.getAttribute('href')).toBe('/evohome-mark.png');
     expect(document.querySelector('meta[name="description"]').getAttribute('content')).toBe(
       'Evohome - Real Estate Upgrade Management Platform',
     );

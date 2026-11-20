@@ -3,7 +3,7 @@ import { GANTT_LOGO_MARK_PATH } from './GanttLogo';
 import { CMP_DOCUMENT_TITLE, isCaribSite } from '../carib/caribSiteUtils';
 
 const EVOME_TITLE = CMP_DOCUMENT_TITLE;
-const EVOME_FAVICON = '/evohome-logo.png';
+const EVOME_FAVICON = '/evohome-mark.png';
 const EVOME_DESCRIPTION = 'Evohome - Real Estate Upgrade Management Platform';
 const CRC_SITE_TITLE = 'Caribbean RE-Connect';
 const CRC_SITE_DESCRIPTION =
